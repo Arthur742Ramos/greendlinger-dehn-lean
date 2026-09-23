@@ -1,6 +1,7 @@
 import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
 import Mathlib.Tactic.Linarith
+import Mathlib.Tactic.Ring
 
 namespace GreendlingerDehn
 
@@ -11,28 +12,125 @@ inductive CurvatureFaceKind where
   | shell (internalArcs : Nat)
   deriving DecidableEq
 
+/-- A corner carries its actual angle (normalized by π) together with the
+local angle bound supplied by the diagram geometry. -/
+inductive FaceCorner where
+  | exterior (angle : ℚ) (angle_le : angle ≤ 1 / 2)
+  | interior (angle : ℚ) (angle_le : angle ≤ 2 / 3)
+  deriving DecidableEq
+
+/-- Angle value carried by one diagram corner. -/
+def FaceCorner.angle : FaceCorner → ℚ
+  | .exterior a _ => a
+  | .interior a _ => a
+
+/-- Number of exterior corners in a finite cyclic list of corners. -/
+def FaceCorner.exteriorCount : List FaceCorner → Nat
+  | [] => 0
+  | .exterior _ _ :: cs => FaceCorner.exteriorCount cs + 1
+  | .interior _ _ :: cs => FaceCorner.exteriorCount cs
+
+/-- Number of interior corners in a finite cyclic list of corners. -/
+def FaceCorner.interiorCount : List FaceCorner → Nat
+  | [] => 0
+  | .exterior _ _ :: cs => FaceCorner.interiorCount cs
+  | .interior _ _ :: cs => FaceCorner.interiorCount cs + 1
+
+/-- Sum of the actual normalized corner angles around one face. -/
+def FaceCorner.angleSum : List FaceCorner → ℚ
+  | [] => 0
+  | c :: cs => FaceCorner.angle c + FaceCorner.angleSum cs
+
+/-- Sum of the local angle caps around one face. -/
+def FaceCorner.capSum : List FaceCorner → ℚ
+  | [] => 0
+  | .exterior _ _ :: cs => 1 / 2 + FaceCorner.capSum cs
+  | .interior _ _ :: cs => 2 / 3 + FaceCorner.capSum cs
+
+theorem FaceCorner.counts_eq_length (cs : List FaceCorner) :
+    FaceCorner.exteriorCount cs + FaceCorner.interiorCount cs = cs.length := by
+  induction cs with
+  | nil => rfl
+  | cons c cs ih =>
+      cases c with
+      | exterior a h => simp [FaceCorner.exteriorCount, FaceCorner.interiorCount]; omega
+      | interior a h => simp [FaceCorner.exteriorCount, FaceCorner.interiorCount]; omega
+
+theorem FaceCorner.angleSum_le_capSum (cs : List FaceCorner) :
+    FaceCorner.angleSum cs ≤ FaceCorner.capSum cs := by
+  induction cs with
+  | nil => rfl
+  | cons c cs ih =>
+      cases c with
+      | exterior a h =>
+          simp only [FaceCorner.angleSum, FaceCorner.angle, FaceCorner.capSum]
+          exact add_le_add h ih
+      | interior a h =>
+          simp only [FaceCorner.angleSum, FaceCorner.angle, FaceCorner.capSum]
+          exact add_le_add h ih
+
+theorem FaceCorner.capSum_eq_counts (cs : List FaceCorner) :
+    FaceCorner.capSum cs = (FaceCorner.exteriorCount cs : ℚ) * (1 / 2 : ℚ) +
+      (FaceCorner.interiorCount cs : ℚ) * (2 / 3 : ℚ) := by
+  induction cs with
+  | nil => norm_num [FaceCorner.capSum, FaceCorner.exteriorCount,
+      FaceCorner.interiorCount]
+  | cons c cs ih =>
+      cases c with
+      | exterior a h =>
+          simp [FaceCorner.capSum, FaceCorner.exteriorCount,
+            FaceCorner.interiorCount, ih]; ring
+      | interior a h =>
+          simp [FaceCorner.capSum, FaceCorner.exteriorCount,
+            FaceCorner.interiorCount, ih]; ring
 /-- Finite local data used in the standard C'(1/6) angle count. Angles are
-measured in units of π. The `angleCap` field records the bounds 1/2 at exterior
-corners and 2/3 at interior corners; the remaining fields are the local
-incidence facts supplied by an arc-reduced disk diagram. -/
+measured in units of π. The actual corner angles and their local caps determine
+the face angle sum; the remaining fields record incidence facts supplied by an
+arc-reduced disk diagram. -/
 structure CurvatureFace where
   kind : CurvatureFaceKind
-  sides : Nat
-  exteriorCorners : Nat
-  angleSum : ℚ
-  exteriorCorners_le_sides : exteriorCorners ≤ sides
-  angleCap : angleSum ≤
-    (exteriorCorners : ℚ) * (1 / 2 : ℚ) +
-      ((sides - exteriorCorners : Nat) : ℚ) * (2 / 3 : ℚ)
-  internal_sides : kind = .internal → 7 ≤ sides
-  internal_exteriorCorners : kind = .internal → exteriorCorners = 0
-  external_sides : kind = .external → 4 ≤ sides
-  external_small_exteriorCorners : kind = .external → sides ≤ 5 →
-    4 ≤ exteriorCorners
-  external_large_exteriorCorners : kind = .external → 6 ≤ sides →
-    1 ≤ exteriorCorners
-  shell_sides : ∀ i, kind = .shell i → sides = i + 1
-  shell_exteriorCorners : ∀ i, kind = .shell i → exteriorCorners = 2
+  corners : List FaceCorner
+  internal_sides : kind = .internal → 7 ≤ corners.length
+  internal_exteriorCorners : kind = .internal → FaceCorner.exteriorCount corners = 0
+  external_sides : kind = .external → 4 ≤ corners.length
+  external_small_exteriorCorners : kind = .external → corners.length ≤ 5 →
+    4 ≤ FaceCorner.exteriorCount corners
+  external_large_exteriorCorners : kind = .external → 6 ≤ corners.length →
+    1 ≤ FaceCorner.exteriorCount corners
+  shell_sides : ∀ i, kind = .shell i → corners.length = i + 1
+  shell_exteriorCorners : ∀ i, kind = .shell i → FaceCorner.exteriorCount corners = 2
+
+def CurvatureFace.sides (f : CurvatureFace) : Nat := f.corners.length
+
+def CurvatureFace.exteriorCorners (f : CurvatureFace) : Nat :=
+  FaceCorner.exteriorCount f.corners
+
+def CurvatureFace.angleSum (f : CurvatureFace) : ℚ :=
+  FaceCorner.angleSum f.corners
+
+theorem CurvatureFace.exteriorCorners_le_sides (f : CurvatureFace) :
+    f.exteriorCorners ≤ f.sides := by
+  change FaceCorner.exteriorCount f.corners ≤ f.corners.length
+  rw [← FaceCorner.counts_eq_length f.corners]
+  exact Nat.le_add_right _ _
+
+theorem CurvatureFace.angleCap (f : CurvatureFace) :
+    f.angleSum ≤ (f.exteriorCorners : ℚ) * (1 / 2 : ℚ) +
+      ((f.sides - f.exteriorCorners : Nat) : ℚ) * (2 / 3 : ℚ) := by
+  have hcounts := FaceCorner.counts_eq_length f.corners
+  have hsub : f.corners.length - FaceCorner.exteriorCount f.corners =
+      FaceCorner.interiorCount f.corners := by omega
+  change FaceCorner.angleSum f.corners ≤
+    (FaceCorner.exteriorCount f.corners : ℚ) * (1 / 2 : ℚ) +
+      (((f.corners.length - FaceCorner.exteriorCount f.corners : Nat) : ℚ)) *
+        (2 / 3 : ℚ)
+  calc
+    FaceCorner.angleSum f.corners ≤ FaceCorner.capSum f.corners :=
+      FaceCorner.angleSum_le_capSum f.corners
+    _ = (FaceCorner.exteriorCount f.corners : ℚ) * (1 / 2 : ℚ) +
+        (FaceCorner.interiorCount f.corners : ℚ) * (2 / 3 : ℚ) :=
+      FaceCorner.capSum_eq_counts f.corners
+    _ = _ := by rw [hsub]
 
 /-- Combinatorial curvature of one face, in units of π. -/
 def CurvatureFace.curvature (f : CurvatureFace) : ℚ :=
@@ -100,22 +198,27 @@ theorem CurvatureFace.curvature_nonpos_of_not_smallShell (f : CurvatureFace)
       have hsides := f.internal_sides hk
       have hcorners := f.internal_exteriorCorners hk
       have hbound := f.curvature_le_local_bound
+      simp only [CurvatureFace.sides, CurvatureFace.exteriorCorners] at hbound
       rw [hcorners] at hbound
-      have hsidesQ : (7 : ℚ) ≤ (f.sides : ℚ) := by exact_mod_cast hsides
+      have hsidesQ : (7 : ℚ) ≤ (f.corners.length : ℚ) := by exact_mod_cast hsides
       nlinarith
   | external =>
       have hsides := f.external_sides hk
       have hbound := f.curvature_le_local_bound
+      simp only [CurvatureFace.sides, CurvatureFace.exteriorCorners] at hbound
       by_cases hsmallSides : f.sides ≤ 5
       · have hc := f.external_small_exteriorCorners hk hsmallSides
-        have hsidesQ : (4 : ℚ) ≤ (f.sides : ℚ) := by exact_mod_cast hsides
-        have hcQ : (4 : ℚ) ≤ (f.exteriorCorners : ℚ) := by exact_mod_cast hc
+        have hsidesQ : (4 : ℚ) ≤ (f.corners.length : ℚ) := by exact_mod_cast hsides
+        have hcQ : (4 : ℚ) ≤ (FaceCorner.exteriorCount f.corners : ℚ) := by
+          exact_mod_cast hc
         nlinarith
       · have hsidesLarge : 6 ≤ f.sides :=
           Nat.succ_le_of_lt (not_le.mp hsmallSides)
         have hc := f.external_large_exteriorCorners hk hsidesLarge
-        have hsidesQ : (6 : ℚ) ≤ (f.sides : ℚ) := by exact_mod_cast hsidesLarge
-        have hcQ : (1 : ℚ) ≤ (f.exteriorCorners : ℚ) := by exact_mod_cast hc
+        have hsidesQ : (6 : ℚ) ≤ (f.corners.length : ℚ) := by
+          exact_mod_cast hsidesLarge
+        have hcQ : (1 : ℚ) ≤ (FaceCorner.exteriorCount f.corners : ℚ) := by
+          exact_mod_cast hc
         nlinarith
   | shell i =>
       have hlarge : 4 ≤ i := by
@@ -126,7 +229,10 @@ theorem CurvatureFace.curvature_nonpos_of_not_smallShell (f : CurvatureFace)
       have hsides := f.shell_sides i hk
       have hcorners := f.shell_exteriorCorners i hk
       have hbound := f.curvature_le_local_bound
-      rw [hsides, hcorners] at hbound
+      simp only [CurvatureFace.sides, CurvatureFace.exteriorCorners] at hbound
+      have hsides' : f.corners.length = i + 1 := hsides
+      have hcorners' : FaceCorner.exteriorCount f.corners = 2 := hcorners
+      rw [hsides', hcorners'] at hbound
       have hiQ : (4 : ℚ) ≤ (i : ℚ) := by exact_mod_cast hlarge
       norm_num [Nat.cast_add] at hbound
       nlinarith [hbound]

@@ -20,7 +20,7 @@ The implementation uses finite relator lists and Mathlib's reduced free-group wo
 - A cyclic redex search checks every rotation of the reduced word, including shells that cross the chosen boundary start.
 - The cyclic fuel-bounded reducer strictly decreases free-word length and preserves identity through each conjugating rotation.
 - Both linear and cyclic Dehn correctness are proved conditionally from their corresponding Greendlinger properties.
-- A finite Gauss--Bonnet accounting theorem derives total face curvature 2 from Euler's disk equation and aggregate vertex-angle/edge-side counts; the angle-counting lemma then forces a face with at most three internal arcs under its local bounds.
+- Each curvature face stores actual corner angles with local 1/2 and 2/3 bounds; the face angle cap is derived by summation, and side/corner counts come from the same finite corner list. A finite Gauss--Bonnet accounting theorem derives total face curvature 2 from Euler's disk equation and aggregate vertex-angle/edge-side counts; the angle-counting lemma then forces a face with at most three internal arcs under its local bounds.
 - A finite arithmetic lemma proves that three or fewer internal arcs, each strictly shorter than one sixth of the relator perimeter, leave an exterior shell arc longer than half the relator.
 - Given a shell decomposition whose internal arcs are actual `C'(1/6)` pieces, the shell theorem constructs the cyclic redex consumed by the executable reducer.
 - For symmetrized presentations, one-step relator rotation closure is proved to cover every cyclic cut, so shell arcs at arbitrary face positions yield the required same-perimeter prefix bounds.

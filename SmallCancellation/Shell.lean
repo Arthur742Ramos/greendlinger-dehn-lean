@@ -116,6 +116,7 @@ theorem CurvatureFace.curvature_nonpos_of_cPrimeSix_pieceBoundary
   have hfaceSides : 7 ≤ f.sides := by rw [hsides]; exact hseven
   have hcorners := f.internal_exteriorCorners hkind
   have hbound := f.curvature_le_local_bound
+  simp only [CurvatureFace.exteriorCorners] at hbound
   rw [hcorners] at hbound
   have hsidesQ : (7 : ℚ) ≤ (f.sides : ℚ) := by exact_mod_cast hfaceSides
   nlinarith [hbound]
