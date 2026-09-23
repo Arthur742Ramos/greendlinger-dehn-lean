@@ -218,6 +218,16 @@ theorem RelatorFactorBoundarySeed.literalBoundary_mk
     FreeGroup.mk seed.literalBoundary = w := by
   rw [seed.to_boundaryReduction.sound, FreeGroup.mk_toWord]
 
+theorem RelatorFactorBoundarySeed.total_cancellation_count
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (seed : RelatorFactorBoundarySeed R w) :
+    seed.literalBoundary.length = w.toWord.length + 2 *
+      (seed.literalFactors_reduce.cancellationCount +
+        seed.cancellation.cancellationCount) := by
+  have hlocal := seed.literalFactors_reduce.length_eq_cancellationCount
+  have hglobal := seed.cancellation.length_eq_cancellationCount
+  omega
+
 /-- Replay the seed's nested proof in a concrete order of adjacent cancellations. -/
 noncomputable def RelatorFactorBoundarySeed.boundaryReduction {α : Type*}
     [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
@@ -242,6 +252,46 @@ noncomputable def RelatorFactorBoundarySeed.of_quotient_eq_one {α : Type*}
     Classical.choice (relatorCertificate_iff_quotient_eq_one.mpr h)
   exact ⟨c.factors, c.factors_prod,
     c.factors_are_conjugates hinv, c.factorCancellationShape⟩
+
+/-- A boundary seed paired with a relator certificate of minimum area. This
+retains the algebraic minimality needed to rule out cancellable face pairs in
+a later diagram construction. -/
+structure MinimalAreaRelatorBoundarySeed {α : Type*} [DecidableEq α]
+    (R : List (FreeGroup α)) (w : FreeGroup α) where
+  certificate : RelatorCertificate R w
+  area_minimal : ∀ c : RelatorCertificate R w, certificate.area ≤ c.area
+  boundary : RelatorFactorBoundarySeed R w
+  boundary_factors : boundary.factors = certificate.factors
+
+/-- Every quotient-null word has a boundary seed coming from a minimum-area
+relator certificate. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.of_quotient_eq_one
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (hinv : ∀ r ∈ R, r⁻¹ ∈ R)
+    (h : PresentedGroup.mk (relationSet R) w = 1) :
+    MinimalAreaRelatorBoundarySeed R w := by
+  have hcert : Nonempty (RelatorCertificate R w) :=
+    relatorCertificate_iff_quotient_eq_one.mpr h
+  have hexists : ∃ c : RelatorCertificate R w,
+      ∀ d : RelatorCertificate R w, c.area ≤ d.area :=
+    RelatorCertificate.exists_minimum_area hcert
+  let c : RelatorCertificate R w := Classical.choose hexists
+  have hmin : ∀ d : RelatorCertificate R w, c.area ≤ d.area :=
+    Classical.choose_spec hexists
+  let boundary : RelatorFactorBoundarySeed R w :=
+    ⟨c.factors, c.factors_prod, c.factors_are_conjugates hinv,
+      c.factorCancellationShape⟩
+  exact ⟨c, hmin, boundary, rfl⟩
+
+theorem MinimalAreaRelatorBoundarySeed.factorOccurrenceCount_eq_area
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed R w) :
+    seed.boundary.balloons.length = seed.certificate.area := by
+  calc
+    seed.boundary.balloons.length = seed.boundary.factors.length := by
+      simp [RelatorFactorBoundarySeed.balloons]
+    _ = seed.certificate.factors.length := by rw [seed.boundary_factors]
+    _ = seed.certificate.area := RelatorCertificate.factors_length seed.certificate
 
 /-- The boundary seed gives a concrete cancellation sequence, hence an exact
 count of how many inverse-letter pairs are removed. -/
