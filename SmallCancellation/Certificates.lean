@@ -28,6 +28,75 @@ def RelatorCertificate.area {R : List (FreeGroup α)} {w : FreeGroup α}
   | .inv c => c.area
   | .conjugate _ _ _ => 1
 
+/-- Flatten a certificate into the finite sequence of relator factors it uses. -/
+def RelatorCertificate.factors {R : List (FreeGroup α)} {w : FreeGroup α}
+    (c : RelatorCertificate R w) : List (FreeGroup α) :=
+  match c with
+  | .one => []
+  | .relator r _ => [r]
+  | .mul c₁ c₂ => c₁.factors ++ c₂.factors
+  | .inv c => (c.factors.map fun r => r⁻¹).reverse
+  | .conjugate g r _ => [g * r * g⁻¹]
+
+theorem RelatorCertificate.factors_prod {R : List (FreeGroup α)}
+    {w : FreeGroup α} (c : RelatorCertificate R w) : c.factors.prod = w := by
+  induction c with
+  | one => simp [RelatorCertificate.factors]
+  | relator r hr => simp [RelatorCertificate.factors]
+  | mul c₁ c₂ ih₁ ih₂ =>
+    simp [RelatorCertificate.factors, List.prod_append, ih₁, ih₂]
+  | inv c ih =>
+    simp only [RelatorCertificate.factors]
+    rw [← List.prod_inv_reverse, ih]
+  | conjugate g r hr => simp [RelatorCertificate.factors]
+
+theorem RelatorCertificate.factors_length {R : List (FreeGroup α)}
+    {w : FreeGroup α} (c : RelatorCertificate R w) : c.factors.length = c.area := by
+  induction c with
+  | one => simp [RelatorCertificate.factors, RelatorCertificate.area]
+  | relator r hr => simp [RelatorCertificate.factors, RelatorCertificate.area]
+  | mul c₁ c₂ ih₁ ih₂ =>
+    simp [RelatorCertificate.factors, RelatorCertificate.area, List.length_append,
+      ih₁, ih₂]
+  | inv c ih =>
+    simp [RelatorCertificate.factors, RelatorCertificate.area, ih]
+  | conjugate g r hr => simp [RelatorCertificate.factors, RelatorCertificate.area]
+
+/-- A factor in a relator certificate is a conjugate of a defining relator. -/
+def IsRelatorConjugate (R : List (FreeGroup α)) (x : FreeGroup α) : Prop :=
+  ∃ g r, r ∈ R ∧ x = g * r * g⁻¹
+
+theorem RelatorCertificate.factors_are_conjugates {R : List (FreeGroup α)}
+    (hinv : ∀ r ∈ R, r⁻¹ ∈ R) {w : FreeGroup α}
+    (c : RelatorCertificate R w) :
+    ∀ x ∈ c.factors, IsRelatorConjugate R x := by
+  induction c with
+  | one => simp [RelatorCertificate.factors]
+  | relator r hr =>
+    intro x hx
+    simp only [RelatorCertificate.factors, List.mem_singleton] at hx
+    subst x
+    exact ⟨1, r, hr, by simp⟩
+  | mul c₁ c₂ ih₁ ih₂ =>
+    intro x hx
+    rcases List.mem_append.mp hx with hx | hx
+    · exact ih₁ x hx
+    · exact ih₂ x hx
+  | inv c ih =>
+    intro x hx
+    simp only [RelatorCertificate.factors, List.mem_reverse, List.mem_map] at hx
+    rcases hx with ⟨y, hy, hxy⟩
+    subst x
+    obtain ⟨g, r, hr, hEq⟩ := ih y hy
+    refine ⟨g, r⁻¹, hinv r hr, ?_⟩
+    rw [hEq]
+    simp [mul_assoc]
+  | conjugate g r hr =>
+    intro x hx
+    simp only [RelatorCertificate.factors, List.mem_singleton] at hx
+    subst x
+    exact ⟨g, r, hr, rfl⟩
+
 theorem RelatorCertificate.eq_one_of_area_eq_zero {R : List (FreeGroup α)}
     {w : FreeGroup α} (c : RelatorCertificate R w) (h : c.area = 0) : w = 1 := by
   induction c with
@@ -44,6 +113,13 @@ theorem RelatorCertificate.eq_one_of_area_eq_zero {R : List (FreeGroup α)}
     rw [ih h]
     simp
   | conjugate g r hr => simp [RelatorCertificate.area] at h
+
+theorem RelatorCertificate.area_pos_of_ne_one {R : List (FreeGroup α)}
+    {w : FreeGroup α} (c : RelatorCertificate R w) (hw : w ≠ 1) :
+    0 < c.area := by
+  by_contra hpos
+  have hzero : c.area = 0 := Nat.eq_zero_of_not_pos hpos
+  exact hw (c.eq_one_of_area_eq_zero hzero)
 
 theorem RelatorCertificate.mem_normalClosure {R : List (FreeGroup α)} {w : FreeGroup α}
     (h : RelatorCertificate R w) : w ∈ Subgroup.normalClosure (relationSet R) := by
