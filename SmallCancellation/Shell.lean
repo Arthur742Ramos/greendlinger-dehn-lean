@@ -107,4 +107,36 @@ theorem cPrimeSix_shell_gives_cyclicRedex
     rw [List.length_flatten]
     omega
 
+/-- In a `SymmetrizedPresentation`, the piece-side prefix bounds needed by the
+shell estimate follow from the shell face's cyclic boundary positions and
+iterated relator-rotation closure. -/
+theorem cPrimeSix_shell_gives_cyclicRedex_of_cyclicPieces
+    {α : Type u} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α)
+    (hc : CPrimeSix P.relators)
+    {w : FreeGroup α} {pre suf : Word α}
+    {relator : FreeGroup α} {exterior : Word α}
+    {arcs : List (Word α)}
+    (hsplit : w.toWord = pre ++ suf)
+    (hrotation : (FreeGroup.mk (suf ++ pre)).toWord =
+      exterior ++ arcs.flatten)
+    (hrelator : relator ∈ P.relators)
+    (hboundary : relator.toWord = exterior ++ arcs.flatten)
+    (hperimeter_pos : 0 < relator.toWord.length)
+    (hcount : arcs.length ≤ 3)
+    (hpieces : ∀ u ∈ arcs, IsPiece P.relators u)
+    (hcyclicPieces : ∀ u ∈ arcs, ∃ arcPre arcSuf tail,
+      relator.toWord = arcPre ++ arcSuf ∧ arcSuf ++ arcPre = u ++ tail) :
+    ∃ c, IsCyclicRedex P.relators w c := by
+  have hprefix : ∀ u ∈ arcs, ∃ r ∈ P.relators, ∃ tail,
+      r.toWord = u ++ tail ∧ r.toWord.length = relator.toWord.length := by
+    intro u hu
+    obtain ⟨arcPre, arcSuf, tail, hcut, hocc⟩ := hcyclicPieces u hu
+    obtain ⟨r, hr, hrot⟩ := P.rotateRelator hrelator hcut
+    refine ⟨r, hr, tail, hrot.trans hocc, ?_⟩
+    rw [hrot, hcut]
+    simp [List.length_append, Nat.add_comm]
+  exact cPrimeSix_shell_gives_cyclicRedex hc hsplit hrotation hrelator
+    hboundary hperimeter_pos hcount hpieces hprefix
+
 end GreendlingerDehn

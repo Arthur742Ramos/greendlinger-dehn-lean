@@ -14,6 +14,8 @@ The same file also proves the numerical shell estimate in isolation: if a relato
 
 `SmallCancellation/Shell.lean` connects that estimate to the executable algorithm: from a specified shell decomposition, piece evidence, same-perimeter relator-prefix evidence, and a cyclic split of the boundary word, it constructs an `IsCyclicRedex` witness. Thus the remaining theorem is sharply localized to constructing an arc-reduced disk diagram from a nullity certificate and deriving the shell decomposition and piece evidence from that diagram.
 
+`SmallCancellation/Words.lean` now proves that the presentation's one-step rotation closure extends to every cyclic cut while preserving the exact rotated word; cyclic reduction rules out cancellation at each new join. The stronger shell theorem uses this result to derive the same-perimeter prefix bounds from the actual cyclic positions of the pieces on the shell relator.
+
 The same module proves that a complete relator boundary partitioned into C'(1/6) pieces must contain at least seven arcs. This derives the interior-face side count from an explicit arc partition and per-piece evidence; the diagram model must still supply those partitions.
 
 ## Why this theorem matters

@@ -23,6 +23,7 @@ The implementation uses finite relator lists and Mathlib's reduced free-group wo
 - A finite Gauss--Bonnet accounting theorem derives total face curvature 2 from Euler's disk equation and aggregate vertex-angle/edge-side counts; the angle-counting lemma then forces a face with at most three internal arcs under its local bounds.
 - A finite arithmetic lemma proves that three or fewer internal arcs, each strictly shorter than one sixth of the relator perimeter, leave an exterior shell arc longer than half the relator.
 - Given a shell decomposition whose internal arcs are actual `C'(1/6)` pieces, the shell theorem constructs the cyclic redex consumed by the executable reducer.
+- For symmetrized presentations, one-step relator rotation closure is proved to cover every cyclic cut, so shell arcs at arbitrary face positions yield the required same-perimeter prefix bounds.
 - The same piece bounds show that a complete relator boundary needs at least seven internal arcs, matching the interior-face bound used by the angle count.
 - The proof deriving Greendlinger's property from reduced van Kampen diagrams and (C'(1/6)) is not yet formalized. This repository is therefore a research prototype, not a Palomar-ready submission.
 

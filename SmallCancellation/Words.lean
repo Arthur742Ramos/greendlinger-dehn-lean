@@ -82,6 +82,74 @@ structure SymmetrizedPresentation (α : Type*) [Fintype α] [DecidableEq α] whe
   rotationClosed : ∀ r ∈ relators, ∀ first rest,
     r.toWord = first :: rest → FreeGroup.mk (rest ++ [first]) ∈ relators
 
+/-- Moving the first letter of a cyclically reduced word to the end preserves
+free reduction. The only new adjacent pair is controlled by the cyclic
+reduction condition. -/
+theorem reduced_rotate_of_cyclicBoundary {α : Type*} [DecidableEq α]
+    {first : Letter α} {rest : Word α}
+    (hred : FreeGroup.IsReduced (first :: rest))
+    (hcyclic : rest.getLast? ≠ some (first.1, !first.2)) :
+    FreeGroup.IsReduced (rest ++ [first]) := by
+  change (rest ++ [first]).IsChain (fun a b => a.1 = b.1 → a.2 = b.2)
+  apply List.IsChain.append
+  · exact hred.tail
+  · simp
+  · intro x hx y hy
+    simp only [List.head?_singleton, Option.mem_def] at hy
+    have hy' : first = y := Option.some.inj hy
+    subst y
+    cases hlast : rest.getLast? with
+    | none => simp [hlast] at hx
+    | some last =>
+        have hx' : last = x := by simpa [hlast] using hx
+        subst x
+        intro hbase
+        have hnot : last ≠ (first.1, !first.2) := by
+          intro h
+          apply hcyclic
+          rw [hlast, h]
+        cases hlastsign : last.2 <;> cases hfirstsign : first.2
+        · rfl
+        · exfalso
+          apply hnot
+          cases last with | mk a b => simp_all
+        · exfalso
+          apply hnot
+          cases last with | mk a b => simp_all
+        · rfl
+
+/-- Closure under one-step cyclic rotation extends to every cut of a relator.
+The returned group element retains the exact rotated word because cyclic
+reduction guarantees that no free cancellation occurs at the new join. -/
+theorem SymmetrizedPresentation.rotateRelator {α : Type*} [Fintype α]
+    [DecidableEq α] (P : SymmetrizedPresentation α)
+    {r : FreeGroup α} (hr : r ∈ P.relators)
+    {pre suf : Word α} (hword : r.toWord = pre ++ suf) :
+    ∃ r' ∈ P.relators, r'.toWord = suf ++ pre := by
+  induction pre generalizing r suf with
+  | nil =>
+      refine ⟨r, hr, ?_⟩
+      simpa using hword
+  | cons first pre ih =>
+      have hsplit : r.toWord = first :: (pre ++ suf) := by
+        simpa using hword
+      have hrrot : FreeGroup.mk ((pre ++ suf) ++ [first]) ∈ P.relators :=
+        P.rotationClosed r hr first (pre ++ suf) hsplit
+      have hcyclic := P.cyclicallyReduced r hr first (pre ++ suf) hsplit
+      have hred : FreeGroup.IsReduced (first :: (pre ++ suf)) := by
+        rw [← hsplit]
+        exact FreeGroup.isReduced_toWord
+      have hrotred := reduced_rotate_of_cyclicBoundary hred hcyclic
+      have hrotword : (FreeGroup.mk ((pre ++ suf) ++ [first])).toWord =
+          pre ++ (suf ++ [first]) := by
+        calc
+          _ = (pre ++ suf) ++ [first] := by
+            rw [FreeGroup.toWord_mk, hrotred.reduce_eq]
+          _ = pre ++ (suf ++ [first]) := by simp [List.append_assoc]
+      obtain ⟨r', hr', hword'⟩ := ih hrrot hrotword
+      refine ⟨r', hr', ?_⟩
+      simpa [List.append_assoc] using hword'
+
 /-- A candidate replacement in Dehn's algorithm. -/
 structure Redex (α : Type*) where
   before : Word α
