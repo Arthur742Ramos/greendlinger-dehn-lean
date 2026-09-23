@@ -20,6 +20,37 @@ theorem cPrimeSix_piece_lt_perimeter {R : List (FreeGroup α)}
   rw [hlength] at h
   exact h
 
+/-- A complete partition of a nonempty relator boundary into C'(1/6) pieces
+has at least seven arcs. This is the interior-face side-count used by the
+curvature argument once a disk diagram supplies its arc decomposition. -/
+theorem cPrimeSix_fullBoundary_has_seven_arcs
+    {R : List (FreeGroup α)} (hc : CPrimeSix R)
+    {arcs : List (Word α)} {perimeter : Nat}
+    (hperimeter : perimeter = (arcs.map List.length).sum)
+    (hperimeter_pos : 0 < perimeter)
+    (hpieces : ∀ u ∈ arcs, IsPiece R u)
+    (hprefix : ∀ u ∈ arcs, ∃ r ∈ R, ∃ tail,
+      r.toWord = u ++ tail ∧ r.toWord.length = perimeter) :
+    7 ≤ arcs.length := by
+  have hnonempty : (arcs.map List.length) ≠ [] := by
+    intro hnil
+    simp [hnil] at hperimeter
+    omega
+  have hpiecebounds : ∀ p ∈ arcs.map List.length, 6 * p < perimeter := by
+    intro p hp
+    rcases List.mem_map.mp hp with ⟨u, hu, rfl⟩
+    exact cPrimeSix_piece_lt_perimeter hc (hpieces u hu) (hprefix u hu)
+  have hsum := six_mul_sum_lt_length_mul hnonempty hpiecebounds
+  rw [← hperimeter] at hsum
+  simp only [List.length_map] at hsum
+  have hlength : 6 < arcs.length := by
+    by_contra hnot
+    have hle : arcs.length ≤ 6 := Nat.le_of_not_gt hnot
+    have hmul : arcs.length * perimeter ≤ 6 * perimeter :=
+      Nat.mul_le_mul_right perimeter hle
+    omega
+  omega
+
 /-- If the internal arcs of a shell are pieces and each occurs as a prefix of
 a relator of the shell's perimeter, C'(1/6) and the three-arc bound force the
 exterior arc to exceed half the relator boundary. -/

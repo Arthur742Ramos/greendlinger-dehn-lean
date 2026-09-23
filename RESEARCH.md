@@ -14,6 +14,8 @@ The same file also proves the numerical shell estimate in isolation: if a relato
 
 `SmallCancellation/Shell.lean` connects that estimate to the executable algorithm: from a specified shell decomposition, piece evidence, same-perimeter relator-prefix evidence, and a cyclic split of the boundary word, it constructs an `IsCyclicRedex` witness. Thus the remaining theorem is sharply localized to constructing an arc-reduced disk diagram from a nullity certificate and deriving the shell decomposition and piece evidence from that diagram.
 
+The same module proves that a complete relator boundary partitioned into C'(1/6) pieces must contain at least seven arcs. This derives the interior-face side count from an explicit arc partition and per-piece evidence; the diagram model must still supply those partitions.
+
 ## Why this theorem matters
 
 Greendlinger's result is the classical bridge from a local overlap restriction on relators to an effective decision procedure for the word problem. The target combines substantial combinatorial group theory with a verified executable algorithm. The repository builds on Mathlib's free-group and presented-group foundations and adds the finite small-cancellation definitions, executable relator checker, exhaustive Dehn reducer, and conditional correctness theorems.
