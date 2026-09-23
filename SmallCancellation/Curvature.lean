@@ -115,4 +115,58 @@ theorem positive_curvature_forces_small_shell {F : Type*} [Fintype F]
   rw [htotal] at hsum
   norm_num at hsum
 
+/-- Summing strict one-sixth bounds over a nonempty finite arc family gives a
+strict total bound. -/
+theorem six_mul_sum_lt_length_mul {pieces : List Nat} {perimeter : Nat}
+    (hne : pieces ≠ []) (hpiece : ∀ p ∈ pieces, 6 * p < perimeter) :
+    6 * pieces.sum < pieces.length * perimeter := by
+  induction pieces with
+  | nil => simp at hne
+  | cons a rest ih =>
+      have hhead : 6 * a < perimeter := hpiece a (by simp)
+      have htail : ∀ p ∈ rest, 6 * p < perimeter := by
+        intro p hp
+        exact hpiece p (by simp [hp])
+      by_cases hrest : rest = []
+      · subst rest
+        simpa using hhead
+      · have htailBound := ih hrest htail
+        simp only [List.sum_cons, List.length_cons]
+        nlinarith [hhead, htailBound]
+
+/-- In a shell with at most three internal arcs, strict C'(1/6) bounds make
+the complementary exterior arc longer than all internal arcs combined. -/
+theorem shell_exterior_longer_than_interior
+    {perimeter exterior : Nat} {pieces : List Nat}
+    (hperimeter : perimeter = exterior + pieces.sum)
+    (hperimeter_pos : 0 < perimeter)
+    (hcount : pieces.length ≤ 3)
+    (hpieces : ∀ p ∈ pieces, 6 * p < perimeter) :
+    pieces.sum < exterior := by
+  by_cases hnil : pieces = []
+  · subst pieces
+    simp only [List.sum_nil, Nat.add_zero] at hperimeter
+    rw [hperimeter] at hperimeter_pos
+    simpa using hperimeter_pos
+  · have hsum := six_mul_sum_lt_length_mul hnil hpieces
+    have hlen : pieces.length * perimeter ≤ 3 * perimeter :=
+      Nat.mul_le_mul_right perimeter hcount
+    have hbound : 6 * pieces.sum < 3 * perimeter := lt_of_lt_of_le hsum hlen
+    rw [hperimeter] at hbound
+    omega
+
+/-- Consequently, the exterior shell arc occupies more than half of the
+relator boundary. -/
+theorem shell_exterior_longer_than_half
+    {perimeter exterior : Nat} {pieces : List Nat}
+    (hperimeter : perimeter = exterior + pieces.sum)
+    (hperimeter_pos : 0 < perimeter)
+    (hcount : pieces.length ≤ 3)
+    (hpieces : ∀ p ∈ pieces, 6 * p < perimeter) :
+    perimeter < 2 * exterior := by
+  have hlong := shell_exterior_longer_than_interior hperimeter hperimeter_pos
+    hcount hpieces
+  rw [hperimeter]
+  omega
+
 end GreendlingerDehn
