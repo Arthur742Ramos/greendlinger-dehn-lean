@@ -1,5 +1,7 @@
 import SmallCancellation.Words
 import SmallCancellation.FiniteCheck
 import SmallCancellation.Dehn
+import SmallCancellation.CyclicDehn
+import SmallCancellation.Curvature
 import SmallCancellation.Certificates
 import SmallCancellation.Examples

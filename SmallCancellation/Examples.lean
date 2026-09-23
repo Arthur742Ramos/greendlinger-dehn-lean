@@ -1,6 +1,7 @@
 import SmallCancellation.Words
 import SmallCancellation.FiniteCheck
 import SmallCancellation.Dehn
+import SmallCancellation.CyclicDehn
 import SmallCancellation.Certificates
 
 namespace GreendlingerDehn.Examples
@@ -18,6 +19,9 @@ example : cPrimeSixCheck symmetrizedRelators = true := by decide
 
 /-- Dehn reduction detects the defining relator as the identity. -/
 example : dehnWordProblem symmetrizedRelators sixthPower = true := by decide
+
+/-- The cyclic Dehn reducer detects a defining relator. -/
+example : cyclicDehnWordProblem symmetrizedRelators sixthPower = true := by decide
 
 /-- A nontrivial power reduces to a shorter free word. -/
 example :

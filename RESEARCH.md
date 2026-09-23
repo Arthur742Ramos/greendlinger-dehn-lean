@@ -2,19 +2,23 @@
 
 ## Mathematical target
 
-Let (X) be a finite alphabet and let (R) be a finite symmetrized set of nonempty cyclically reduced relators. If (R) satisfies (C'(1/6)), then every nonempty freely reduced word (w) that is trivial in ⟨(Xmid R)⟩ contains a contiguous subword (v) that is an initial segment of some (r\in R) and satisfies (2|v|>|r|). The linear-word conclusion is the form needed by the executable Dehn reducer.
+Let `X` be a finite alphabet and `R` a finite symmetrized set of nonempty cyclically reduced relators satisfying `C'(1/6)`. Greendlinger's lemma says that every nontrivial freely reduced word representing the identity has a cyclic rotation containing a contiguous subword `v` that is an initial segment of some `r ∈ R` and satisfies `2 * |v| > |r|`. This cyclic form is the theorem surface for the executable cyclic Dehn reducer.
 
-The intended proof derives this from a reduced van Kampen diagram: the (C'(1/6)) condition bounds internal arcs by one sixth of each adjacent relator; a combinatorial curvature count supplies an exterior shell with at most three internal arcs; the complementary exterior arc is therefore longer than half of its relator. Minimal diagrams with cut vertices require a block or terminal-disc argument to ensure the shell lies contiguously in the input word.
+The standard proof uses a reduced van Kampen diagram. The `C'(1/6)` condition bounds every internal arc by one sixth of each incident relator. An angle assignment gives interior corners weight at most `2/3` and exterior corners weight at most `1/2`, in units of `π`. Euler characteristic one for the disk makes the total face curvature positive; therefore an exterior shell has at most three internal arcs, and its complementary boundary arc is longer than half its relator.
 
-The formalization also identifies presented-group nullity with existence of a finite relator-certificate tree. Each certificate flattens to a finite product of conjugates of defining relators (when the list is inverse-closed), and the minimum number of relator factors exists. The executable procedure enumerates all finite relator cuts and subword occurrences, selects the first valid long side, replaces it by the inverse complementary side, and freely reduces. The checked generic theorem already proves preservation, strict length decrease, termination, and word-problem correctness assuming the Greendlinger property. Turning a minimum certificate into a reduced planar diagram, then proving the (C'(1/6)\Rightarrow\) Greendlinger shell estimate, is still missing and remains the release-blocking theorem.
+Presented-group nullity is already characterized by finite relator-certificate trees. Each certificate flattens to a product of conjugates of defining relators (when the relator list is inverse-closed), and a minimum area exists. The cyclic executable procedure enumerates every rotation and relator cut, selects a valid long side, replaces it by the inverse complementary side, and freely reduces. Each step preserves identity under conjugacy and strictly decreases length. Its termination and word-problem correctness are proved assuming the cyclic Greendlinger property.
+
+`SmallCancellation/Curvature.lean` formalizes the finite angle-counting implication: positive total curvature plus explicit local face-incidence bounds yields a shell with at most three internal arcs. It does not derive those inputs from a disk map. The release-blocking work remains (1) constructing a reduced planar diagram from a nullity certificate, (2) deriving disk Euler/angle identities and local incidence bounds from an actual combinatorial disk model, and (3) extracting the relator subword from the shell.
 
 ## Why this theorem matters
 
-Greendlinger's result is the classical bridge from a local overlap restriction on relators to a decision procedure for the word problem. It is a substantial theorem in combinatorial group theory rather than an isolated implementation exercise. The project uses Mathlib's free-group and presented-group foundations, and adds the finite small-cancellation definitions, executable relator checker, exhaustive Dehn reducer, and correctness proof.
+Greendlinger's result is the classical bridge from a local overlap restriction on relators to an effective decision procedure for the word problem. The target combines substantial combinatorial group theory with a verified executable algorithm. The repository builds on Mathlib's free-group and presented-group foundations and adds the finite small-cancellation definitions, executable relator checker, exhaustive Dehn reducer, and conditional correctness theorems.
 
 Primary references:
 
 - Martin Greendlinger, “Dehn's algorithm for the word problem,” *Communications on Pure and Applied Mathematics* 13 (1960), 67–83. [DOI and publisher record](https://doi.org/10.1002/cpa.3160130108).
 - Roger C. Lyndon, “On Dehn's Algorithm,” *Mathematische Annalen* 166 (1966), 208–228. [EuDML record](https://eudml.org/doc/161458).
 
-Repository and code searches have not found a Lean formalization of this theorem. This is a search result, not a claim of global priority. Palomar eligibility will be evaluated only after the exact theorem is fully proved and the required release gates pass.
+An accessible exposition of the arc-reduced diagram and angle-counting proof is Martin T. Touikan, *An Introduction to Combinatorial Group Theory*, §3.5. [Course notes](https://ntouikan.ext.unb.ca/MATH6022/IntroCGGT/html_output/section-18.html).
+
+Repository and code searches have not found a Lean formalization of this theorem. This is a search result, not a claim of global priority. Palomar eligibility will be evaluated only after the exact theorem is fully proved and all required release gates pass.
