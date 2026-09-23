@@ -22,6 +22,7 @@ The implementation uses finite relator lists and Mathlib's reduced free-group wo
 - Both linear and cyclic Dehn correctness are proved conditionally from their corresponding Greendlinger properties.
 - The finite angle-counting lemma proves that positive total curvature forces a face with at most three internal arcs, given local incidence and Euler-curvature data for an arc-reduced disk diagram.
 - A finite arithmetic lemma proves that three or fewer internal arcs, each strictly shorter than one sixth of the relator perimeter, leave an exterior shell arc longer than half the relator.
+- Given a shell decomposition whose internal arcs are actual `C'(1/6)` pieces, the shell theorem constructs the cyclic redex consumed by the executable reducer.
 - The proof deriving Greendlinger's property from reduced van Kampen diagrams and (C'(1/6)) is not yet formalized. This repository is therefore a research prototype, not a Palomar-ready submission.
 
 The remaining bridge must construct reduced finite diagrams from nullity certificates and derive the local incidence facts and total curvature from an actual disk-map model. The angle-counting lemma takes those as explicit inputs; it does not establish them. No Palomar intake or registration has been made.

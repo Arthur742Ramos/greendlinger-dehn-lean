@@ -12,6 +12,8 @@ The finite piece predicate keeps distinct cyclic start positions even when a pro
 
 The same file also proves the numerical shell estimate in isolation: if a relator boundary is partitioned into an exterior arc and at most three internal arcs, and each internal arc is strictly shorter than one sixth of the perimeter, then the exterior arc is longer than half the perimeter. This closes the arithmetic step after an actual diagram supplies those arcs; it does not construct the diagram or establish that its internal arcs are pieces.
 
+`SmallCancellation/Shell.lean` connects that estimate to the executable algorithm: from a specified shell decomposition, piece evidence, same-perimeter relator-prefix evidence, and a cyclic split of the boundary word, it constructs an `IsCyclicRedex` witness. Thus the remaining theorem is sharply localized to constructing an arc-reduced disk diagram from a nullity certificate and deriving the shell decomposition and piece evidence from that diagram.
+
 ## Why this theorem matters
 
 Greendlinger's result is the classical bridge from a local overlap restriction on relators to an effective decision procedure for the word problem. The target combines substantial combinatorial group theory with a verified executable algorithm. The repository builds on Mathlib's free-group and presented-group foundations and adds the finite small-cancellation definitions, executable relator checker, exhaustive Dehn reducer, and conditional correctness theorems.
