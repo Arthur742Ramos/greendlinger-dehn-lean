@@ -6,7 +6,7 @@ Let (X) be a finite alphabet and let (R) be a finite symmetrized set of nonempty
 
 The intended proof derives this from a reduced van Kampen diagram: the (C'(1/6)) condition bounds internal arcs by one sixth of each adjacent relator; a combinatorial curvature count supplies an exterior shell with at most three internal arcs; the complementary exterior arc is therefore longer than half of its relator. Minimal diagrams with cut vertices require a block or terminal-disc argument to ensure the shell lies contiguously in the input word.
 
-The executable procedure enumerates all finite relator cuts and subword occurrences, selects the first valid long side, replaces it by the inverse complementary side, and freely reduces. The checked generic theorem already proves preservation, strict length decrease, termination, and word-problem correctness assuming the Greendlinger property. The (C'(1/6)\Rightarrow\) Greendlinger diagram argument is still missing and remains the release-blocking theorem.
+The formalization also identifies presented-group nullity with existence of a finite relator-certificate tree and proves that such certificates have a minimum relator-cell count. The executable procedure enumerates all finite relator cuts and subword occurrences, selects the first valid long side, replaces it by the inverse complementary side, and freely reduces. The checked generic theorem already proves preservation, strict length decrease, termination, and word-problem correctness assuming the Greendlinger property. Turning a minimum certificate into a reduced planar diagram, then proving the (C'(1/6)\Rightarrow\) Greendlinger shell estimate, is still missing and remains the release-blocking theorem.
 
 ## Why this theorem matters
 
