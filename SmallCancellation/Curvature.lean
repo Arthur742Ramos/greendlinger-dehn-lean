@@ -131,6 +131,27 @@ theorem CurvatureFace.curvature_nonpos_of_not_smallShell (f : CurvatureFace)
       norm_num [Nat.cast_add] at hbound
       nlinarith [hbound]
 
+/-- If all faces outside the designated shell cases have nonpositive
+curvature, positive total curvature forces a small shell. -/
+theorem positive_curvature_forces_small_shell_of_nonpos {F : Type*} [Fintype F]
+    (faces : F → CurvatureFace)
+    (htotal : ∑ f : F, (faces f).curvature = 2)
+    (hface_nonpos : ∀ f, ¬ (faces f).IsSmallShell → (faces f).curvature ≤ 0) :
+    ∃ f : F, (faces f).IsSmallShell := by
+  by_contra hnone
+  have hnonpos_all : ∀ f : F, (faces f).curvature ≤ 0 := by
+    intro f
+    apply hface_nonpos
+    intro hsmall
+    exact hnone ⟨f, hsmall⟩
+  have hsum : (∑ f : F, (faces f).curvature) ≤ 0 := by
+    calc
+      (∑ f : F, (faces f).curvature) ≤ ∑ _f : F, (0 : ℚ) :=
+        Finset.sum_le_sum (fun f _ => hnonpos_all f)
+      _ = 0 := by simp
+  rw [htotal] at hsum
+  norm_num at hsum
+
 /-- The local curvature estimates force a small shell whenever the total
 curvature is positive. For disk diagrams, the total-curvature identity is the
 Euler characteristic calculation; the diagram-to-local-data construction is a
@@ -139,19 +160,9 @@ theorem positive_curvature_forces_small_shell {F : Type*} [Fintype F]
     (faces : F → CurvatureFace)
     (htotal : ∑ f : F, (faces f).curvature = 2) :
     ∃ f : F, (faces f).IsSmallShell := by
-  by_contra hnone
-  have hnonpos : ∀ f : F, (faces f).curvature ≤ 0 := by
-    intro f
-    apply CurvatureFace.curvature_nonpos_of_not_smallShell
-    intro hsmall
-    exact hnone ⟨f, hsmall⟩
-  have hsum : (∑ f : F, (faces f).curvature) ≤ 0 := by
-    calc
-      (∑ f : F, (faces f).curvature) ≤ ∑ _f : F, (0 : ℚ) :=
-        Finset.sum_le_sum (fun f _ => hnonpos f)
-      _ = 0 := by simp
-  rw [htotal] at hsum
-  norm_num at hsum
+  apply positive_curvature_forces_small_shell_of_nonpos faces htotal
+  intro f hsmall
+  exact (faces f).curvature_nonpos_of_not_smallShell hsmall
 
 /-- Combining the finite Gauss--Bonnet accounting with the local angle bounds
 forces a face with at most three internal arcs. -/
