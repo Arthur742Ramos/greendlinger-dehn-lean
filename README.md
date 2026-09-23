@@ -26,7 +26,7 @@ The implementation uses finite relator lists and Mathlib's reduced free-group wo
 - For symmetrized presentations, one-step relator rotation closure is proved to cover every cyclic cut, so shell arcs at arbitrary face positions yield the required same-perimeter prefix bounds.
 - The same piece bounds show that a complete relator boundary needs at least seven arcs; with the model's angle cap, this derives nonpositive curvature for an internal face.
 - Combining that result with finite Gauss--Bonnet accounting lets the curvature argument force a small shell when every internal face has explicit C'(1/6) piece data.
-- The composed curvature-and-shell theorem returns the exact cyclic redex searched by the algorithm from that finite profile.
+- The composed curvature-and-shell theorem returns the exact cyclic redex searched by the algorithm from that finite profile. `CurvatureShellProfileProperty` isolates profile existence as the single remaining global diagram interface, and the end-to-end Dehn correctness theorem is conditional on that explicit property.
 - The proof deriving Greendlinger's property from reduced van Kampen diagrams and (C'(1/6)) is not yet formalized. This repository is therefore a research prototype, not a Palomar-ready submission.
 
 The remaining bridge must construct a reduced finite diagram from a nullity certificate and derive the aggregate accounting, external-face bounds, reducedness-to-piece facts, and shell boundary profile from an actual disk-map model. The composed theorem currently consumes that complete profile as explicit data. No Palomar intake or registration has been made.

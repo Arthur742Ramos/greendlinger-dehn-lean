@@ -296,4 +296,52 @@ theorem positive_curvature_forces_cyclicRedex_of_curvature_and_shell_data
     P hc faces accounting internalData
   exact (shellData f hsmall).cyclic_redex hc hsmall
 
+/-- The finite geometric data consumed by the local curvature argument.
+This profile is not yet constructed from an actual van Kampen diagram. -/
+structure CurvatureShellProfile {α : Type u} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α) (w : FreeGroup α) where
+  faceCount : Nat
+  faces : Fin faceCount → CurvatureFace
+  accounting : DiskCurvatureAccounting faces
+  internalData : ∀ f, (faces f).kind = .internal →
+    InternalFacePieceData P (faces f)
+  shellData : ∀ f, (faces f).IsSmallShell →
+    ShellRedexData P w (faces f)
+
+/-- Every nontrivial null word has a finite curvature/shell profile. Proving
+this property from nullity, minimum-area certificates, and `C'(1/6)` is the
+remaining global van Kampen diagram theorem. -/
+def CurvatureShellProfileProperty {α : Type u} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α) : Prop :=
+  ∀ w : FreeGroup α,
+    PresentedGroup.mk (relationSet P.relators) w = 1 → w ≠ 1 →
+      Nonempty (CurvatureShellProfile P w)
+
+/-- A curvature/shell profile for each nontrivial null word supplies the
+cyclic Greendlinger property. Proving `CurvatureShellProfileProperty` from
+nullity, the minimum-area certificate, and `C'(1/6)` is the remaining global
+diagram theorem. -/
+theorem cyclicGreendlinger_of_curvatureShellProfileProperty
+    {α : Type u} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α)
+    (hc : CPrimeSix P.relators)
+    (hprofile : CurvatureShellProfileProperty P) :
+    CyclicGreendlingerProperty P.relators := by
+  intro w hnull hne
+  obtain ⟨profile⟩ := hprofile w hnull hne
+  exact positive_curvature_forces_cyclicRedex_of_curvature_and_shell_data
+    P hc w profile.faces profile.accounting profile.internalData profile.shellData
+
+/-- End-to-end cyclic Dehn word-problem correctness for a C'(1/6)
+presentation, conditional on the explicit geometric-profile existence bridge. -/
+theorem cyclicDehnWordProblem_correct_of_CPrimeSix_and_curvatureShellProfiles
+    {α : Type u} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α)
+    (hc : CPrimeSix P.relators)
+    (hprofile : CurvatureShellProfileProperty P)
+    (w : FreeGroup α) :
+    cyclicDehnWordProblem P.relators w = true ↔
+      PresentedGroup.mk (relationSet P.relators) w = 1 := by
+  exact cyclicDehnWordProblem_correct_of_greendlinger
+    (cyclicGreendlinger_of_curvatureShellProfileProperty P hc hprofile) w
 end GreendlingerDehn
