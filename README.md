@@ -12,6 +12,7 @@ The implementation uses finite relator lists and Mathlib's reduced free-group wo
 ## Current formalization status
 
 - The exhaustive redex search is proved complete for the stated factorization predicate.
+- A finite executable (C'(1/6)) checker is proved equivalent to the piece-based definition.
 - Replacement is proved to preserve the presented-group element and strictly decrease free-word length.
 - The fuel-bounded reducer is proved to terminate at an irreducible word.
 - Dehn correctness is proved conditionally from the Greendlinger property.

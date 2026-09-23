@@ -1,2 +1,3 @@
 import SmallCancellation.Words
+import SmallCancellation.FiniteCheck
 import SmallCancellation.Dehn
