@@ -14,6 +14,7 @@ The implementation uses finite relator lists and Mathlib's reduced free-group wo
 - The exhaustive redex search is proved complete for the stated factorization predicate.
 - A finite executable (C'(1/6)) checker is proved equivalent to the piece-based definition.
 - Presented-group nullity has finite relator-certificate trees, and a minimum-area certificate exists.
+- Kernel-checked examples exercise the checker and reducer on the symmetrized presentation \(\langle a\mid a^6\rangle\).
 - Replacement is proved to preserve the presented-group element and strictly decrease free-word length.
 - The fuel-bounded reducer is proved to terminate at an irreducible word.
 - Dehn correctness is proved conditionally from the Greendlinger property.

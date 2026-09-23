@@ -2,3 +2,4 @@ import SmallCancellation.Words
 import SmallCancellation.FiniteCheck
 import SmallCancellation.Dehn
 import SmallCancellation.Certificates
+import SmallCancellation.Examples
