@@ -1,0 +1,2 @@
+import SmallCancellation.Words
+import SmallCancellation.Dehn
