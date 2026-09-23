@@ -8,3 +8,4 @@ import SmallCancellation.Certificates
 import SmallCancellation.Examples
 import SmallCancellation.Cancellation
 import SmallCancellation.CertificateCancellation
+import SmallCancellation.DiskMap
