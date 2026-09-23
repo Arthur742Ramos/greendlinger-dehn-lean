@@ -38,6 +38,44 @@ structure CurvatureFace where
 def CurvatureFace.curvature (f : CurvatureFace) : ℚ :=
   f.angleSum - ((f.sides : ℚ) - 2)
 
+/-- Finite accounting data for the combinatorial Gauss--Bonnet calculation on a
+disk decomposition. `angle_count` says interior vertices contribute angle sum
+2 and boundary vertices 1; `side_count` says interior edges have two incident
+face sides and boundary edges one. The diagram development must establish these
+identities and Euler's formula from its actual incidence structure. -/
+structure DiskCurvatureAccounting {F : Type*} [Fintype F]
+    (faces : F → CurvatureFace) where
+  vertices : Nat
+  edges : Nat
+  boundary : Nat
+  euler : vertices + Fintype.card F = edges + 1
+  angle_count : (∑ f : F, (faces f).angleSum) + boundary =
+    (2 : ℚ) * vertices
+  side_count : (∑ f : F, ((faces f).sides : ℚ)) + boundary =
+    (2 : ℚ) * edges
+
+/-- The local vertex and edge counts together with disk Euler characteristic
+give total face curvature 2. -/
+theorem DiskCurvatureAccounting.total_curvature_eq_two
+    {F : Type*} [Fintype F] {faces : F → CurvatureFace}
+    (a : DiskCurvatureAccounting faces) :
+    ∑ f : F, (faces f).curvature = 2 := by
+  classical
+  simp only [CurvatureFace.curvature, Finset.sum_sub_distrib]
+  have hangle : (∑ f : F, (faces f).angleSum) =
+      (2 : ℚ) * a.vertices - a.boundary := by
+    linarith [a.angle_count]
+  have hside : (∑ f : F, ((faces f).sides : ℚ)) =
+      (2 : ℚ) * a.edges - a.boundary := by
+    linarith [a.side_count]
+  have hconst : (∑ _f : F, (2 : ℚ)) = (Fintype.card F : ℚ) * 2 := by
+    simp
+  have heuler : (a.vertices : ℚ) + (Fintype.card F : ℚ) =
+      (a.edges : ℚ) + 1 := by
+    exact_mod_cast a.euler
+  rw [hangle, hside, hconst]
+  nlinarith [heuler]
+
 /-- A shell with at most three internal arcs is the desired Greendlinger face. -/
 def CurvatureFace.IsSmallShell (f : CurvatureFace) : Prop :=
   ∃ i, f.kind = .shell i ∧ i ≤ 3
@@ -114,6 +152,14 @@ theorem positive_curvature_forces_small_shell {F : Type*} [Fintype F]
       _ = 0 := by simp
   rw [htotal] at hsum
   norm_num at hsum
+
+/-- Combining the finite Gauss--Bonnet accounting with the local angle bounds
+forces a face with at most three internal arcs. -/
+theorem positive_curvature_forces_small_shell_of_accounting
+    {F : Type*} [Fintype F] (faces : F → CurvatureFace)
+    (a : DiskCurvatureAccounting faces) :
+    ∃ f : F, (faces f).IsSmallShell :=
+  positive_curvature_forces_small_shell faces a.total_curvature_eq_two
 
 /-- Summing strict one-sixth bounds over a nonempty finite arc family gives a
 strict total bound. -/
