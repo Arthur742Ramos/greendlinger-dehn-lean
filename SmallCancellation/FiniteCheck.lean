@@ -21,35 +21,82 @@ theorem mem_prefixes_iff {u w : Word α} :
 
 variable [DecidableEq α]
 
-/-- Enumerate exactly the nonempty common prefixes of distinct relators. -/
-def pieceCandidates (R : List (FreeGroup α)) : List (Word α) :=
+/-- Enumerate nonempty common prefixes of distinct symmetrized relators. -/
+def distinctPieceCandidates (R : List (FreeGroup α)) : List (Word α) :=
   R.flatMap fun r =>
     R.flatMap fun s =>
       if r = s then [] else
         (prefixes r.toWord).filter fun u =>
           decide (u ≠ [] ∧ u ∈ prefixes s.toWord)
 
+/-- Enumerate common prefixes arising from distinct cyclic positions in one
+relator, including positions whose rotations spell the same word. -/
+def repeatedPieceCandidates (R : List (FreeGroup α)) : List (Word α) :=
+  R.flatMap fun r =>
+    (cyclicShifts r.toWord).flatMap fun p =>
+      ((cyclicShifts r.toWord).filter fun q => decide (p.1 ≠ q.1)).flatMap fun q =>
+        (prefixes p.2).filter fun u =>
+          decide (u ≠ [] ∧ u ∈ prefixes q.2)
+
+/-- Enumerate all finite small-cancellation pieces. -/
+def pieceCandidates (R : List (FreeGroup α)) : List (Word α) :=
+  distinctPieceCandidates R ++ repeatedPieceCandidates R
+
 theorem pieceCandidates_sound {R : List (FreeGroup α)} {u : Word α}
     (hu : u ∈ pieceCandidates R) : IsPiece R u := by
-  simp only [pieceCandidates, List.mem_flatMap] at hu
-  rcases hu with ⟨r, hr, s, hs, hu⟩
-  by_cases hrs : r = s
-  · simp [hrs] at hu
-  · simp only [if_neg hrs, List.mem_filter, decide_eq_true_eq] at hu
-    rcases hu with ⟨hru, ⟨hne, hsu⟩⟩
-    refine ⟨hne, r, hr, s, hs, hrs, ?_⟩
-    obtain ⟨rt, hrt⟩ := mem_prefixes_iff.mp hru
-    obtain ⟨st, hst⟩ := mem_prefixes_iff.mp hsu
-    exact ⟨rt, st, hrt, hst⟩
+  rcases List.mem_append.mp hu with hu | hu
+  · simp only [distinctPieceCandidates, List.mem_flatMap] at hu
+    rcases hu with ⟨r, hr, s, hs, hu⟩
+    by_cases hrs : r = s
+    · simp [hrs] at hu
+    · simp only [if_neg hrs, List.mem_filter, decide_eq_true_eq] at hu
+      rcases hu with ⟨hru, ⟨hne, hsu⟩⟩
+      refine ⟨hne, Or.inl ?_⟩
+      refine ⟨r, hr, s, hs, hrs, ?_⟩
+      obtain ⟨rt, hrt⟩ := mem_prefixes_iff.mp hru
+      obtain ⟨st, hst⟩ := mem_prefixes_iff.mp hsu
+      exact ⟨rt, st, hrt, hst⟩
+  · unfold repeatedPieceCandidates at hu
+    rcases List.mem_flatMap.mp hu with ⟨r, hr, h₁⟩
+    rcases List.mem_flatMap.mp h₁ with ⟨p, hp, h₂⟩
+    rcases List.mem_flatMap.mp h₂ with ⟨q, hqfilter, h₃⟩
+    rcases List.mem_filter.mp hqfilter with ⟨hq, hposBool⟩
+    have hpos : p.1 ≠ q.1 := by simpa using hposBool
+    rcases List.mem_filter.mp h₃ with ⟨hpu, hcondBool⟩
+    have hcond : u ≠ [] ∧ u ∈ prefixes q.2 := by simpa using hcondBool
+    rcases hcond with ⟨hne, hqu⟩
+    obtain ⟨rTail, hrTail⟩ := mem_prefixes_iff.mp hpu
+    obtain ⟨sTail, hsTail⟩ := mem_prefixes_iff.mp hqu
+    exact ⟨hne, Or.inr ⟨r, hr, p.1, q.1, p.2, q.2, rTail, sTail,
+      hpos, hp, hq, hrTail, hsTail⟩⟩
 
 theorem pieceCandidates_complete {R : List (FreeGroup α)} {u : Word α}
     (hu : IsPiece R u) : u ∈ pieceCandidates R := by
-  rcases hu with ⟨hne, r, hr, s, hs, hrs, rt, st, hrt, hst⟩
-  simp only [pieceCandidates, List.mem_flatMap]
-  refine ⟨r, hr, s, hs, ?_⟩
-  have hru : u ∈ prefixes r.toWord := mem_prefixes_iff.mpr ⟨rt, hrt⟩
-  have hsu : u ∈ prefixes s.toWord := mem_prefixes_iff.mpr ⟨st, hst⟩
-  simp [hrs, List.mem_filter, hru, hne, hsu]
+  rcases hu with ⟨hne, hpiece⟩
+  rcases hpiece with hpiece | hpiece
+  · rcases hpiece with ⟨r, hr, s, hs, hrs, rt, st, hrt, hst⟩
+    apply List.mem_append.mpr
+    left
+    simp only [distinctPieceCandidates, List.mem_flatMap]
+    refine ⟨r, hr, s, hs, ?_⟩
+    have hru : u ∈ prefixes r.toWord := mem_prefixes_iff.mpr ⟨rt, hrt⟩
+    have hsu : u ∈ prefixes s.toWord := mem_prefixes_iff.mpr ⟨st, hst⟩
+    simp [hrs, List.mem_filter, hru, hne, hsu]
+  · rcases hpiece with ⟨r, hr, i, j, rShift, sShift, rTail, sTail,
+      hpos, hri, hsj, hru, hsu⟩
+    apply List.mem_append.mpr
+    right
+    apply List.mem_flatMap.mpr
+    refine ⟨r, hr, ?_⟩
+    apply List.mem_flatMap.mpr
+    refine ⟨(i, rShift), hri, ?_⟩
+    apply List.mem_flatMap.mpr
+    refine ⟨(j, sShift), ?_, ?_⟩
+    · apply List.mem_filter.mpr
+      exact ⟨hsj, by simp [hpos]⟩
+    · apply List.mem_filter.mpr
+      refine ⟨mem_prefixes_iff.mpr ⟨rTail, hru⟩, ?_⟩
+      simp [hne, mem_prefixes_iff.mpr ⟨sTail, hsu⟩]
 
 /-- Executable checker for the metric small-cancellation condition C'(1/6). -/
 def cPrimeSixCheck (R : List (FreeGroup α)) : Bool :=

@@ -14,8 +14,25 @@ def sixthPower : FreeGroup Atom := FreeGroup.mk (List.replicate 6 (atom, true))
 
 def symmetrizedRelators : List (FreeGroup Atom) := [sixthPower, sixthPower⁻¹]
 
-/-- The finite C'(1/6) checker accepts the symmetrized one-generator example. -/
-example : cPrimeSixCheck symmetrizedRelators = true := by decide
+abbrev DistinctAtom := Fin 8
+
+def longRelator : FreeGroup DistinctAtom :=
+  FreeGroup.mk ([(0, true), (1, true), (2, true), (3, true),
+    (4, true), (5, true), (6, true), (7, true)] : Word DistinctAtom)
+
+def cyclicOrbit (r : FreeGroup DistinctAtom) : List (FreeGroup DistinctAtom) :=
+  (cyclicShifts r.toWord).map fun p => FreeGroup.mk p.2
+
+def cPrimeSymmetrizedRelators : List (FreeGroup DistinctAtom) :=
+  cyclicOrbit longRelator ++ cyclicOrbit longRelator⁻¹
+
+/-- The finite checker accepts a symmetrized relator with distinct cyclic
+letters; the periodic one-generator relator below is intentionally excluded. -/
+example : cPrimeSixCheck cPrimeSymmetrizedRelators = true := by decide
+
+/-- Repeated cyclic positions in a proper-power relator are pieces, so the
+one-generator periodic presentation fails the strict C'(1/6) test. -/
+example : cPrimeSixCheck symmetrizedRelators = false := by decide
 
 /-- Dehn reduction detects the defining relator as the identity. -/
 example : dehnWordProblem symmetrizedRelators sixthPower = true := by decide

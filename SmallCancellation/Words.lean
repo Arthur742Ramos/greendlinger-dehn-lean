@@ -21,10 +21,48 @@ theorem mem_splits_iff {α : Type*} {w pre suf : List α} :
       | nil => simp [splits, eq_comm]
       | cons y ys => simp [splits, ih, List.cons_append, and_comm, eq_comm]
 
-/-- A nonempty common prefix of two distinct symmetrized relators is a piece. -/
+/-- All cyclic rotations of a word, tagged by their distinct start positions.
+The full-length split is omitted because it is the same cyclic position as zero. -/
+def cyclicShifts {α : Type*} (w : Word α) : List (Nat × Word α) :=
+  ((splits w).filter fun p => decide (p.1.length < w.length)).map
+    fun p => (p.1.length, p.2 ++ p.1)
+
+theorem mem_cyclicShifts_iff {α : Type*} {w : Word α} {i : Nat} {v : Word α} :
+    (i, v) ∈ cyclicShifts w ↔
+      ∃ pre suf, w = pre ++ suf ∧ pre.length < w.length ∧
+        i = pre.length ∧ v = suf ++ pre := by
+  constructor
+  · intro h
+    unfold cyclicShifts at h
+    rcases List.mem_map.mp h with ⟨p, hp, hpair⟩
+    rcases List.mem_filter.mp hp with ⟨hsplit, hlt⟩
+    have hlt' : p.1.length < w.length := by simpa using hlt
+    have hword := mem_splits_iff.mp hsplit
+    cases p with
+    | mk pre suf =>
+        simp only [Prod.mk.injEq] at hpair
+        rcases hpair with ⟨hi, hv⟩
+        exact ⟨pre, suf, hword, hlt', hi.symm, hv.symm⟩
+  · rintro ⟨pre, suf, hsplit, hlt, rfl, rfl⟩
+    unfold cyclicShifts
+    apply List.mem_map.mpr
+    refine ⟨(pre, suf), ?_, rfl⟩
+    apply List.mem_filter.mpr
+    exact ⟨mem_splits_iff.mpr hsplit, by simp [hlt]⟩
+
+/-- A nonempty common prefix of two distinct symmetrized relators, or of two
+different cyclic positions in one relator, is a piece. The second clause is
+essential for proper powers, where distinct cyclic positions can spell the same
+word and would be lost by deduplicating the symmetrized relator list. -/
 def IsPiece {α : Type*} [DecidableEq α] (R : List (FreeGroup α)) (u : Word α) : Prop :=
-  u ≠ [] ∧ ∃ r ∈ R, ∃ s ∈ R, r ≠ s ∧
-    ∃ rTail sTail, r.toWord = u ++ rTail ∧ s.toWord = u ++ sTail
+  u ≠ [] ∧
+    ((∃ r ∈ R, ∃ s ∈ R, r ≠ s ∧
+        ∃ rTail sTail, r.toWord = u ++ rTail ∧ s.toWord = u ++ sTail) ∨
+      ∃ r ∈ R, ∃ i j rShift sShift rTail sTail,
+        i ≠ j ∧
+        (i, rShift) ∈ cyclicShifts r.toWord ∧
+        (j, sShift) ∈ cyclicShifts r.toWord ∧
+        rShift = u ++ rTail ∧ sShift = u ++ sTail)
 
 /-- The metric small cancellation condition (C'(1/6)), for a symmetrized finite
 set of cyclically reduced relators. -/
