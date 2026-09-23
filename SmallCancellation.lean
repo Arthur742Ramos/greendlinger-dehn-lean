@@ -6,3 +6,5 @@ import SmallCancellation.Curvature
 import SmallCancellation.Shell
 import SmallCancellation.Certificates
 import SmallCancellation.Examples
+import SmallCancellation.Cancellation
+import SmallCancellation.CertificateCancellation
