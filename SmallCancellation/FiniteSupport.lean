@@ -73,6 +73,19 @@ theorem target_mem_endpointFinset {α : Type*} (G : LabelledDartGraph α)
   right
   exact Finset.mem_image.mpr ⟨d, Finset.mem_univ d, rfl⟩
 
+/-- Every vertex in the finite support is incident to an edge dart. -/
+theorem activeVertex_incident {α : Type*} (G : LabelledDartGraph α)
+    [Fintype G.toDartGraph.Dart] (v : G.ActiveVertex) :
+    ∃ d, G.toDartGraph.source d = v.1 ∨ G.toDartGraph.target d = v.1 := by
+  classical
+  have hv := v.2
+  unfold endpointFinset at hv
+  rcases Finset.mem_union.mp hv with hs | ht
+  · rcases Finset.mem_image.mp hs with ⟨d, _, h⟩
+    exact ⟨d, Or.inl h⟩
+  · rcases Finset.mem_image.mp ht with ⟨d, _, h⟩
+    exact ⟨d, Or.inr h⟩
+
 /-- The restriction of a finite-dart graph to precisely its incident
 vertices. Its dart and label data are unchanged. -/
 def endpointRestriction {α : Type*} (G : LabelledDartGraph α)

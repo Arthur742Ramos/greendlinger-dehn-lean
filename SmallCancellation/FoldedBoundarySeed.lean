@@ -4,6 +4,15 @@ import SmallCancellation.FiniteSupport
 
 namespace GreendlingerDehn
 
+/-- A face boundary carried by a finite map, with its defining-relator
+provenance retained explicitly. -/
+structure RelatorBoundaryLoop {α : Type*} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α) (G : LabelledDartGraph α) where
+  relator : FreeGroup α
+  relator_mem : relator ∈ P.relators
+  base : G.toDartGraph.Vertex
+  walk : LabelledWalk G base base relator.toWord
+
 /-- Fold the occurrence boundary of a minimum-area lollipop seed along its
 certified free-reduction trace. The output is a labeled quotient graph and a
 closed boundary walk spelling the requested reduced word. This is a genuine
@@ -98,11 +107,12 @@ noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonRelatorLoopAt
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
     (i : Fin seed.boundary.reducedBalloons.length) :
-    Σ vertex : seed.finiteFoldedBoundaryGraph.toDartGraph.Vertex,
-      LabelledWalk seed.finiteFoldedBoundaryGraph vertex vertex
-        (seed.boundary.reducedBalloons.get i).label.relator.toWord := by
+    RelatorBoundaryLoop P seed.finiteFoldedBoundaryGraph := by
   let hom := seed.finiteFoldedBoundaryHom hne
+  let balloon := seed.boundary.reducedBalloons.get i
   let loop := seed.balloonRelatorLoopAt i
-  exact ⟨hom.mapVertex loop.1, loop.2.map hom⟩
+  refine ⟨balloon.label.relator, balloon.label.relator_mem,
+    hom.mapVertex loop.1, ?_⟩
+  simpa [balloon] using loop.2.map hom
 
 end GreendlingerDehn
