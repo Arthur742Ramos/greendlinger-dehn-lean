@@ -19,3 +19,4 @@ import SmallCancellation.PlanarBoundarySeed
 import SmallCancellation.WordPath
 import SmallCancellation.LollipopFolds
 import SmallCancellation.FoldedBoundarySeed
+import SmallCancellation.PairingComponents
