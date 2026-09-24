@@ -206,6 +206,66 @@ theorem cyclicReplacement_decreases_norm {R : List (FreeGroup α)}
       _ = w.norm := rfl
   omega
 
+/-- With fuel at least the current reduced length, cyclic Dehn reduction never
+increases that length. -/
+theorem cyclicDehnReduceFuel_norm_le {R : List (FreeGroup α)} :
+    ∀ (n : Nat) (w : FreeGroup α), w.norm ≤ n →
+      (cyclicDehnReduceFuel R n w).norm ≤ w.norm := by
+  intro n
+  induction n with
+  | zero =>
+      intro w hw
+      have hwzero : w.norm = 0 := Nat.eq_zero_of_le_zero hw
+      simp [cyclicDehnReduceFuel, hwzero]
+  | succ n ih =>
+      intro w hw
+      unfold cyclicDehnReduceFuel
+      cases hfind : findCyclicRedex? R w with
+      | none => exact le_rfl
+      | some c =>
+          have hc := findCyclicRedex?_sound hfind
+          have hdecrease := cyclicReplacement_decreases_norm hc
+          have hbound : (replaceRedex c.1.redex).norm ≤ n := by omega
+          exact (ih (replaceRedex c.1.redex) hbound).trans (Nat.le_of_lt hdecrease)
+
+/-- If a cyclic redex is available and the fuel covers the input norm, the
+cyclic reducer performs progress: all later steps preserve the strict decrease
+established by its first replacement. -/
+theorem cyclicDehnReduceFuel_norm_lt_of_cyclicRedex {R : List (FreeGroup α)} :
+    ∀ (n : Nat) (w : FreeGroup α), w.norm ≤ n →
+      (∃ c, IsCyclicRedex R w c) →
+        (cyclicDehnReduceFuel R n w).norm < w.norm := by
+  intro n
+  induction n with
+  | zero =>
+      intro w hw hredex
+      obtain ⟨c, hc⟩ := hredex
+      have hdecrease := cyclicReplacement_decreases_norm hc
+      have hwzero : w.norm = 0 := Nat.eq_zero_of_le_zero hw
+      omega
+  | succ n ih =>
+      intro w hw hredex
+      unfold cyclicDehnReduceFuel
+      cases hfind : findCyclicRedex? R w with
+      | none =>
+          exact False.elim ((findCyclicRedex?_none_iff (R := R) (w := w)).mp
+            hfind hredex)
+      | some c =>
+          have hc := findCyclicRedex?_sound hfind
+          have hdecrease := cyclicReplacement_decreases_norm hc
+          have hbound : (replaceRedex c.1.redex).norm ≤ n := by omega
+          have htail := cyclicDehnReduceFuel_norm_le (R := R) n
+            (replaceRedex c.1.redex) hbound
+          exact Nat.lt_of_le_of_lt htail hdecrease
+
+/-- The executable cyclic reducer strictly decreases norm whenever its input
+contains a cyclic redex. -/
+theorem cyclicDehnReduce_norm_lt_of_cyclicRedex {R : List (FreeGroup α)}
+    {w : FreeGroup α} (hredex : ∃ c, IsCyclicRedex R w c) :
+    (cyclicDehnReduce R w).norm < w.norm := by
+  simpa [cyclicDehnReduce] using
+    cyclicDehnReduceFuel_norm_lt_of_cyclicRedex (R := R) w.norm w le_rfl hredex
+
 theorem cyclicDehnReduceFuel_preserves_identity {R : List (FreeGroup α)} :
     ∀ (n : Nat) (w : FreeGroup α),
       PresentedGroup.mk (relationSet R) (cyclicDehnReduceFuel R n w) = 1 ↔

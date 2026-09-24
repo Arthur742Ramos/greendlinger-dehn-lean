@@ -201,4 +201,18 @@ theorem cyclicGreendlinger_of_certificate_area_le_one
   have hminimumArea : seed.certificate.area = 1 := by omega
   exact seed.cyclicGreendlinger_of_area_one hminimumArea
 
+/-- In the area-at-most-one case, the executable cyclic Dehn reducer makes a
+strictly shorter result from every nontrivial null input. -/
+theorem cyclicDehnReduce_norm_lt_of_certificate_area_le_one
+    {α : Type*} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α) (w : FreeGroup α)
+    (hnull : PresentedGroup.mk (relationSet P.relators) w = 1)
+    (hne : w ≠ 1)
+    (certificate : RelatorCertificate P.relators w)
+    (harea : certificate.area ≤ 1) :
+    (cyclicDehnReduce P.relators w).norm < w.norm := by
+  apply cyclicDehnReduce_norm_lt_of_cyclicRedex
+  exact cyclicGreendlinger_of_certificate_area_le_one
+    P w hnull hne certificate harea
+
 end GreendlingerDehn
