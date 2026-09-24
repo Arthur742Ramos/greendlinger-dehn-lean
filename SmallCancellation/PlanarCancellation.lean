@@ -28,6 +28,15 @@ theorem pairEndpoints_length (pairs : List (Nat × Nat)) :
       simp [pairEndpoints]
       omega
 
+theorem pairEndpoints_append (left right : List (Nat × Nat)) :
+    pairEndpoints (left ++ right) = pairEndpoints left ++ pairEndpoints right := by
+  simp [pairEndpoints, List.flatMap_append]
+
+theorem pairEndpoints_map {pairs : List (Nat × Nat)} (f : Nat → Nat) :
+    pairEndpoints (pairs.map fun p => (f p.1, f p.2)) =
+      (pairEndpoints pairs).map f := by
+  simp [pairEndpoints, List.flatMap_map, List.map_flatMap]
+
 /-- Shift surviving letter occurrences when their source word is embedded in a
 larger concatenation. Each occurrence retains its source position and label. -/
 def shiftLetterOccurrences (offset : Nat) (occurrences : List (Nat × Letter α)) :
@@ -52,8 +61,64 @@ def CancellationIntervalsCompatible (p q : Nat × Nat) : Prop :=
   p.2 < q.1 ∨ q.2 < p.1 ∨
     (p.1 ≤ q.1 ∧ q.2 ≤ p.2) ∨ (q.1 ≤ p.1 ∧ p.2 ≤ q.2)
 
+theorem CancellationIntervalsCompatible.symm {p q : Nat × Nat}
+    (h : CancellationIntervalsCompatible p q) :
+    CancellationIntervalsCompatible q p := by
+  rcases h with h | h | ⟨hpq₁, hqp₂⟩ | ⟨hqp₁, hpq₂⟩
+  · exact Or.inr (Or.inl h)
+  · exact Or.inl h
+  · exact Or.inr (Or.inr (Or.inr ⟨hpq₁, hqp₂⟩))
+  · exact Or.inr (Or.inr (Or.inl ⟨hqp₁, hpq₂⟩))
+
 def CancellationPairsNoncrossing (pairs : List (Nat × Nat)) : Prop :=
   ∀ p ∈ pairs, ∀ q ∈ pairs, CancellationIntervalsCompatible p q
+
+/-- Finite source-position data for a word reduction. The record captures a
+noncrossing inverse-letter pairing and the ordered surviving occurrences;
+these are the combinatorial inputs to a later planar gluing construction. -/
+structure IndexedBoundaryTrace {α : Type*} (raw reduced : Word α) where
+  cancellationPairs : List (Nat × Nat)
+  survivorOccurrences : List (Nat × Letter α)
+  pairs_noncrossing : CancellationPairsNoncrossing cancellationPairs
+  pairs_are_inverseLetters : ∀ p ∈ cancellationPairs,
+    ∃ a, raw[p.1]? = some a ∧ raw[p.2]? = some (inverseLetter a)
+  pairs_inBounds : ∀ p ∈ cancellationPairs,
+    p.1 < p.2 ∧ p.2 < raw.length
+  endpoints_nodup : (pairEndpoints cancellationPairs).Nodup
+  endpoints_inBounds : ∀ i ∈ pairEndpoints cancellationPairs, i < raw.length
+  survivors_labels : survivorOccurrences.map Prod.snd = reduced
+  survivors_length : survivorOccurrences.length = reduced.length
+  survivorPositions_nodup : (survivorOccurrences.map Prod.fst).Nodup
+  survivorPositions_strict : List.Pairwise (fun i j : Nat => i < j)
+    (survivorOccurrences.map Prod.fst)
+  survivors_are_sourceLetters : ∀ o ∈ survivorOccurrences,
+    raw[o.1]? = some o.2
+  survivors_inBounds : ∀ o ∈ survivorOccurrences, o.1 < raw.length
+  endpoints_disjoint_survivors : ∀ i ∈ pairEndpoints cancellationPairs,
+    ∀ j ∈ survivorOccurrences.map Prod.fst, i ≠ j
+  no_survivor_inside_pair : ∀ p ∈ cancellationPairs,
+    ∀ o ∈ survivorOccurrences, p.1 < o.1 → o.1 < p.2 → False
+  endpoint_survivor_count : (pairEndpoints cancellationPairs).length +
+    (survivorOccurrences.map Prod.fst).length = raw.length
+  sourcePositions_partition : ∀ i, i < raw.length →
+    i ∈ pairEndpoints cancellationPairs ∨
+      i ∈ survivorOccurrences.map Prod.fst
+
+theorem CancellationIntervalsCompatible.map_strictMono {p q : Nat × Nat}
+    {f : Nat → Nat} (hf : ∀ ⦃x y⦄, x < y → f x < f y)
+    (h : CancellationIntervalsCompatible p q) :
+    CancellationIntervalsCompatible
+      (f p.1, f p.2) (f q.1, f q.2) := by
+  have map_le {x y : Nat} (hxy : x ≤ y) : f x ≤ f y := by
+    rcases Nat.eq_or_lt_of_le hxy with heq | hlt
+    · subst y
+      exact le_rfl
+    · exact (hf hlt).le
+  rcases h with h | h | ⟨hpq₁, hqp₂⟩ | ⟨hqp₁, hpq₂⟩
+  · exact Or.inl (hf h)
+  · exact Or.inr (Or.inl (hf h))
+  · exact Or.inr (Or.inr (Or.inl ⟨map_le hpq₁, map_le hqp₂⟩))
+  · exact Or.inr (Or.inr (Or.inr ⟨map_le hqp₁, map_le hpq₂⟩))
 
 theorem CancellationIntervalsCompatible.shift {p q : Nat × Nat}
     (h : CancellationIntervalsCompatible p q) (offset : Nat) :
@@ -269,6 +334,18 @@ def sourcePositionOfOutput {raw reduced : Word α}
     (h : FreeReductionShape raw reduced) (i : Fin reduced.length) : Nat :=
   h.survivorPositions.get (h.survivorOutputIndex i)
 
+/-- Strictly increasing total extension of `sourcePositionOfOutput`. Out-of-
+range output indices are placed after all source positions. -/
+def sourcePositionOfOutputNat {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) (i : Nat) : Nat :=
+  if hi : i < reduced.length then h.sourcePositionOfOutput ⟨i, hi⟩
+  else h.inputWord.length + (i - reduced.length)
+
+theorem sourcePositionOfOutputNat_eq {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) {i : Nat} (hi : i < reduced.length) :
+    h.sourcePositionOfOutputNat i = h.sourcePositionOfOutput ⟨i, hi⟩ := by
+  simp [sourcePositionOfOutputNat, hi]
+
 theorem survivorPositions_inBounds {raw reduced : Word α}
     (h : FreeReductionShape raw reduced) :
     ∀ i ∈ h.survivorPositions, i < h.inputWord.length := by
@@ -285,6 +362,12 @@ theorem sourcePositionOfOutput_inBounds {raw reduced : Word α}
   exact (List.forall_mem_iff_get.mp h.survivorPositions_inBounds)
     (h.survivorOutputIndex i)
 
+theorem sourcePositionOfOutput_mem {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) (i : Fin reduced.length) :
+    h.sourcePositionOfOutput i ∈ h.survivorPositions := by
+  change h.survivorPositions.get (h.survivorOutputIndex i) ∈ h.survivorPositions
+  exact List.get_mem _ _
+
 theorem sourcePositionOfOutput_strict {raw reduced : Word α}
     (h : FreeReductionShape raw reduced) {i j : Fin reduced.length}
     (hij : i < j) : h.sourcePositionOfOutput i < h.sourcePositionOfOutput j := by
@@ -292,6 +375,181 @@ theorem sourcePositionOfOutput_strict {raw reduced : Word α}
     Fin.mk_lt_mk.mpr hij
   have hstrict := h.survivorOccurrencePositions_strict.rel_get_of_lt hij'
   exact hstrict
+
+theorem sourcePositionOfOutputNat_strict {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) {i j : Nat} (hij : i < j) :
+    h.sourcePositionOfOutputNat i < h.sourcePositionOfOutputNat j := by
+  by_cases hi : i < reduced.length
+  · by_cases hj : j < reduced.length
+    · rw [h.sourcePositionOfOutputNat_eq hi, h.sourcePositionOfOutputNat_eq hj]
+      exact h.sourcePositionOfOutput_strict (Fin.mk_lt_mk.mpr hij)
+    · rw [h.sourcePositionOfOutputNat_eq hi]
+      have hbound := h.sourcePositionOfOutput_inBounds ⟨i, hi⟩
+      have hj' : reduced.length ≤ j := Nat.le_of_not_gt hj
+      simp [sourcePositionOfOutputNat, hj]
+      omega
+  · have hj : ¬ j < reduced.length := by omega
+    simp [sourcePositionOfOutputNat, hi, hj]
+    omega
+
+theorem sourcePositionOfOutputNat_injective {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    Function.Injective h.sourcePositionOfOutputNat := by
+  intro i j hij
+  by_contra hne
+  rcases lt_or_gt_of_ne hne with hlt | hgt
+  · have hstrict := h.sourcePositionOfOutputNat_strict hlt
+    omega
+  · have hstrict := h.sourcePositionOfOutputNat_strict hgt
+    omega
+
+theorem sourcePositionOfOutput_injective {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    Function.Injective h.sourcePositionOfOutput := by
+  intro i j hij
+  by_contra hne
+  rcases lt_or_gt_of_ne hne with hlt | hgt
+  · have hstrict := h.sourcePositionOfOutput_strict hlt
+    omega
+  · have hstrict := h.sourcePositionOfOutput_strict hgt
+    omega
+
+/-- Lift a pair of output positions back to the corresponding source
+occurrences of an earlier free reduction. -/
+def liftCancellationPair {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced)
+    (p : Fin reduced.length × Fin reduced.length) : Nat × Nat :=
+  (h.sourcePositionOfOutput p.1, h.sourcePositionOfOutput p.2)
+
+theorem liftCancellationPair_forward {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced)
+    {p : Fin reduced.length × Fin reduced.length}
+    (hp : p.1.val < p.2.val) :
+    (h.liftCancellationPair p).1 < (h.liftCancellationPair p).2 := by
+  exact h.sourcePositionOfOutput_strict (Fin.mk_lt_mk.mpr hp)
+
+theorem liftCancellationPair_preserves_compatibility {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced)
+    {p q : Fin reduced.length × Fin reduced.length}
+    (hpq : CancellationIntervalsCompatible (p.1.val, p.2.val)
+      (q.1.val, q.2.val)) :
+    CancellationIntervalsCompatible (h.liftCancellationPair p)
+      (h.liftCancellationPair q) := by
+  have map_lt {i j : Fin reduced.length} (hij : i.val < j.val) :
+      h.sourcePositionOfOutput i < h.sourcePositionOfOutput j :=
+    h.sourcePositionOfOutput_strict (Fin.mk_lt_mk.mpr hij)
+  have map_le {i j : Fin reduced.length} (hij : i.val ≤ j.val) :
+      h.sourcePositionOfOutput i ≤ h.sourcePositionOfOutput j := by
+    rcases Nat.eq_or_lt_of_le hij with heq | hlt
+    · have hEq : i = j := Fin.ext heq
+      subst j
+      exact le_rfl
+    · exact (map_lt hlt).le
+  rcases hpq with hpq | hqp | ⟨hpq₁, hqp₂⟩ | ⟨hqp₁, hpq₂⟩
+  · exact Or.inl (map_lt hpq)
+  · exact Or.inr (Or.inl (map_lt hqp))
+  · exact Or.inr (Or.inr (Or.inl ⟨map_le hpq₁, map_le hqp₂⟩))
+  · exact Or.inr (Or.inr (Or.inr ⟨map_le hqp₁, map_le hpq₂⟩))
+
+/-- Apply the total monotone source-position map to an arbitrary pair of
+integer output positions. -/
+def liftCancellationPairNat {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) (p : Nat × Nat) : Nat × Nat :=
+  (h.sourcePositionOfOutputNat p.1, h.sourcePositionOfOutputNat p.2)
+
+theorem liftCancellationPairNat_preserves_compatibility {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) {p q : Nat × Nat}
+    (hpq : CancellationIntervalsCompatible p q) :
+    CancellationIntervalsCompatible (h.liftCancellationPairNat p)
+      (h.liftCancellationPairNat q) := by
+  exact CancellationIntervalsCompatible.map_strictMono
+    (fun {_ _} hij => h.sourcePositionOfOutputNat_strict hij) hpq
+
+/-- Lift every cancellation pair in a later reduction through an earlier
+reduction, using the source occurrence retained at each endpoint. -/
+def liftCancellationPairs {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) : List (Nat × Nat) :=
+  later.cancellationPairs.map fun p =>
+    earlier.liftCancellationPairNat p
+
+theorem liftCancellationPairs_eq_map {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    liftCancellationPairs earlier later =
+      later.cancellationPairs.map fun p =>
+        earlier.liftCancellationPairNat p := by
+  rfl
+
+/-- Lift the retained output occurrences of a later reduction through an
+earlier reduction while preserving their labels and order. -/
+def liftSurvivorOccurrences {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) : List (Nat × Letter α) :=
+  later.survivorOccurrences.map fun o =>
+    (earlier.sourcePositionOfOutputNat o.1, o.2)
+
+theorem liftSurvivorOccurrences_eq_map {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    liftSurvivorOccurrences earlier later =
+      later.survivorOccurrences.map fun o =>
+        (earlier.sourcePositionOfOutputNat o.1, o.2) := by
+  rfl
+
+theorem liftSurvivorOccurrences_labels {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (liftSurvivorOccurrences earlier later).map Prod.snd = reduced := by
+  rw [liftSurvivorOccurrences_eq_map]
+  simpa [List.map_map, Function.comp_def] using later.survivorOccurrences_labels
+
+theorem liftSurvivorOccurrences_length {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (liftSurvivorOccurrences earlier later).length = reduced.length := by
+  rw [liftSurvivorOccurrences_eq_map]
+  simp [later.survivorOccurrences_length]
+
+theorem liftSurvivorOccurrences_positions {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (liftSurvivorOccurrences earlier later).map Prod.fst =
+      later.survivorPositions.map earlier.sourcePositionOfOutputNat := by
+  rw [liftSurvivorOccurrences_eq_map]
+  simp [survivorPositions, List.map_map, Function.comp_def]
+
+theorem liftSurvivorOccurrences_positions_strict {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    List.Pairwise (fun x y : Nat => x < y)
+      ((liftSurvivorOccurrences earlier later).map Prod.fst) := by
+  rw [liftSurvivorOccurrences_positions, List.pairwise_map]
+  apply later.survivorOccurrencePositions_strict.imp
+  intro x y hxy
+  exact earlier.sourcePositionOfOutputNat_strict hxy
+
+theorem liftSurvivorOccurrences_positions_nodup {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ((liftSurvivorOccurrences earlier later).map Prod.fst).Nodup := by
+  have hstrict := earlier.liftSurvivorOccurrences_positions_strict later
+  change List.Pairwise (fun x y : Nat => x ≠ y)
+    ((liftSurvivorOccurrences earlier later).map Prod.fst)
+  exact hstrict.imp (fun hlt => Nat.ne_of_lt hlt)
+
+theorem liftSurvivorOccurrences_inBounds {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ o ∈ liftSurvivorOccurrences earlier later,
+      o.1 < earlier.inputWord.length := by
+  intro o ho
+  rw [liftSurvivorOccurrences_eq_map] at ho
+  rcases List.mem_map.mp ho with ⟨p, hp, rfl⟩
+  have hpBound := later.survivorOccurrences_inBounds p hp
+  have hpLt : p.1 < middle.length := by simpa [inputWord] using hpBound
+  rw [earlier.sourcePositionOfOutputNat_eq hpLt]
+  exact earlier.sourcePositionOfOutput_inBounds ⟨p.1, hpLt⟩
 
 theorem survivorOccurrences_are_sourceLetters {raw reduced : Word α}
     (h : FreeReductionShape raw reduced) :
@@ -334,6 +592,34 @@ theorem survivorOccurrences_are_sourceLetters {raw reduced : Word α}
         _ = suffix[q.1]? := getElem?_append_shift
           (([a] ++ inner) ++ [inverseLetter a]) suffix q.1
         _ = q.2 := hsource
+
+theorem sourcePositionOfOutput_sourceLetter {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) (i : Fin reduced.length) :
+    raw[h.sourcePositionOfOutput i]? = some reduced[i.val] := by
+  have hi : i.val < h.survivorOccurrences.length := by
+    rw [h.survivorOccurrences_length]
+    exact i.isLt
+  let o : Nat × Letter α := h.survivorOccurrences[i.val]
+  have ho : o ∈ h.survivorOccurrences := by
+    dsimp [o]
+    exact List.getElem_mem hi
+  have hsource := h.survivorOccurrences_are_sourceLetters o ho
+  have hposition : h.sourcePositionOfOutput i = o.1 := by
+    dsimp [sourcePositionOfOutput, survivorOutputIndex, survivorPositions, o]
+    simp
+  have hlabel : o.2 = reduced[i.val] := by
+    have hlabels := congrArg (fun xs : List (Letter α) => xs[i.val]?)
+      h.survivorOccurrences_labels
+    have hlabels' : (h.survivorOccurrences[i.val]?).map Prod.snd =
+        some reduced[i.val] := by simpa using hlabels
+    have ho' : h.survivorOccurrences[i.val]? = some o := by
+      simp [o, hi]
+    rw [ho'] at hlabels'
+    injection hlabels' with hlabel
+  calc
+    raw[h.sourcePositionOfOutput i]? = raw[o.1]? := by rw [hposition]
+    _ = some o.2 := hsource
+    _ = some reduced[i.val] := by rw [hlabel]
 
 theorem cancellationPairs_length {raw reduced : Word α}
     (h : FreeReductionShape raw reduced) :
@@ -901,6 +1187,648 @@ theorem cancellationPairs_contain_no_survivor {raw reduced : Word α}
           have hbefore' : p₀.1 < q.1 := by omega
           have hafter' : q.1 < p₀.2 := by omega
           exact ihSuffix p₀ hp₀ q hq hbefore' hafter'
+
+/-- Pairs introduced by a later reduction lift to intervals compatible with
+every earlier cancellation interval. A lifted pair can enclose an earlier
+interval, but its surviving endpoints cannot cross that interval. -/
+theorem liftCancellationPair_compatible_with_earlier
+    {raw middle : Word α} (h : FreeReductionShape raw middle)
+    {p : Nat × Nat} (hp : p ∈ h.cancellationPairs)
+    (q : Fin middle.length × Fin middle.length) (hq : q.1.val < q.2.val) :
+    CancellationIntervalsCompatible p (h.liftCancellationPair q) := by
+  let x := h.sourcePositionOfOutput q.1
+  let y := h.sourcePositionOfOutput q.2
+  have hxy : x < y := by
+    dsimp [x, y]
+    exact h.sourcePositionOfOutput_strict (Fin.mk_lt_mk.mpr hq)
+  have hxmem : x ∈ h.survivorPositions := by
+    dsimp [x]
+    exact h.sourcePositionOfOutput_mem q.1
+  have hymem : y ∈ h.survivorPositions := by
+    dsimp [y]
+    exact h.sourcePositionOfOutput_mem q.2
+  have hxlist : x ∈ h.survivorOccurrences.map Prod.fst := by
+    simpa [survivorPositions] using hxmem
+  have hylist : y ∈ h.survivorOccurrences.map Prod.fst := by
+    simpa [survivorPositions] using hymem
+  obtain ⟨ox, hox, hoxx⟩ := List.mem_map.mp hxlist
+  obtain ⟨oy, hoy, hoyy⟩ := List.mem_map.mp hylist
+  have hAvoidX := h.survivorOccurrences_disjointFromCancellationPairs ox hox p hp
+  have hAvoidY := h.survivorOccurrences_disjointFromCancellationPairs oy hoy p hp
+  have hxNe1 : x ≠ p.1 := by simpa [hoxx] using hAvoidX.1
+  have hxNe2 : x ≠ p.2 := by simpa [hoxx] using hAvoidX.2
+  have hyNe1 : y ≠ p.1 := by simpa [hoyy] using hAvoidY.1
+  have hyNe2 : y ≠ p.2 := by simpa [hoyy] using hAvoidY.2
+  have hxNoInterior : ¬ (p.1 < x ∧ x < p.2) := by
+    intro hx
+    exact h.cancellationPairs_contain_no_survivor p hp ox hox
+      (by simpa [hoxx] using hx.1) (by simpa [hoxx] using hx.2)
+  have hyNoInterior : ¬ (p.1 < y ∧ y < p.2) := by
+    intro hy
+    exact h.cancellationPairs_contain_no_survivor p hp oy hoy
+      (by simpa [hoyy] using hy.1) (by simpa [hoyy] using hy.2)
+  have hpForward := h.cancellationPairs_inBounds p hp
+  have hxOutside : x < p.1 ∨ p.2 < x := by
+    by_cases hbefore : x < p.1
+    · exact Or.inl hbefore
+    · by_cases hafter : p.2 < x
+      · exact Or.inr hafter
+      · have hleft : p.1 < x := by omega
+        have hright : x < p.2 := by omega
+        exact False.elim (hxNoInterior ⟨hleft, hright⟩)
+  have hyOutside : y < p.1 ∨ p.2 < y := by
+    by_cases hbefore : y < p.1
+    · exact Or.inl hbefore
+    · by_cases hafter : p.2 < y
+      · exact Or.inr hafter
+      · have hleft : p.1 < y := by omega
+        have hright : y < p.2 := by omega
+        exact False.elim (hyNoInterior ⟨hleft, hright⟩)
+  rcases hxOutside with hxBefore | hxAfter
+  · rcases hyOutside with hyBefore | hyAfter
+    · exact Or.inr (Or.inl (by dsimp [liftCancellationPair, x, y]; omega))
+    · exact Or.inr (Or.inr (Or.inr
+        (by dsimp [liftCancellationPair, x, y]; omega)))
+  · rcases hyOutside with hyBefore | hyAfter
+    · exfalso
+      dsimp [x, y] at hxy
+      omega
+    · exact Or.inl (by dsimp [liftCancellationPair, x, y]; omega)
+
+/-- Endpoint lists commute with lifting cancellation pairs. -/
+theorem pairEndpoints_liftCancellationPairs {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    pairEndpoints (liftCancellationPairs earlier later) =
+      (pairEndpoints later.cancellationPairs).map earlier.sourcePositionOfOutputNat := by
+  rw [liftCancellationPairs_eq_map]
+  change pairEndpoints (later.cancellationPairs.map fun p =>
+    (earlier.sourcePositionOfOutputNat p.1,
+      earlier.sourcePositionOfOutputNat p.2)) = _
+  rw [pairEndpoints_map]
+
+theorem liftCancellationPairs_nodup {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (pairEndpoints (liftCancellationPairs earlier later)).Nodup := by
+  rw [pairEndpoints_liftCancellationPairs]
+  exact later.cancellationEndpoints_nodup.map
+    earlier.sourcePositionOfOutputNat_injective
+
+theorem liftCancellationPairs_noncrossing {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    CancellationPairsNoncrossing (liftCancellationPairs earlier later) := by
+  intro p hp q hq
+  rw [liftCancellationPairs_eq_map] at hp hq
+  rcases List.mem_map.mp hp with ⟨p₀, hp₀, rfl⟩
+  rcases List.mem_map.mp hq with ⟨q₀, hq₀, rfl⟩
+  exact earlier.liftCancellationPairNat_preserves_compatibility
+    (later.cancellationPairs_noncrossing p₀ hp₀ q₀ hq₀)
+
+theorem liftCancellationPairs_inBounds {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ p ∈ liftCancellationPairs earlier later,
+      p.1 < p.2 ∧ p.2 < earlier.inputWord.length := by
+  intro p hp
+  rw [liftCancellationPairs_eq_map] at hp
+  rcases List.mem_map.mp hp with ⟨q, hq, rfl⟩
+  have hqBound := later.cancellationPairs_inBounds q hq
+  have hqFirst : q.1 < middle.length := by
+    simpa [inputWord] using Nat.lt_trans hqBound.1 hqBound.2
+  have hqSecond : q.2 < middle.length := by
+    simpa [inputWord] using hqBound.2
+  constructor
+  · exact earlier.sourcePositionOfOutputNat_strict hqBound.1
+  · change earlier.sourcePositionOfOutputNat q.2 < earlier.inputWord.length
+    rw [earlier.sourcePositionOfOutputNat_eq hqSecond]
+    exact earlier.sourcePositionOfOutput_inBounds ⟨q.2, hqSecond⟩
+
+theorem survivorPositions_avoidCancellationPairEndpoints
+    {raw reduced : Word α} (h : FreeReductionShape raw reduced)
+    {i : Nat} (hi : i ∈ h.survivorPositions)
+    {p : Nat × Nat} (hp : p ∈ h.cancellationPairs) :
+    i ≠ p.1 ∧ i ≠ p.2 := by
+  have hi' : i ∈ h.survivorOccurrences.map Prod.fst := by
+    simpa only [survivorPositions] using hi
+  rcases List.mem_map.mp hi' with ⟨o, ho, hio⟩
+  have hAvoid := h.survivorOccurrences_disjointFromCancellationPairs o ho p hp
+  constructor
+  · intro heq
+    apply hAvoid.1
+    calc
+      o.1 = i := hio
+      _ = p.1 := heq
+  · intro heq
+    apply hAvoid.2
+    calc
+      o.1 = i := hio
+      _ = p.2 := heq
+
+theorem liftCancellationPairs_compatible_with_earlier
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced)
+    {p : Nat × Nat} (hp : p ∈ earlier.cancellationPairs)
+    {q : Nat × Nat} (hq : q ∈ liftCancellationPairs earlier later) :
+    CancellationIntervalsCompatible p q := by
+  rw [liftCancellationPairs_eq_map] at hq
+  rcases List.mem_map.mp hq with ⟨q₀, hq₀, hqEq⟩
+  have hqBound := later.cancellationPairs_inBounds q₀ hq₀
+  have hqFirst : q₀.1 < middle.length := by
+    simpa [inputWord] using Nat.lt_trans hqBound.1 hqBound.2
+  have hqSecond : q₀.2 < middle.length := by
+    simpa [inputWord] using hqBound.2
+  let qFin : Fin middle.length × Fin middle.length :=
+    (⟨q₀.1, hqFirst⟩, ⟨q₀.2, hqSecond⟩)
+  have hcompat := earlier.liftCancellationPair_compatible_with_earlier
+    hp qFin hqBound.1
+  have hqEq'' : earlier.liftCancellationPair qFin = q := by
+    simpa [liftCancellationPair, liftCancellationPairNat, qFin, hqFirst, hqSecond,
+      sourcePositionOfOutputNat_eq] using hqEq
+  have hqEq' : q = earlier.liftCancellationPair qFin := hqEq''.symm
+  rw [hqEq']
+  exact hcompat
+
+theorem cancellationEndpoints_disjoint_liftCancellationPairs
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ i ∈ pairEndpoints earlier.cancellationPairs,
+      i ∈ pairEndpoints (liftCancellationPairs earlier later) → False := by
+  intro i hiEarlier hiLater
+  rw [pairEndpoints_liftCancellationPairs] at hiLater
+  rcases List.mem_map.mp hiLater with ⟨j, hj, hji⟩
+  have hjBound := later.cancellationEndpoints_inBounds j hj
+  have hjLt : j < middle.length := by
+    simpa [inputWord] using hjBound
+  have hsourceMem : earlier.sourcePositionOfOutputNat j ∈ earlier.survivorPositions := by
+    rw [earlier.sourcePositionOfOutputNat_eq hjLt]
+    exact earlier.sourcePositionOfOutput_mem ⟨j, hjLt⟩
+  rcases List.mem_flatMap.mp hiEarlier with ⟨p, hp, hpi⟩
+  simp only [List.mem_cons, List.not_mem_nil] at hpi
+  rcases hpi with hpi | hpi
+  · have hAvoid := earlier.survivorPositions_avoidCancellationPairEndpoints
+      hsourceMem hp
+    exact hAvoid.1 (hji.trans hpi)
+  · rcases hpi with hpi | hfalse
+    · have hAvoid := earlier.survivorPositions_avoidCancellationPairEndpoints
+        hsourceMem hp
+      exact hAvoid.2 (hji.trans hpi)
+    · cases hfalse
+
+theorem composedCancellationEndpoints_nodup
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (pairEndpoints
+      (earlier.cancellationPairs ++ liftCancellationPairs earlier later)).Nodup := by
+  rw [pairEndpoints_append]
+  change List.Pairwise (fun x y : Nat => x ≠ y)
+    (pairEndpoints earlier.cancellationPairs ++
+      pairEndpoints (liftCancellationPairs earlier later))
+  rw [List.pairwise_append]
+  refine ⟨earlier.cancellationEndpoints_nodup,
+    liftCancellationPairs_nodup earlier later, ?_⟩
+  intro x hx y hy heq
+  subst y
+  exact (cancellationEndpoints_disjoint_liftCancellationPairs
+    earlier later x hx hy).elim
+
+theorem composedCancellationPairs_noncrossing
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    CancellationPairsNoncrossing
+      (earlier.cancellationPairs ++ liftCancellationPairs earlier later) := by
+  intro p hp q hq
+  rw [List.mem_append] at hp hq
+  rcases hp with hpEarlier | hpLater <;>
+    rcases hq with hqEarlier | hqLater
+  · exact earlier.cancellationPairs_noncrossing p hpEarlier q hqEarlier
+  · exact earlier.liftCancellationPairs_compatible_with_earlier
+      later hpEarlier hqLater
+  · exact (earlier.liftCancellationPairs_compatible_with_earlier
+      later hqEarlier hpLater).symm
+  · exact liftCancellationPairs_noncrossing earlier later p hpLater q hqLater
+
+theorem liftSurvivorOccurrences_are_sourceLetters
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ o ∈ liftSurvivorOccurrences earlier later,
+      raw[o.1]? = some o.2 := by
+  intro o ho
+  rw [liftSurvivorOccurrences_eq_map] at ho
+  rcases List.mem_map.mp ho with ⟨q, hq, rfl⟩
+  have hbound := later.survivorOccurrences_inBounds q hq
+  have hqLt : q.1 < middle.length := by
+    simpa [inputWord] using hbound
+  have hraw := earlier.sourcePositionOfOutput_sourceLetter ⟨q.1, hqLt⟩
+  have hmid := later.survivorOccurrences_are_sourceLetters q hq
+  change raw[earlier.sourcePositionOfOutputNat q.1]? = some q.2
+  have hraw' : raw[earlier.sourcePositionOfOutputNat q.1]? =
+      some middle[q.1] := by
+    rw [earlier.sourcePositionOfOutputNat_eq hqLt]
+    simpa using hraw
+  have hmid' : middle[q.1] = q.2 := by
+    rw [List.getElem?_eq_getElem hqLt] at hmid
+    exact Option.some.inj hmid
+  rw [hmid'] at hraw'
+  exact hraw'
+
+theorem liftCancellationPairs_are_inverseLetterOccurrences
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ p ∈ liftCancellationPairs earlier later,
+      ∃ a, raw[p.1]? = some a ∧ raw[p.2]? = some (inverseLetter a) := by
+  intro p hp
+  rw [liftCancellationPairs_eq_map] at hp
+  rcases List.mem_map.mp hp with ⟨q, hq, rfl⟩
+  obtain ⟨a, hq₁, hq₂⟩ := later.cancellationPairs_are_inverseLetterOccurrences q hq
+  have hqBounds := later.cancellationPairs_inBounds q hq
+  have hq₁Lt : q.1 < middle.length := by
+    simpa [inputWord] using Nat.lt_trans hqBounds.1 hqBounds.2
+  have hq₂Lt : q.2 < middle.length := by
+    simpa [inputWord] using hqBounds.2
+  have hraw₁ := earlier.sourcePositionOfOutput_sourceLetter ⟨q.1, hq₁Lt⟩
+  have hraw₂ := earlier.sourcePositionOfOutput_sourceLetter ⟨q.2, hq₂Lt⟩
+  dsimp [liftCancellationPairNat]
+  change middle[q.1]? = some a at hq₁
+  change middle[q.2]? = some (inverseLetter a) at hq₂
+  have hraw₁' : raw[earlier.sourcePositionOfOutputNat q.1]? =
+      some middle[q.1] := by
+    rw [earlier.sourcePositionOfOutputNat_eq hq₁Lt]
+    simpa using hraw₁
+  have hraw₂' : raw[earlier.sourcePositionOfOutputNat q.2]? =
+      some middle[q.2] := by
+    rw [earlier.sourcePositionOfOutputNat_eq hq₂Lt]
+    simpa using hraw₂
+  have hq₁' : middle[q.1] = a := by
+    rw [List.getElem?_eq_getElem hq₁Lt] at hq₁
+    exact Option.some.inj hq₁
+  have hq₂' : middle[q.2] = inverseLetter a := by
+    rw [List.getElem?_eq_getElem hq₂Lt] at hq₂
+    exact Option.some.inj hq₂
+  rw [hq₁'] at hraw₁'
+  rw [hq₂'] at hraw₂'
+  exact ⟨a, hraw₁', hraw₂'⟩
+
+def composedCancellationPairs {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) : List (Nat × Nat) :=
+  earlier.cancellationPairs ++ liftCancellationPairs earlier later
+
+def composedSurvivorOccurrences {raw middle reduced : Word α}
+    (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) : List (Nat × Letter α) :=
+  liftSurvivorOccurrences earlier later
+
+theorem composedCancellationPairs_are_inverseLetterOccurrences
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ p ∈ composedCancellationPairs earlier later,
+      ∃ a, raw[p.1]? = some a ∧ raw[p.2]? = some (inverseLetter a) := by
+  intro p hp
+  rw [composedCancellationPairs, List.mem_append] at hp
+  rcases hp with hp | hp
+  · exact earlier.cancellationPairs_are_inverseLetterOccurrences p hp
+  · exact liftCancellationPairs_are_inverseLetterOccurrences earlier later p hp
+
+theorem composedCancellationPairs_inBounds
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ p ∈ composedCancellationPairs earlier later,
+      p.1 < p.2 ∧ p.2 < earlier.inputWord.length := by
+  intro p hp
+  rw [composedCancellationPairs, List.mem_append] at hp
+  rcases hp with hp | hp
+  · exact earlier.cancellationPairs_inBounds p hp
+  · exact liftCancellationPairs_inBounds earlier later p hp
+
+theorem composedSurvivorOccurrences_sourceLetters
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ o ∈ composedSurvivorOccurrences earlier later,
+      raw[o.1]? = some o.2 :=
+  liftSurvivorOccurrences_are_sourceLetters earlier later
+
+theorem composedSurvivorOccurrences_labels
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (composedSurvivorOccurrences earlier later).map Prod.snd = reduced :=
+  liftSurvivorOccurrences_labels earlier later
+
+theorem composedSurvivorOccurrences_length
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (composedSurvivorOccurrences earlier later).length = reduced.length :=
+  liftSurvivorOccurrences_length earlier later
+
+theorem composedSurvivorOccurrences_positions_strict
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    List.Pairwise (fun x y : Nat => x < y)
+      ((composedSurvivorOccurrences earlier later).map Prod.fst) :=
+  liftSurvivorOccurrences_positions_strict earlier later
+
+theorem composedSurvivorOccurrences_inBounds
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ o ∈ composedSurvivorOccurrences earlier later,
+      o.1 < earlier.inputWord.length :=
+  liftSurvivorOccurrences_inBounds earlier later
+
+theorem composedCancellationEndpoints_length
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (pairEndpoints (composedCancellationPairs earlier later)).length =
+      2 * (earlier.cancellationCount + later.cancellationCount) := by
+  simp only [composedCancellationPairs]
+  rw [pairEndpoints_append, List.length_append,
+    earlier.cancellationEndpoints_length,
+    pairEndpoints_liftCancellationPairs, List.length_map,
+    later.cancellationEndpoints_length]
+  omega
+
+theorem composedSurvivorAndCancellationEndpointCount
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    (pairEndpoints (composedCancellationPairs earlier later)).length +
+        (composedSurvivorOccurrences earlier later).length =
+      earlier.inputWord.length := by
+  rw [composedCancellationEndpoints_length,
+    composedSurvivorOccurrences_length]
+  have hearlier := earlier.length_eq_cancellationCount
+  have hlater := later.length_eq_cancellationCount
+  simp only [inputWord] at hearlier hlater ⊢
+  omega
+
+theorem composedSurvivorPositions_memEarlier
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) {i : Nat}
+    (hi : i ∈ (composedSurvivorOccurrences earlier later).map Prod.fst) :
+    i ∈ earlier.survivorPositions := by
+  change i ∈ (liftSurvivorOccurrences earlier later).map Prod.fst at hi
+  rw [liftSurvivorOccurrences_positions] at hi
+  rcases List.mem_map.mp hi with ⟨j, hj, rfl⟩
+  rcases List.mem_map.mp hj with ⟨o, ho, rfl⟩
+  have hoBound := later.survivorOccurrences_inBounds o ho
+  have hoLt : o.1 < middle.length := by simpa [inputWord] using hoBound
+  rw [earlier.sourcePositionOfOutputNat_eq hoLt]
+  exact earlier.sourcePositionOfOutput_mem ⟨o.1, hoLt⟩
+
+theorem composedSurvivorPositions_avoidEarlierEndpoints
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) {i : Nat}
+    (hi : i ∈ (composedSurvivorOccurrences earlier later).map Prod.fst)
+    {p : Nat × Nat} (hp : p ∈ earlier.cancellationPairs) :
+    i ≠ p.1 ∧ i ≠ p.2 := by
+  exact earlier.survivorPositions_avoidCancellationPairEndpoints
+    (composedSurvivorPositions_memEarlier earlier later hi) hp
+
+theorem composedSurvivorPositions_disjointFromLiftedEndpoints
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) {i j : Nat}
+    (hi : i ∈ (composedSurvivorOccurrences earlier later).map Prod.fst)
+    (hj : j ∈ pairEndpoints (liftCancellationPairs earlier later)) :
+    i ≠ j := by
+  intro hEq
+  change i ∈ (liftSurvivorOccurrences earlier later).map Prod.fst at hi
+  rw [liftSurvivorOccurrences_positions] at hi
+  rw [pairEndpoints_liftCancellationPairs] at hj
+  rcases List.mem_map.mp hi with ⟨s, hs, rfl⟩
+  rcases List.mem_map.mp hj with ⟨e, he, rfl⟩
+  rcases List.mem_flatMap.mp he with ⟨p, hp, hpe⟩
+  simp only [List.mem_cons, List.not_mem_nil] at hpe
+  have hAvoid := later.survivorPositions_avoidCancellationPairEndpoints hs hp
+  have hse : s = e := earlier.sourcePositionOfOutputNat_injective hEq
+  rcases hpe with hpe | hpe
+  · exact hAvoid.1 (hse.trans hpe)
+  · rcases hpe with hpe | hfalse
+    · exact hAvoid.2 (hse.trans hpe)
+    · cases hfalse
+
+theorem composedCancellationEndpoints_inBounds
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ i ∈ pairEndpoints (composedCancellationPairs earlier later),
+      i < earlier.inputWord.length := by
+  intro i hi
+  rcases List.mem_flatMap.mp hi with ⟨p, hp, hpi⟩
+  have hbound := composedCancellationPairs_inBounds earlier later p hp
+  simp only [List.mem_cons, List.not_mem_nil] at hpi
+  rcases hpi with hpi | hpi
+  · rw [hpi]
+    exact Nat.lt_trans hbound.1 hbound.2
+  · rcases hpi with hpi | hnil
+    · rw [hpi]
+      exact hbound.2
+    · cases hnil
+
+theorem composedCancellationEndpoints_disjointSurvivorPositions
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ i ∈ pairEndpoints (composedCancellationPairs earlier later),
+      ∀ j ∈ (composedSurvivorOccurrences earlier later).map Prod.fst,
+        i ≠ j := by
+  intro i hi j hj heq
+  rcases List.mem_flatMap.mp hi with ⟨p, hp, hpi⟩
+  simp only [List.mem_cons, List.not_mem_nil] at hpi
+  rw [composedCancellationPairs, List.mem_append] at hp
+  rcases hp with hpEarlier | hpLater
+  · have hAvoid := composedSurvivorPositions_avoidEarlierEndpoints
+      earlier later hj hpEarlier
+    rcases hpi with hpi | hpi
+    · apply hAvoid.1
+      calc
+        j = i := heq.symm
+        _ = p.1 := hpi
+    · rcases hpi with hpi | hfalse
+      · apply hAvoid.2
+        calc
+          j = i := heq.symm
+          _ = p.2 := hpi
+      · cases hfalse
+  · have hiLater : i ∈ pairEndpoints (liftCancellationPairs earlier later) := by
+      apply List.mem_flatMap.mpr
+      exact ⟨p, hpLater, by simpa using hpi⟩
+    exact (composedSurvivorPositions_disjointFromLiftedEndpoints
+      earlier later hj hiLater) heq.symm
+
+theorem composedCancellationEndpoints_noncrossing
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    CancellationPairsNoncrossing (composedCancellationPairs earlier later) := by
+  exact composedCancellationPairs_noncrossing earlier later
+
+theorem composedSourcePositions_partition
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ i, i < earlier.inputWord.length →
+      i ∈ pairEndpoints (composedCancellationPairs earlier later) ∨
+        i ∈ (composedSurvivorOccurrences earlier later).map Prod.fst := by
+  classical
+  let endpoints := pairEndpoints (composedCancellationPairs earlier later)
+  let survivors := (composedSurvivorOccurrences earlier later).map Prod.fst
+  let endpointSet := endpoints.toFinset
+  let survivorSet := survivors.toFinset
+  let n := earlier.inputWord.length
+  have hEndpointNodup : endpoints.Nodup := by
+    exact composedCancellationEndpoints_nodup earlier later
+  have hSurvivorNodup : survivors.Nodup := by
+    have hstrict := composedSurvivorOccurrences_positions_strict earlier later
+    change List.Pairwise (fun x y : Nat => x ≠ y) survivors
+    exact hstrict.imp (fun hlt => Nat.ne_of_lt hlt)
+  have hEndpointCard : endpointSet.card = endpoints.length := by
+    change endpoints.toFinset.card = endpoints.length
+    exact List.toFinset_card_of_nodup hEndpointNodup
+  have hSurvivorCard : survivorSet.card = survivors.length := by
+    change survivors.toFinset.card = survivors.length
+    exact List.toFinset_card_of_nodup hSurvivorNodup
+  have hDisjoint : Disjoint endpointSet survivorSet := by
+    rw [Finset.disjoint_left]
+    intro i hiEndpoint hiSurvivor
+    have hiEndpoint' : i ∈ endpoints := by simpa [endpointSet] using hiEndpoint
+    have hiSurvivor' : i ∈ survivors := by simpa [survivorSet] using hiSurvivor
+    rcases List.mem_flatMap.mp hiEndpoint' with ⟨p, hp, hpi⟩
+    simp only [List.mem_cons, List.not_mem_nil] at hpi
+    rw [composedCancellationPairs, List.mem_append] at hp
+    rcases hp with hpEarlier | hpLater
+    · have hAvoid := composedSurvivorPositions_avoidEarlierEndpoints
+        earlier later hiSurvivor' hpEarlier
+      rcases hpi with hpi | hpi
+      · exact hAvoid.1 hpi
+      · rcases hpi with hpi | hfalse
+        · exact hAvoid.2 hpi
+        · cases hfalse
+    · have hiLaterEndpoint : i ∈ pairEndpoints (liftCancellationPairs earlier later) := by
+        apply List.mem_flatMap.mpr
+        exact ⟨p, hpLater, by simpa using hpi⟩
+      exact (composedSurvivorPositions_disjointFromLiftedEndpoints
+        earlier later hiSurvivor' hiLaterEndpoint) rfl
+  have hEndpointSubset : endpointSet ⊆ Finset.range n := by
+    intro i hi
+    have hi' : i ∈ endpoints := by simpa [endpointSet] using hi
+    exact Finset.mem_range.mpr (composedCancellationEndpoints_inBounds
+      earlier later i hi')
+  have hSurvivorSubset : survivorSet ⊆ Finset.range n := by
+    intro i hi
+    have hi' : i ∈ survivors := by simpa [survivorSet] using hi
+    rcases List.mem_map.mp hi' with ⟨o, ho, rfl⟩
+    exact Finset.mem_range.mpr (composedSurvivorOccurrences_inBounds
+      earlier later o ho)
+  have hUnionCard : (endpointSet ∪ survivorSet).card = (Finset.range n).card := by
+    calc
+      (endpointSet ∪ survivorSet).card = endpointSet.card + survivorSet.card :=
+        Finset.card_union_of_disjoint hDisjoint
+      _ = endpoints.length + survivors.length := by rw [hEndpointCard, hSurvivorCard]
+      _ = n := by
+        simpa [endpoints, survivors, n] using
+          composedSurvivorAndCancellationEndpointCount earlier later
+      _ = (Finset.range n).card := by simp
+  have hUnionSubset : endpointSet ∪ survivorSet ⊆ Finset.range n :=
+    Finset.union_subset hEndpointSubset hSurvivorSubset
+  have hUnionEq : endpointSet ∪ survivorSet = Finset.range n :=
+    Finset.eq_of_subset_of_card_le hUnionSubset (le_of_eq hUnionCard.symm)
+  intro i hi
+  have hiUnion : i ∈ endpointSet ∪ survivorSet := by
+    rw [hUnionEq]
+    exact Finset.mem_range.mpr hi
+  rcases Finset.mem_union.mp hiUnion with hiEndpoint | hiSurvivor
+  · exact Or.inl (by simpa [endpointSet, endpoints] using hiEndpoint)
+  · exact Or.inr (by simpa [survivorSet, survivors] using hiSurvivor)
+
+theorem composedSurvivorOccurrences_hasEarlierOccurrence
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) {o : Nat × Letter α}
+    (ho : o ∈ composedSurvivorOccurrences earlier later) :
+    ∃ e ∈ earlier.survivorOccurrences, e.1 = o.1 := by
+  have hpos : o.1 ∈
+      (composedSurvivorOccurrences earlier later).map Prod.fst :=
+    List.mem_map.mpr ⟨o, ho, rfl⟩
+  have hEarlier := composedSurvivorPositions_memEarlier earlier later hpos
+  change o.1 ∈ earlier.survivorOccurrences.map Prod.fst at hEarlier
+  rcases List.mem_map.mp hEarlier with ⟨e, he, heo⟩
+  exact ⟨e, he, heo⟩
+
+theorem composedCancellationPairs_contain_no_survivor
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) :
+    ∀ p ∈ composedCancellationPairs earlier later,
+      ∀ o ∈ composedSurvivorOccurrences earlier later,
+        p.1 < o.1 → o.1 < p.2 → False := by
+  intro p hp o ho hbefore hafter
+  rw [composedCancellationPairs, List.mem_append] at hp
+  rcases hp with hpEarlier | hpLater
+  · obtain ⟨e, he, hepos⟩ :=
+      composedSurvivorOccurrences_hasEarlierOccurrence earlier later ho
+    have hno := earlier.cancellationPairs_contain_no_survivor p hpEarlier e he
+    apply hno
+    · simpa [hepos] using hbefore
+    · simpa [hepos] using hafter
+  · rw [liftCancellationPairs_eq_map] at hpLater
+    rcases List.mem_map.mp hpLater with ⟨q, hq, rfl⟩
+    rw [composedSurvivorOccurrences, liftSurvivorOccurrences_eq_map] at ho
+    rcases List.mem_map.mp ho with ⟨s, hs, rfl⟩
+    have hqBefore : q.1 < s.1 := by
+      by_contra hnot
+      have hle : s.1 ≤ q.1 := Nat.le_of_not_gt hnot
+      rcases Nat.eq_or_lt_of_le hle with heq | hlt
+      ·
+        have hbefore' : earlier.sourcePositionOfOutputNat q.1 <
+            earlier.sourcePositionOfOutputNat s.1 := by
+          simpa [liftCancellationPairNat] using hbefore
+        rw [heq] at hbefore'
+        exact Nat.lt_irrefl _ hbefore'
+      · have hrev := earlier.sourcePositionOfOutputNat_strict hlt
+        have hbefore' : earlier.sourcePositionOfOutputNat q.1 <
+            earlier.sourcePositionOfOutputNat s.1 := by
+          simpa [liftCancellationPairNat] using hbefore
+        omega
+    have hAfter : s.1 < q.2 := by
+      by_contra hnot
+      have hle : q.2 ≤ s.1 := Nat.le_of_not_gt hnot
+      rcases Nat.eq_or_lt_of_le hle with heq | hlt
+      ·
+        have hafter' : earlier.sourcePositionOfOutputNat s.1 <
+            earlier.sourcePositionOfOutputNat q.2 := by
+          simpa [liftCancellationPairNat] using hafter
+        rw [heq] at hafter'
+        exact Nat.lt_irrefl _ hafter'
+      · have hrev := earlier.sourcePositionOfOutputNat_strict hlt
+        have hafter' : earlier.sourcePositionOfOutputNat s.1 <
+            earlier.sourcePositionOfOutputNat q.2 := by
+          simpa [liftCancellationPairNat] using hafter
+        omega
+    exact later.cancellationPairs_contain_no_survivor q hq s hs
+      hqBefore hAfter
+
+/-- Compose two free-reduction traces while retaining the original source
+positions of every cancellation and final survivor. -/
+def composeIndexedBoundaryTrace
+    {raw middle reduced : Word α} (earlier : FreeReductionShape raw middle)
+    (later : FreeReductionShape middle reduced) : IndexedBoundaryTrace raw reduced where
+  cancellationPairs := composedCancellationPairs earlier later
+  survivorOccurrences := composedSurvivorOccurrences earlier later
+  pairs_noncrossing := composedCancellationPairs_noncrossing earlier later
+  pairs_are_inverseLetters := composedCancellationPairs_are_inverseLetterOccurrences
+    earlier later
+  pairs_inBounds := composedCancellationPairs_inBounds earlier later
+  endpoints_nodup := by
+    exact composedCancellationEndpoints_nodup earlier later
+  endpoints_inBounds := composedCancellationEndpoints_inBounds earlier later
+  survivors_labels := composedSurvivorOccurrences_labels earlier later
+  survivors_length := composedSurvivorOccurrences_length earlier later
+  survivorPositions_nodup := by
+    have hstrict := composedSurvivorOccurrences_positions_strict earlier later
+    exact hstrict.imp (fun hlt => Nat.ne_of_lt hlt)
+  survivorPositions_strict := composedSurvivorOccurrences_positions_strict earlier later
+  survivors_are_sourceLetters := composedSurvivorOccurrences_sourceLetters earlier later
+  survivors_inBounds := composedSurvivorOccurrences_inBounds earlier later
+  endpoints_disjoint_survivors :=
+    composedCancellationEndpoints_disjointSurvivorPositions earlier later
+  no_survivor_inside_pair := composedCancellationPairs_contain_no_survivor
+    earlier later
+  endpoint_survivor_count := by
+    simpa [inputWord] using composedSurvivorAndCancellationEndpointCount earlier later
+  sourcePositions_partition := composedSourcePositions_partition earlier later
 
 end FreeReductionShape
 

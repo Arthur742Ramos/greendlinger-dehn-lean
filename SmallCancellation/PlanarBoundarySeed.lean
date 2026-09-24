@@ -75,4 +75,16 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryTrace {α : Type*}
   · exact trace.cancellationPairs_contain_no_survivor
   · exact trace.sourcePositions_partition
 
+/-- Retain both stages of the minimum-area seed's boundary reduction: each
+literal conjugate-relator balloon reduces to its canonical factor word, and
+the concatenated factor word reduces to the requested boundary. The returned
+trace therefore preserves the precise local-then-global cancellation pairing
+on the original literal boundary. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.stagedBoundaryTrace
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed R w) :
+    IndexedBoundaryTrace seed.boundary.literalBoundary w.toWord :=
+  FreeReductionShape.composeIndexedBoundaryTrace
+    seed.boundary.literalFactors_reduce seed.boundary.cancellation
+
 end GreendlingerDehn
