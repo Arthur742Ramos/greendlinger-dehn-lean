@@ -372,6 +372,58 @@ def reducedBalloonEndpointPairs {α : Type*} [Fintype α] [DecidableEq α]
            (wordPathSuffixHom b.label.rawWord
             ((tail.map (fun x => x.label.rawWord)).flatten)).mapVertex pair.2))
 
+/-- Each balloon occurrence has its own path embedding into the flattened
+boundary. Indexing by `Fin` preserves duplicate balloon values as distinct face
+occurrences. -/
+theorem reducedBalloonOccurrencePathEmbedding {α : Type*} [Fintype α]
+    [DecidableEq α] {P : SymmetrizedPresentation α}
+    (balloons : List (ReducedRelatorBalloonData P))
+    (i : Fin balloons.length) :
+    ∃ f : LabelledGraphHom
+        (wordPathGraph (balloons.get i).label.rawWord)
+        (wordPathGraph ((balloons.map
+          (fun b => b.label.rawWord)).flatten)),
+      (f.mapVertex (0 : Nat),
+        f.mapVertex (balloons.get i).label.rawWord.length) ∈
+        reducedBalloonEndpointPairs balloons := by
+  induction balloons with
+  | nil => exact Fin.elim0 i
+  | cons head tail ih =>
+    cases i using Fin.cases with
+    | zero =>
+      let f : LabelledGraphHom
+          (wordPathGraph ((head :: tail).get 0).label.rawWord)
+          (wordPathGraph (((head :: tail).map
+            (fun b => b.label.rawWord)).flatten)) := by
+        simpa only [List.get_cons_zero, List.map_cons, List.flatten_cons] using
+          wordPathPrefixHom head.label.rawWord
+            ((tail.map (fun b => b.label.rawWord)).flatten)
+      refine ⟨f, ?_⟩
+      change (0, head.label.rawWord.length) ∈
+        reducedBalloonEndpointPairs (head :: tail)
+      exact List.Mem.head _
+    | succ i =>
+      obtain ⟨tailEmbedding, htail⟩ := ih i
+      let suffix := wordPathSuffixHom head.label.rawWord
+        ((tail.map (fun b => b.label.rawWord)).flatten)
+      let f : LabelledGraphHom
+          (wordPathGraph ((head :: tail).get i.succ).label.rawWord)
+          (wordPathGraph (((head :: tail).map
+            (fun b => b.label.rawWord)).flatten)) := by
+        simpa only [List.get_cons_succ', List.map_cons, List.flatten_cons] using
+          LabelledGraphHom.comp suffix tailEmbedding
+      refine ⟨f, ?_⟩
+      change (suffix.mapVertex (tailEmbedding.mapVertex (0 : Nat)),
+        suffix.mapVertex
+          (tailEmbedding.mapVertex ((tail.get i).label.rawWord.length))) ∈
+        reducedBalloonEndpointPairs (head :: tail)
+      rw [reducedBalloonEndpointPairs]
+      apply List.mem_cons.mpr
+      right
+      apply List.mem_map.mpr
+      exact ⟨(tailEmbedding.mapVertex (0 : Nat),
+        tailEmbedding.mapVertex ((tail.get i).label.rawWord.length)), htail, rfl⟩
+
 /-- Each balloon boundary has a corresponding pair of endpoint positions in
 the flattened occurrence path. -/
 theorem reducedBalloonEndpointPairs_contains {α : Type*} [Fintype α]
@@ -613,6 +665,49 @@ theorem MinimalAreaRelatorBoundarySeed.foldedBalloon_hasRelatorLoop
           (boundaryHom.mapVertex
             (embedding.mapVertex b.label.conjugator.toWord.length)))
         endpoint b.label.relator.toWord) hloop.symm) hwalk⟩
+
+/-- Each balloon occurrence has a closed walk for its complete conjugate-relator
+boundary in the final quotient graph. -/
+theorem MinimalAreaRelatorBoundarySeed.foldedBalloon_hasBoundaryLoop
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (b : ReducedRelatorBalloonData P)
+    (hb : b ∈ seed.boundary.reducedBalloons) :
+    ∃ vertex : seed.foldedBalloonBoundaryWalk.graph.toDartGraph.Vertex,
+      Nonempty (LabelledWalk seed.foldedBalloonBoundaryWalk.graph vertex vertex
+        b.label.rawWord) := by
+  obtain ⟨embedding, hends⟩ := reducedBalloonEndpointPairs_contains
+    seed.boundary.reducedBalloons b hb
+  let positions := (embedding.mapVertex (0 : Nat),
+    embedding.mapVertex b.label.rawWord.length)
+  have hpositions : positions ∈ seed.balloonEndpointPairs := by
+    simpa [positions, MinimalAreaRelatorBoundarySeed.balloonEndpointPairs] using hends
+  have hjoin := wordBoundary_join_eq seed.boundary.reducedLiteralBoundary
+    seed.balloonEndpointPairs positions hpositions
+  let start := seed.foldedBalloonBoundaryWalk.hom.mapVertex
+    (seed.balloonBoundaryHom.mapVertex (embedding.mapVertex (0 : Nat)))
+  let finish := seed.foldedBalloonBoundaryWalk.hom.mapVertex
+    (seed.balloonBoundaryHom.mapVertex
+      (embedding.mapVertex b.label.rawWord.length))
+  have hwalk : LabelledWalk seed.foldedBalloonBoundaryWalk.graph start finish
+      b.label.rawWord := by
+    simpa [start, finish] using
+      (((wordPathWalk b.label.rawWord).map embedding).map
+        seed.balloonBoundaryHom).map seed.foldedBalloonBoundaryWalk.hom
+  have hstartFinish : start = finish := by
+    dsimp [start, finish]
+    exact congrArg seed.foldedBalloonBoundaryWalk.hom.mapVertex
+      (by
+        change seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex (0 : Nat)) =
+          seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex b.label.rawWord.length)
+        exact hjoin)
+  refine ⟨start, ?_⟩
+  exact ⟨Eq.mp (congrArg
+    (fun endpoint => LabelledWalk seed.foldedBalloonBoundaryWalk.graph
+      start endpoint b.label.rawWord) hstartFinish.symm) hwalk⟩
 
 /-- Choose an actual closed relator walk for each indexed balloon occurrence.
 This gives the seed a finite face-boundary family on the common folded

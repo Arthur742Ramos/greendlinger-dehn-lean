@@ -4,6 +4,15 @@ import SmallCancellation.FiniteSupport
 
 namespace GreendlingerDehn
 
+/-- A complete conjugate-relator balloon boundary carried by a graph. Unlike
+`RelatorBoundaryLoop`, this retains the doubled conjugator stem that belongs
+to the attaching map of the relator cell. -/
+structure RelatorBalloonBoundaryLoop {α : Type*} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α) (G : LabelledDartGraph α) where
+  balloon : ReducedRelatorBalloonData P
+  base : G.toDartGraph.Vertex
+  walk : LabelledWalk G base base balloon.label.rawWord
+
 /-- A face boundary carried by a finite map, with its defining-relator
 provenance retained explicitly. -/
 structure RelatorBoundaryLoop {α : Type*} [Fintype α] [DecidableEq α]
@@ -177,5 +186,183 @@ noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonRelatorLoopAt
     P.relator_isCyclicallyReduced balloon.label.relator_mem,
     hom.mapVertex loop.1, ?_⟩
   simpa [balloon] using loop.2.map hom
+
+/-- The occurrence-specific embedding before the boundary and folding
+quotients. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.balloonOccurrenceEmbedding
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i : Fin seed.boundary.reducedBalloons.length) :=
+  Classical.choose
+    (reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons i)
+
+/-- Its two endpoint positions are the indexed balloon's own endpoint join,
+so repeated equal balloon values remain distinct occurrences. -/
+theorem MinimalAreaRelatorBoundarySeed.balloonOccurrenceEmbedding_endpoints_mem
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i : Fin seed.boundary.reducedBalloons.length) :
+    ((seed.balloonOccurrenceEmbedding i).mapVertex (0 : Nat),
+      (seed.balloonOccurrenceEmbedding i).mapVertex
+        ((seed.boundary.reducedBalloons.get i).label.rawWord.length)) ∈
+      seed.balloonEndpointPairs := by
+  simpa [MinimalAreaRelatorBoundarySeed.balloonOccurrenceEmbedding,
+    MinimalAreaRelatorBoundarySeed.balloonEndpointPairs] using
+    Classical.choose_spec
+      (reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons i)
+
+/-- An individual oriented side occurrence of an indexed balloon face. -/
+abbrev RelatorBalloonFaceSide {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :=
+  Σ i : Fin seed.boundary.reducedBalloons.length,
+    Fin ((seed.boundary.reducedBalloons.get i).label.rawWord.length)
+
+/-- The occurrence-specific graph map from one balloon boundary path to the
+finite folded graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonOccurrenceHom
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length) :
+    LabelledGraphHom
+      (wordPathGraph ((seed.boundary.reducedBalloons.get i).label.rawWord))
+      seed.finiteFoldedBoundaryGraph := by
+  exact LabelledGraphHom.comp (seed.finiteFoldedBoundaryHom hne)
+    (LabelledGraphHom.comp seed.foldedBalloonBoundaryWalk.hom
+      (LabelledGraphHom.comp seed.balloonBoundaryHom
+        (seed.balloonOccurrenceEmbedding i)))
+
+/-- The complete conjugate-relator boundary of each indexed balloon is a loop
+in the same finite folded graph as the target boundary. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonBoundaryLoopAt
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length) :
+    RelatorBalloonBoundaryLoop P seed.finiteFoldedBoundaryGraph := by
+  classical
+  let balloon := seed.boundary.reducedBalloons.get i
+  let embedding := seed.balloonOccurrenceEmbedding i
+  let hom := seed.finiteBalloonOccurrenceHom hne i
+  let ends := (embedding.mapVertex (0 : Nat),
+    embedding.mapVertex balloon.label.rawWord.length)
+  have hends : ends ∈ seed.balloonEndpointPairs := by
+    simpa [ends, balloon] using
+      seed.balloonOccurrenceEmbedding_endpoints_mem i
+  have hjoin := wordBoundary_join_eq seed.boundary.reducedLiteralBoundary
+    seed.balloonEndpointPairs ends hends
+  have hboundary : seed.balloonBoundaryHom.mapVertex
+        (embedding.mapVertex (0 : Nat)) =
+      seed.balloonBoundaryHom.mapVertex
+        (embedding.mapVertex balloon.label.rawWord.length) := by
+    change (Quotient.mk (BoundaryVertexJoinSetoid
+        seed.boundary.reducedLiteralBoundary.length seed.balloonEndpointPairs)
+        (embedding.mapVertex (0 : Nat))) =
+      Quotient.mk (BoundaryVertexJoinSetoid
+        seed.boundary.reducedLiteralBoundary.length seed.balloonEndpointPairs)
+        (embedding.mapVertex balloon.label.rawWord.length)
+    exact hjoin
+  let start := hom.mapVertex (0 : Nat)
+  let finish := hom.mapVertex balloon.label.rawWord.length
+  have hstartFinish : start = finish := by
+    change (seed.finiteFoldedBoundaryHom hne).mapVertex
+        (seed.foldedBalloonBoundaryWalk.hom.mapVertex
+          (seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex (0 : Nat)))) =
+      (seed.finiteFoldedBoundaryHom hne).mapVertex
+        (seed.foldedBalloonBoundaryWalk.hom.mapVertex
+          (seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex balloon.label.rawWord.length)))
+    exact congrArg
+      (fun v => (seed.finiteFoldedBoundaryHom hne).mapVertex
+        (seed.foldedBalloonBoundaryWalk.hom.mapVertex v)) hboundary
+  have hwalk : LabelledWalk seed.finiteFoldedBoundaryGraph start finish
+      balloon.label.rawWord := by
+    simpa [start, finish, balloon] using
+      (wordPathWalk balloon.label.rawWord).map hom
+  refine ⟨balloon, start, ?_⟩
+  exact Eq.mp (congrArg
+    (fun endpoint => LabelledWalk seed.finiteFoldedBoundaryGraph
+      start endpoint balloon.label.rawWord) hstartFinish.symm) hwalk
+
+/-- The occurrence-indexed face-side map into the finite folded graph. The
+index preserves each side even when two balloon words or relator labels agree.
+-/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonFaceSideDart
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.rawWord.length)) :
+    seed.finiteFoldedBoundaryGraph.toDartGraph.Dart := by
+  exact (seed.finiteBalloonOccurrenceHom hne i).mapDart (j, false)
+
+/-- The indexed face-side map preserves the attaching-word label. -/
+@[simp]
+theorem MinimalAreaRelatorBoundarySeed.finiteBalloonFaceSideDart_label
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.rawWord.length)) :
+    seed.finiteFoldedBoundaryGraph.label
+      (seed.finiteBalloonFaceSideDart hne i j) =
+      (seed.boundary.reducedBalloons.get i).label.rawWord[j] := by
+  change seed.finiteFoldedBoundaryGraph.label
+    ((seed.finiteBalloonOccurrenceHom hne i).mapDart (j, false)) = _
+  simpa [wordPathGraph] using
+    (seed.finiteBalloonOccurrenceHom hne i).map_label (j, false)
+
+/-- The source of each face-side dart is the corresponding occurrence-path
+vertex under the indexed face map. -/
+theorem MinimalAreaRelatorBoundarySeed.finiteBalloonFaceSideDart_source
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.rawWord.length)) :
+    seed.finiteFoldedBoundaryGraph.toDartGraph.source
+      (seed.finiteBalloonFaceSideDart hne i j) =
+      (seed.finiteBalloonOccurrenceHom hne i).mapVertex j.val := by
+  change seed.finiteFoldedBoundaryGraph.toDartGraph.source
+      ((seed.finiteBalloonOccurrenceHom hne i).mapDart (j, false)) = _
+  simpa [wordPathGraph] using
+    (seed.finiteBalloonOccurrenceHom hne i).map_source (j, false)
+
+/-- The target of each face-side dart is the next occurrence-path vertex under
+the indexed face map. -/
+theorem MinimalAreaRelatorBoundarySeed.finiteBalloonFaceSideDart_target
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.rawWord.length)) :
+    seed.finiteFoldedBoundaryGraph.toDartGraph.target
+      (seed.finiteBalloonFaceSideDart hne i j) =
+      (seed.finiteBalloonOccurrenceHom hne i).mapVertex (j.val + 1) := by
+  change seed.finiteFoldedBoundaryGraph.toDartGraph.target
+      ((seed.finiteBalloonOccurrenceHom hne i).mapDart (j, false)) = _
+  simpa [wordPathGraph] using
+    (seed.finiteBalloonOccurrenceHom hne i).map_target (j, false)
+
+/-- The sum of the attaching-word side counts of the indexed balloon faces is
+the complete lollipop boundary length, including the letters removed by the
+later boundary cancellations. -/
+theorem MinimalAreaRelatorBoundarySeed.sum_balloonBoundary_length
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    (seed.boundary.reducedBalloons.map
+      (fun b => b.label.rawWord.length)).sum =
+      w.toWord.length + 2 * seed.boundary.cancellation.cancellationCount := by
+  have hlength : seed.boundary.reducedLiteralBoundary.length =
+      (seed.boundary.reducedBalloons.map
+        (fun b => b.label.rawWord.length)).sum := by
+    simp [RelatorFactorBoundarySeed.reducedLiteralBoundary, Function.comp_def]
+  rw [← hlength]
+  exact seed.boundary.reducedLiteralBoundary_length_eq
 
 end GreendlingerDehn
