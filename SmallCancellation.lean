@@ -8,6 +8,7 @@ import SmallCancellation.Certificates
 import SmallCancellation.Examples
 import SmallCancellation.Cancellation
 import SmallCancellation.CertificateCancellation
+import SmallCancellation.ReducedLollipop
 import SmallCancellation.DiskMap
 import SmallCancellation.PlanarCancellation
 import SmallCancellation.PlanarBoundarySeed

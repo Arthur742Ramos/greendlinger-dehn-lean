@@ -1,5 +1,6 @@
 import SmallCancellation.CertificateCancellation
 import SmallCancellation.PlanarCancellation
+import SmallCancellation.ReducedLollipop
 
 namespace GreendlingerDehn
 
@@ -86,5 +87,28 @@ noncomputable def MinimalAreaRelatorBoundarySeed.stagedBoundaryTrace
     IndexedBoundaryTrace seed.boundary.literalBoundary w.toWord :=
   FreeReductionShape.composeIndexedBoundaryTrace
     seed.boundary.literalFactors_reduce seed.boundary.cancellation
+
+/-- The minimum-area certificate also admits a boundary trace based on
+cancellation-free relator balloons. Each literal lollipop boundary is already
+the canonical factor word, so only the global factor cancellations remain. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.reducedLollipopBoundaryTrace
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    IndexedBoundaryTrace seed.boundary.reducedLiteralBoundary w.toWord :=
+  FreeReductionShape.composeIndexedBoundaryTrace
+    (FreeReductionShape.identity seed.boundary.reducedLiteralBoundary)
+    seed.boundary.reducedLiteralBoundaryShape
+
+theorem MinimalAreaRelatorBoundarySeed.reducedBalloonCount_eq_area
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    seed.boundary.reducedBalloons.length = seed.certificate.area := by
+  calc
+    seed.boundary.reducedBalloons.length = seed.boundary.factors.length := by
+      simp [RelatorFactorBoundarySeed.reducedBalloons]
+    _ = seed.certificate.factors.length := by rw [seed.boundary_factors]
+    _ = seed.certificate.area := RelatorCertificate.factors_length seed.certificate
 
 end GreendlingerDehn
