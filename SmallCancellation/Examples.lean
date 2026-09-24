@@ -26,9 +26,20 @@ def cyclicOrbit (r : FreeGroup DistinctAtom) : List (FreeGroup DistinctAtom) :=
 def cPrimeSymmetrizedRelators : List (FreeGroup DistinctAtom) :=
   cyclicOrbit longRelator ++ cyclicOrbit longRelator⁻¹
 
+/-- The defining relator and its inverse suffice for the executable check below;
+the full cyclic closure used by `SymmetrizedPresentation` is checked above. -/
+def cPrimeBaseRelators : List (FreeGroup DistinctAtom) :=
+  [longRelator, longRelator⁻¹]
+
 /-- The finite checker accepts a symmetrized relator with distinct cyclic
 letters; the periodic one-generator relator below is intentionally excluded. -/
 example : cPrimeSixCheck cPrimeSymmetrizedRelators = true := by decide
+
+/-- On an accepted finite C'(1/6) presentation, the cyclic Dehn procedure
+recognizes the defining relator as the identity. -/
+example : cPrimeSixCheck cPrimeBaseRelators = true := by decide
+
+example : cyclicDehnWordProblem cPrimeBaseRelators longRelator = true := by decide
 
 /-- Repeated cyclic positions in a proper-power relator are pieces, so the
 one-generator periodic presentation fails the strict C'(1/6) test. -/
