@@ -1,5 +1,6 @@
 import SmallCancellation.Cancellation
 import SmallCancellation.Certificates
+import Mathlib.Tactic.Group
 
 namespace GreendlingerDehn
 
@@ -318,6 +319,16 @@ theorem exists_certificate_of_conjugate_factor_labels {α : Type*}
       rw [hheadArea, htailArea]
       omega
 
+private theorem prod_conjugate_map {α : Type*} (x : FreeGroup α)
+    (xs : List (FreeGroup α)) :
+    (xs.map fun y => x * y * x⁻¹).prod = x * xs.prod * x⁻¹ := by
+  induction xs with
+  | nil => simp
+  | cons y ys ih =>
+      simp only [List.map_cons, List.prod_cons]
+      rw [ih]
+      group
+
 /-- Minimum area rules out adjacent inverse relator-conjugate factors. Such a
 pair would cancel in the product and produce a certificate with two fewer
 relator occurrences. This is an algebraic reducedness condition; it does not
@@ -357,6 +368,62 @@ theorem MinimalAreaRelatorBoundarySeed.no_adjacent_inverse_factors
   have hshortLength : (pre ++ post).length < seed.boundary.factors.length := by
     rw [hshape]
     simp only [List.length_append, List.length_cons]
+    omega
+  have hstrict : shortCertAtW.area < seed.certificate.area := by
+    rw [hshortAreaAtW, holdArea]
+    exact hshortLength
+  exact (Nat.not_le_of_gt hstrict) (seed.area_minimal shortCertAtW)
+
+/-- Minimum area also rules out inverse factors at the two ends of the list.
+Conjugating every middle factor by the first factor would otherwise preserve
+the product while deleting the inverse end pair. -/
+theorem MinimalAreaRelatorBoundarySeed.no_cyclic_adjacent_inverse_factors
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed R w)
+    (x : FreeGroup α) (middle : List (FreeGroup α))
+    (hshape : seed.boundary.factors = x :: middle ++ [x⁻¹]) :
+    False := by
+  have hlabels : ∀ y ∈ middle, IsRelatorConjugate R (x * y * x⁻¹) := by
+    intro y hy
+    have hyOriginal : y ∈ seed.boundary.factors := by
+      rw [hshape]
+      simp [hy]
+    obtain ⟨g, r, hr, hfactor⟩ := seed.boundary.factor_labels y hyOriginal
+    refine ⟨x * g, r, hr, ?_⟩
+    calc
+      x * y * x⁻¹ = x * (g * r * g⁻¹) * x⁻¹ := by rw [hfactor]
+      _ = (x * g) * r * (x * g)⁻¹ := by group
+  let shortened : List (FreeGroup α) := middle.map fun y => x * y * x⁻¹
+  have hshortLabels : ∀ y ∈ shortened, IsRelatorConjugate R y := by
+    intro y hy
+    rcases List.mem_map.mp hy with ⟨z, hz, hzy⟩
+    subst y
+    exact hlabels z hz
+  have hproductShape : seed.boundary.factors.prod =
+      x * middle.prod * x⁻¹ := by
+    rw [hshape]
+    simp [List.prod_append, mul_assoc]
+  have hshortProduct : shortened.prod = w := by
+    calc
+      shortened.prod = x * middle.prod * x⁻¹ := by
+        exact prod_conjugate_map x middle
+      _ = seed.boundary.factors.prod := hproductShape.symm
+      _ = w := seed.boundary.product_eq
+  obtain ⟨shortCert, hshortArea⟩ :=
+    exists_certificate_of_conjugate_factor_labels shortened hshortLabels
+  let shortCertAtW : RelatorCertificate R w := hshortProduct ▸ shortCert
+  have hshortAreaAtW : shortCertAtW.area = middle.length := by
+    dsimp [shortCertAtW]
+    cases hshortProduct
+    simpa [shortened] using hshortArea
+  have holdArea : seed.certificate.area = seed.boundary.factors.length := by
+    calc
+      seed.certificate.area = seed.certificate.factors.length :=
+        (RelatorCertificate.factors_length seed.certificate).symm
+      _ = seed.boundary.factors.length := by rw [seed.boundary_factors]
+  have hshortLength : middle.length < seed.boundary.factors.length := by
+    rw [hshape]
+    simp only [List.length_cons, List.length_append]
     omega
   have hstrict : shortCertAtW.area < seed.certificate.area := by
     rw [hshortAreaAtW, holdArea]
