@@ -161,6 +161,50 @@ theorem sum_outDegree_eq_two_edgeClass_card [Fintype G.toDartGraph.Dart]
       2 * Fintype.card G.EdgeClass := by
   rw [G.sum_outDegree_eq_dart_card, G.dart_card_eq_two_edgeClass_card]
 
+/-- The source vertex of a dart, viewed in the finite incident support. -/
+def activeSource [Fintype G.toDartGraph.Dart] (d : G.toDartGraph.Dart) :
+    G.ActiveVertex :=
+  ⟨G.toDartGraph.source d, G.source_mem_endpointFinset d⟩
+
+/-- Out-degree on the finite incident-vertex support. -/
+noncomputable def activeOutDegree [Fintype G.toDartGraph.Dart]
+    (v : G.ActiveVertex) : Nat := by
+  classical
+  exact Fintype.card {d : G.toDartGraph.Dart // G.activeSource d = v}
+
+/-- Every vertex retained by finite support has positive outgoing degree. -/
+theorem activeOutDegree_pos [Fintype G.toDartGraph.Dart]
+    (v : G.ActiveVertex) : 0 < G.activeOutDegree v := by
+  classical
+  obtain ⟨d, hd⟩ := G.activeVertex_incident v
+  have hsource : ∃ e, G.toDartGraph.source e = v.1 := by
+    rcases hd with hs | ht
+    · exact ⟨d, hs⟩
+    · exact ⟨G.toDartGraph.reverse d, by
+        rw [G.toDartGraph.source_reverse]
+        exact ht⟩
+  obtain ⟨e, he⟩ := hsource
+  have heActive : G.activeSource e = v := Subtype.ext he
+  rw [activeOutDegree]
+  exact Fintype.card_pos_iff.mpr ⟨⟨e, heActive⟩⟩
+
+/-- On the finite incident-vertex support, outgoing degrees count each
+unoriented edge twice. This is the graph-level form of the `darts_total`
+identity in `LinkCornerMapData`. -/
+theorem sum_activeOutDegree_eq_two_edgeClass_card
+    [Fintype G.toDartGraph.Dart] :
+    (∑ v : G.ActiveVertex, G.activeOutDegree v) =
+      2 * Fintype.card G.EdgeClass := by
+  classical
+  calc
+    (∑ v : G.ActiveVertex, G.activeOutDegree v) =
+        Fintype.card (Σ v : G.ActiveVertex,
+          {d : G.toDartGraph.Dart // G.activeSource d = v}) := by
+      exact Fintype.card_sigma.symm
+    _ = Fintype.card G.toDartGraph.Dart :=
+      Fintype.card_congr (Equiv.sigmaFiberEquiv G.activeSource)
+    _ = 2 * Fintype.card G.EdgeClass := G.dart_card_eq_two_edgeClass_card
+
 end LabelledDartGraph
 
 end GreendlingerDehn
