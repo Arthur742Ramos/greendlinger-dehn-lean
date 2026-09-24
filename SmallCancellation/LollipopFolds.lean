@@ -614,4 +614,23 @@ theorem MinimalAreaRelatorBoundarySeed.foldedBalloon_hasRelatorLoop
             (embedding.mapVertex b.label.conjugator.toWord.length)))
         endpoint b.label.relator.toWord) hloop.symm) hwalk⟩
 
+/-- Choose an actual closed relator walk for each indexed balloon occurrence.
+This gives the seed a finite face-boundary family on the common folded
+1-skeleton; the remaining diagram work is to supply and verify its cyclic
+orders and incidence data. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.balloonRelatorLoopAt
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i : Fin seed.boundary.reducedBalloons.length) :
+    Σ vertex : seed.foldedBalloonBoundaryWalk.graph.toDartGraph.Vertex,
+      LabelledWalk seed.foldedBalloonBoundaryWalk.graph vertex vertex
+        (seed.boundary.reducedBalloons.get i).label.relator.toWord := by
+  classical
+  let balloon := seed.boundary.reducedBalloons.get i
+  have hballoon : balloon ∈ seed.boundary.reducedBalloons := List.get_mem _ _
+  let hloop := seed.foldedBalloon_hasRelatorLoop balloon hballoon
+  refine ⟨Classical.choose hloop, ?_⟩
+  simpa [balloon] using (Classical.choose_spec hloop).some
+
 end GreendlingerDehn
