@@ -1,5 +1,6 @@
 import SmallCancellation.Words
 import SmallCancellation.FiniteCheck
+import SmallCancellation.FiniteDartEdges
 import SmallCancellation.Dehn
 import SmallCancellation.CyclicDehn
 import SmallCancellation.Curvature
