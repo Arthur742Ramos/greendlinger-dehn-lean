@@ -479,6 +479,80 @@ theorem MinimalAreaRelatorBoundarySeed.no_nonempty_null_factor_block
     exact hshortLength
   exact (Nat.not_le_of_gt hstrict) (seed.area_minimal shortCertAtW)
 
+/-- If the target word is nontrivial, no nonempty cyclic interval of its
+minimum-area factor list can multiply to one. A wrapping interval is removed
+by conjugating the complementary factors by the product of the prefix. -/
+theorem MinimalAreaRelatorBoundarySeed.no_nonempty_cyclic_null_factor_block
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed R w)
+    (pre middle post : List (FreeGroup α))
+    (hshape : seed.boundary.factors = pre ++ middle ++ post)
+    (hblock : (post ++ pre).prod = 1)
+    (hblockNonempty : post ++ pre ≠ []) :
+    False := by
+  let conjugator := pre.prod
+  let shortened := middle.map fun y => conjugator * y * conjugator⁻¹
+  have hlabels : ∀ y ∈ middle, IsRelatorConjugate R (conjugator * y * conjugator⁻¹) := by
+    intro y hy
+    have hyOriginal : y ∈ seed.boundary.factors := by
+      rw [hshape]
+      exact List.mem_append.mpr (Or.inl (List.mem_append.mpr (Or.inr hy)))
+    obtain ⟨g, r, hr, hfactor⟩ := seed.boundary.factor_labels y hyOriginal
+    refine ⟨conjugator * g, r, hr, ?_⟩
+    calc
+      conjugator * y * conjugator⁻¹ =
+          conjugator * (g * r * g⁻¹) * conjugator⁻¹ := by rw [hfactor]
+      _ = (conjugator * g) * r * (conjugator * g)⁻¹ := by group
+  have hshortLabels : ∀ y ∈ shortened, IsRelatorConjugate R y := by
+    intro y hy
+    rcases List.mem_map.mp hy with ⟨z, hz, hzy⟩
+    subst y
+    exact hlabels z hz
+  have hblockProduct : post.prod * pre.prod = 1 := by
+    simpa [List.prod_append] using hblock
+  have hpostProduct : post.prod = pre.prod⁻¹ := by
+    calc
+      post.prod = post.prod * pre.prod * pre.prod⁻¹ := by group
+      _ = 1 * pre.prod⁻¹ := by rw [hblockProduct]
+      _ = pre.prod⁻¹ := by simp
+  have hfactorProduct : seed.boundary.factors.prod =
+      pre.prod * middle.prod * pre.prod⁻¹ := by
+    have h := congrArg List.prod hshape
+    rw [List.prod_append, List.prod_append] at h
+    rw [h, hpostProduct]
+  have hshortProduct : shortened.prod = w := by
+    calc
+      shortened.prod = pre.prod * middle.prod * pre.prod⁻¹ := by
+        dsimp [shortened, conjugator]
+        exact prod_conjugate_map pre.prod middle
+      _ = seed.boundary.factors.prod := hfactorProduct.symm
+      _ = w := seed.boundary.product_eq
+  obtain ⟨shortCert, hshortArea⟩ :=
+    exists_certificate_of_conjugate_factor_labels shortened hshortLabels
+  let shortCertAtW : RelatorCertificate R w := hshortProduct ▸ shortCert
+  have hshortAreaAtW : shortCertAtW.area = middle.length := by
+    dsimp [shortCertAtW]
+    cases hshortProduct
+    simpa [shortened] using hshortArea
+  have holdArea : seed.certificate.area = seed.boundary.factors.length := by
+    calc
+      seed.certificate.area = seed.certificate.factors.length :=
+        (RelatorCertificate.factors_length seed.certificate).symm
+      _ = seed.boundary.factors.length := by rw [seed.boundary_factors]
+  have hblockLength : 0 < (post ++ pre).length := by
+    cases h : post ++ pre with
+    | nil => exact False.elim (hblockNonempty h)
+    | cons head tail => simp
+  have hshortLength : middle.length < seed.boundary.factors.length := by
+    rw [hshape]
+    simp only [List.length_append]
+    simp only [List.length_append] at hblockLength
+    omega
+  have hstrict : shortCertAtW.area < seed.certificate.area := by
+    rw [hshortAreaAtW, holdArea]
+    exact hshortLength
+  exact (Nat.not_le_of_gt hstrict) (seed.area_minimal shortCertAtW)
+
 /-- The boundary seed gives a concrete cancellation sequence, hence an exact
 count of how many inverse-letter pairs are removed. -/
 theorem RelatorFactorBoundarySeed.cancellation_count {α : Type*}
