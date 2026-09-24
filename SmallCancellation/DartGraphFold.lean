@@ -192,6 +192,24 @@ noncomputable def append {α : Type*} {G : LabelledDartGraph α}
       simpa using LabelledWalk.cons d hsource htarget
         (LabelledWalk.append tail second)
 
+/-- Reverse a walk and invert its label word. -/
+noncomputable def reverse {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (walk : LabelledWalk G u v word) :
+    LabelledWalk G v u (FreeGroup.invRev word) := by
+  induction walk with
+  | nil vertex => exact .nil vertex
+  | @cons u v w dart hsource htarget tailWord tailWalk ih =>
+      have hsource' : G.toDartGraph.source (G.toDartGraph.reverse dart) = v := by
+        rw [G.toDartGraph.source_reverse, htarget]
+      have htarget' : G.toDartGraph.target (G.toDartGraph.reverse dart) = u := by
+        rw [G.toDartGraph.target_reverse, hsource]
+      have hlast : LabelledWalk G v u [inverseLetter (G.label dart)] := by
+        simpa [G.label_reverse] using
+          (LabelledWalk.cons (G.toDartGraph.reverse dart) hsource' htarget' (.nil u))
+      rw [FreeGroup.invRev_cons]
+      exact ih.append hlast
+
 /-- Split a labeled walk at a word concatenation, exposing its middle vertex. -/
 def split {α : Type*} {G : LabelledDartGraph α}
     {u v : G.toDartGraph.Vertex} (left right : Word α)

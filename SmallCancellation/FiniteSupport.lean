@@ -144,6 +144,21 @@ noncomputable def endpointRestrictionHom {α : Type*}
     simp [endpointMap, G.target_mem_endpointFinset]
   map_label := by intro d; rfl
 
+@[simp] theorem endpointRestrictionHom_mapVertex_source {α : Type*}
+    (G : LabelledDartGraph α) [Fintype G.toDartGraph.Dart]
+    (hne : Nonempty G.toDartGraph.Dart) (d : G.toDartGraph.Dart) :
+    (G.endpointRestrictionHom hne).mapVertex (G.toDartGraph.source d) =
+      ⟨G.toDartGraph.source d, G.source_mem_endpointFinset d⟩ := by
+  change G.endpointMap hne (G.toDartGraph.source d) = _
+  simp [endpointMap, G.source_mem_endpointFinset]
+
+@[simp] theorem endpointRestrictionHom_mapVertex_source_val {α : Type*}
+    (G : LabelledDartGraph α) [Fintype G.toDartGraph.Dart]
+    (hne : Nonempty G.toDartGraph.Dart) (d : G.toDartGraph.Dart) :
+    ((G.endpointRestrictionHom hne).mapVertex
+      (G.toDartGraph.source d)).1 = G.toDartGraph.source d := by
+  simp [endpointRestrictionHom, endpointMap, G.source_mem_endpointFinset]
+
 end LabelledDartGraph
 
 end GreendlingerDehn

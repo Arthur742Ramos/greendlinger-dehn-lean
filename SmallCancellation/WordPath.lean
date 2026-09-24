@@ -171,11 +171,15 @@ def wordPathSuffixHom {α : Type*} (pre suf : Word α) :
   map_source := by
     intro d
     cases d with
-    | mk i direction => cases direction <;> simp [wordPathGraph] <;> omega
+    | mk i direction =>
+        cases direction <;> simp [wordPathGraph]
+        all_goals omega
   map_target := by
     intro d
     cases d with
-    | mk i direction => cases direction <;> simp [wordPathGraph] <;> omega
+    | mk i direction =>
+        cases direction <;> simp [wordPathGraph]
+        all_goals omega
   map_label := by
     intro d
     cases d with
@@ -358,5 +362,53 @@ noncomputable def wordBoundaryLoopWithJoins {α : Type*} (word : Word α)
         (Quotient.mk (BoundaryVertexJoinSetoid word.length joins) 0) endpoint word)
       (wordBoundary_endpoints_eq_withJoins word joins).symm)
     boundaryWalk
+
+/-- The prefix of a polygon boundary reaches the vertex at its cut position.
+This makes every occurrence vertex accessible from the boundary basepoint. -/
+noncomputable def wordBoundaryPrefixWalkWithJoins {α : Type*}
+    (word : Word α) (joins : List (Nat × Nat)) (k : Nat)
+    (hk : k ≤ word.length) :
+    LabelledWalk (wordBoundaryGraphWithJoins word joins)
+      (Quotient.mk (BoundaryVertexJoinSetoid word.length joins) 0)
+      (Quotient.mk (BoundaryVertexJoinSetoid word.length joins) k)
+      (word.take k) := by
+  let preWord := word.take k
+  let sufWord := word.drop k
+  have hsplit : preWord ++ sufWord = word := List.take_append_drop k word
+  have hlen : preWord.length = k := by
+    dsimp [preWord]
+    simp [List.length_take, Nat.min_eq_left hk]
+  let path := (wordPathWalk preWord).map (wordPathPrefixHom preWord sufWord)
+  have path' : LabelledWalk (wordPathGraph word) (0 : Nat) (k : Nat) preWord := by
+    rw [← hsplit]
+    simpa [path, wordPathPrefixHom, id, hlen] using path
+  exact path'.map (wordPathBoundaryHomWithJoins word joins)
+
+/-- A directed edge occurrence starts at a vertex reached by a boundary
+prefix. -/
+noncomputable def wordBoundaryPrefixWalkToDartSource {α : Type*}
+    (word : Word α) (joins : List (Nat × Nat))
+    (d : (wordBoundaryGraphWithJoins word joins).toDartGraph.Dart) :
+    LabelledWalk (wordBoundaryGraphWithJoins word joins)
+      (Quotient.mk (BoundaryVertexJoinSetoid word.length joins) 0)
+      ((wordBoundaryGraphWithJoins word joins).toDartGraph.source d)
+      (word.take (if d.2 then d.1.val + 1 else d.1.val)) := by
+  let k := if d.2 then d.1.val + 1 else d.1.val
+  have hk : k ≤ word.length := by
+    dsimp [k]
+    by_cases hd : d.2
+    · simp [hd]
+      omega
+    · simp [hd]
+  let prefixWalk := wordBoundaryPrefixWalkWithJoins word joins k hk
+  have hsource :
+      (Quotient.mk (BoundaryVertexJoinSetoid word.length joins) k :
+        WordBoundaryVertexWithJoins word joins) =
+        (wordBoundaryGraphWithJoins word joins).toDartGraph.source d := by
+    cases d with
+    | mk i direction =>
+        cases direction <;>
+          simp [k, wordBoundaryGraphWithJoins, wordPathGraph]
+  simpa [prefixWalk, k] using hsource ▸ prefixWalk
 
 end GreendlingerDehn

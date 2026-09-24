@@ -94,12 +94,73 @@ noncomputable def MinimalAreaRelatorBoundarySeed.finiteFoldedBoundaryHom
       seed.foldedBoundaryWalk.walk hword
   exact seed.foldedBoundaryWalk.graph.endpointRestrictionHom hdart
 
+/-- The root vertex of the finite folded boundary graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteFoldedBoundaryBasepoint
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :
+    seed.finiteFoldedBoundaryGraph.toDartGraph.Vertex :=
+  (seed.finiteFoldedBoundaryHom hne).mapVertex
+    (seed.foldedBoundaryWalk.hom.mapVertex
+      (Quotient.mk (BoundaryVertexJoinSetoid
+        seed.boundary.reducedLiteralBoundary.length seed.balloonEndpointPairs) 0))
+
 /-- The target boundary walk on the finite incident-vertex graph. -/
 noncomputable def MinimalAreaRelatorBoundarySeed.finiteFoldedBoundaryWalk
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :=
   seed.foldedBoundaryWalk.walk.map (seed.finiteFoldedBoundaryHom hne)
+
+/-- Every vertex of the finite folded one-skeleton is joined to its boundary
+basepoint by a labeled walk. The source word path visits every dart endpoint,
+and the successive quotient maps preserve those walks. -/
+theorem MinimalAreaRelatorBoundarySeed.finiteFoldedBoundaryVertex_reachable
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (v : seed.finiteFoldedBoundaryGraph.toDartGraph.Vertex) :
+    ∃ word, Nonempty (LabelledWalk seed.finiteFoldedBoundaryGraph
+      (seed.finiteFoldedBoundaryBasepoint hne) v word) := by
+  classical
+  letI := seed.finiteFoldedBoundaryDartFintype
+  obtain ⟨d, hd⟩ := seed.foldedBoundaryWalk.graph.activeVertex_incident v
+  have hsource : ∃ e, seed.foldedBoundaryWalk.graph.toDartGraph.source e = v.1 := by
+    rcases hd with hs | ht
+    · exact ⟨d, hs⟩
+    · exact ⟨seed.foldedBoundaryWalk.graph.toDartGraph.reverse d, by
+        rw [seed.foldedBoundaryWalk.graph.toDartGraph.source_reverse]
+        exact ht⟩
+  obtain ⟨dFinal, hdFinal⟩ := hsource
+  obtain ⟨dSource, hdSource⟩ :=
+    seed.foldedBoundaryWalk.hom_surjective dFinal
+  let prefixWalk := wordBoundaryPrefixWalkToDartSource
+    seed.boundary.reducedLiteralBoundary seed.balloonEndpointPairs dSource
+  let mappedWalk := (prefixWalk.map seed.foldedBoundaryWalk.hom).map
+    (seed.finiteFoldedBoundaryHom hne)
+  have htargetRaw :
+      seed.foldedBoundaryWalk.hom.mapVertex
+          (seed.balloonBoundaryGraph.toDartGraph.source dSource) =
+        seed.foldedBoundaryWalk.graph.toDartGraph.source dFinal := by
+    calc
+      _ = seed.foldedBoundaryWalk.graph.toDartGraph.source
+          (seed.foldedBoundaryWalk.hom.mapDart dSource) :=
+        (seed.foldedBoundaryWalk.hom.map_source dSource).symm
+      _ = seed.foldedBoundaryWalk.graph.toDartGraph.source dFinal :=
+        congrArg seed.foldedBoundaryWalk.graph.toDartGraph.source hdSource
+  have htarget :
+      (seed.finiteFoldedBoundaryHom hne).mapVertex
+          (seed.foldedBoundaryWalk.hom.mapVertex
+            (seed.balloonBoundaryGraph.toDartGraph.source dSource)) = v := by
+    apply Subtype.ext
+    calc
+      _ = seed.foldedBoundaryWalk.graph.toDartGraph.source dFinal := by
+        rw [htargetRaw]
+        simp [MinimalAreaRelatorBoundarySeed.finiteFoldedBoundaryHom]
+      _ = v.1 := hdFinal
+  refine ⟨(seed.boundary.reducedLiteralBoundary).take
+      (if dSource.2 then dSource.1.val + 1 else dSource.1.val), ?_⟩
+  exact ⟨htarget ▸ mappedWalk⟩
 
 /-- The indexed relator-face loop family, now carried by the same finite graph
 as the target boundary walk. -/
