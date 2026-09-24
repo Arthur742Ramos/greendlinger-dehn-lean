@@ -211,6 +211,88 @@ theorem survivorOccurrencePositions_nodup {raw reduced : Word α}
         exact Nat.add_left_cancel hxy
       exact ihSuffix.map hinjective
 
+theorem survivorOccurrencePositions_strict {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    List.Pairwise (fun x y : Nat => x < y)
+      (h.survivorOccurrences.map Prod.fst) := by
+  induction h with
+  | empty => simp [survivorOccurrences]
+  | letter a => simp [survivorOccurrences]
+  | @append u u' v v' left right ihLeft ihRight =>
+      simp only [survivorOccurrences, List.map_append,
+        shiftLetterOccurrences_positions]
+      change List.Pairwise (fun x y : Nat => x < y)
+        (left.survivorOccurrences.map Prod.fst ++
+          (right.survivorOccurrences.map Prod.fst).map
+            (left.inputWord.length + ·))
+      rw [List.pairwise_append]
+      refine ⟨ihLeft, ?_, ?_⟩
+      · rw [List.pairwise_map]
+        apply ihRight.imp
+        intro x y hxy
+        omega
+      · intro x hx y hy
+        rcases List.mem_map.mp hx with ⟨o, ho, rfl⟩
+        rcases List.mem_map.mp hy with ⟨z, hz, rfl⟩
+        have hbound := left.survivorOccurrences_inBounds o ho
+        have hleft : o.1 < u.length := by
+          simpa [inputWord] using hbound
+        have hoffset : left.inputWord.length = u.length := by simp [inputWord]
+        omega
+  | @bracket a inner suffix result innerShape suffixShape ihInner ihSuffix =>
+      simp only [survivorOccurrences, shiftLetterOccurrences_positions]
+      rw [List.pairwise_map]
+      apply ihSuffix.imp
+      intro x y hxy
+      omega
+
+/-- The ordered source positions of the retained output letters. -/
+def survivorPositions {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) : List Nat :=
+  h.survivorOccurrences.map Prod.fst
+
+theorem survivorPositions_length {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    (h.survivorPositions).length = reduced.length := by
+  simp [survivorPositions, h.survivorOccurrences_length]
+
+/-- Recover the source position of an output letter by its index in the
+reduced word. The strict-order theorem makes this map an order embedding. -/
+def survivorOutputIndex {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) (i : Fin reduced.length) :
+    Fin h.survivorPositions.length :=
+  ⟨i.val, by
+    rw [survivorPositions, List.length_map, h.survivorOccurrences_length]
+    exact i.isLt⟩
+
+def sourcePositionOfOutput {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) (i : Fin reduced.length) : Nat :=
+  h.survivorPositions.get (h.survivorOutputIndex i)
+
+theorem survivorPositions_inBounds {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    ∀ i ∈ h.survivorPositions, i < h.inputWord.length := by
+  intro i hi
+  have hi' : i ∈ h.survivorOccurrences.map Prod.fst := by
+    simpa only [survivorPositions] using hi
+  rcases List.mem_map.mp hi' with ⟨o, ho, hEq⟩
+  rw [← hEq]
+  exact h.survivorOccurrences_inBounds o ho
+
+theorem sourcePositionOfOutput_inBounds {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) (i : Fin reduced.length) :
+    h.sourcePositionOfOutput i < h.inputWord.length := by
+  exact (List.forall_mem_iff_get.mp h.survivorPositions_inBounds)
+    (h.survivorOutputIndex i)
+
+theorem sourcePositionOfOutput_strict {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) {i j : Fin reduced.length}
+    (hij : i < j) : h.sourcePositionOfOutput i < h.sourcePositionOfOutput j := by
+  have hij' : h.survivorOutputIndex i < h.survivorOutputIndex j :=
+    Fin.mk_lt_mk.mpr hij
+  have hstrict := h.survivorOccurrencePositions_strict.rel_get_of_lt hij'
+  exact hstrict
+
 theorem survivorOccurrences_are_sourceLetters {raw reduced : Word α}
     (h : FreeReductionShape raw reduced) :
     ∀ o ∈ h.survivorOccurrences, raw[o.1]? = some o.2 := by
@@ -761,6 +843,64 @@ theorem sourcePositions_partition {raw reduced : Word α}
   rcases Finset.mem_union.mp hiUnion with hiEndpoint | hiSurvivor
   · exact Or.inl (by simpa [endpointSet, endpoints] using hiEndpoint)
   · exact Or.inr (by simpa [survivorSet, survivors] using hiSurvivor)
+
+/-- A cancellation interval contains no retained source occurrence. The
+bracketed subword reduces completely before its outer inverse pair is removed.
+-/
+theorem cancellationPairs_contain_no_survivor {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    ∀ p ∈ h.cancellationPairs, ∀ o ∈ h.survivorOccurrences,
+      p.1 < o.1 → o.1 < p.2 → False := by
+  induction h with
+  | empty => simp [cancellationPairs, survivorOccurrences]
+  | letter a => simp [cancellationPairs, survivorOccurrences]
+  | @append u u' v v' left right ihLeft ihRight =>
+      intro p hp o ho hbefore hafter
+      simp only [cancellationPairs, List.mem_append] at hp
+      simp only [survivorOccurrences, List.mem_append] at ho
+      rcases hp with hpLeft | hpRight
+      · rcases ho with hoLeft | hoRight
+        · exact ihLeft p hpLeft o hoLeft hbefore hafter
+        · rcases List.mem_map.mp hoRight with ⟨q, hq, hqo⟩
+          subst o
+          have hbound := left.cancellationPairs_inBounds p hpLeft
+          have hupper : p.2 < u.length := by simpa [inputWord] using hbound.2
+          have hoffset : left.inputWord.length = u.length := by simp [inputWord]
+          omega
+      · rcases List.mem_map.mp hpRight with ⟨p₀, hp₀, hpp⟩
+        subst p
+        rcases ho with hoLeft | hoRight
+        · have hbound := left.survivorOccurrences_inBounds o hoLeft
+          have hleft : o.1 < u.length := by simpa [inputWord] using hbound
+          have hoffset : left.inputWord.length = u.length := by simp [inputWord]
+          omega
+        · rcases List.mem_map.mp hoRight with ⟨q, hq, hqo⟩
+          subst o
+          have hlen : left.inputWord.length = u.length := by simp [inputWord]
+          have hbefore' : p₀.1 < q.1 := by omega
+          have hafter' : q.1 < p₀.2 := by omega
+          exact ihRight p₀ hp₀ q hq hbefore' hafter'
+  | @bracket a inner suffix result innerShape suffixShape ihInner ihSuffix =>
+      intro p hp o ho hbefore hafter
+      simp only [cancellationPairs, List.mem_cons, List.mem_append] at hp
+      simp only [survivorOccurrences, shiftLetterOccurrences] at ho
+      rcases List.mem_map.mp ho with ⟨q, hq, hqo⟩
+      subst o
+      rcases hp with hroot | hpRest
+      · subst p
+        simp only [inputWord] at hafter
+        omega
+      · rcases hpRest with hpInner | hpSuffix
+        · rcases List.mem_map.mp hpInner with ⟨p₀, hp₀, rfl⟩
+          have hbound := innerShape.cancellationPairs_inBounds p₀ hp₀
+          have hinner : innerShape.inputWord.length = inner.length := by
+            simp [inputWord]
+          simp only [inputWord] at hafter
+          omega
+        · rcases List.mem_map.mp hpSuffix with ⟨p₀, hp₀, rfl⟩
+          have hbefore' : p₀.1 < q.1 := by omega
+          have hafter' : q.1 < p₀.2 := by omega
+          exact ihSuffix p₀ hp₀ q hq hbefore' hafter'
 
 end FreeReductionShape
 

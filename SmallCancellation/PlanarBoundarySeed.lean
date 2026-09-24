@@ -40,6 +40,8 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryTrace {α : Type*}
       trace.survivorOccurrences.map Prod.snd = w.toWord ∧
       trace.survivorOccurrences.length = w.toWord.length ∧
       (trace.survivorOccurrences.map Prod.fst).Nodup ∧
+      List.Pairwise (fun i j : Nat => i < j)
+        (trace.survivorOccurrences.map Prod.fst) ∧
       (pairEndpoints trace.cancellationPairs).length +
           (trace.survivorOccurrences.map Prod.fst).length =
         trace.inputWord.length ∧
@@ -48,11 +50,13 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryTrace {α : Type*}
       (∀ o ∈ trace.survivorOccurrences, o.1 < trace.inputWord.length) ∧
       (∀ o ∈ trace.survivorOccurrences, ∀ p ∈ trace.cancellationPairs,
         o.1 ≠ p.1 ∧ o.1 ≠ p.2) ∧
+      (∀ p ∈ trace.cancellationPairs, ∀ o ∈ trace.survivorOccurrences,
+        p.1 < o.1 → o.1 < p.2 → False) ∧
       (∀ i, i < trace.inputWord.length →
         i ∈ pairEndpoints trace.cancellationPairs ∨
           i ∈ trace.survivorOccurrences.map Prod.fst) := by
   let trace := seed.boundary.to_boundaryShape
-  refine ⟨trace, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨trace, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact trace.cancellationPairs_length
   · exact trace.cancellationPairs_noncrossing
   · exact trace.cancellationPairs_are_inverseLetterOccurrences
@@ -63,10 +67,12 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryTrace {α : Type*}
   · exact trace.survivorOccurrences_labels
   · exact trace.survivorOccurrences_length
   · exact trace.survivorOccurrencePositions_nodup
+  · exact trace.survivorOccurrencePositions_strict
   · simpa using trace.survivorAndCancellationEndpointCount
   · exact trace.survivorOccurrences_are_sourceLetters
   · exact trace.survivorOccurrences_inBounds
   · exact trace.survivorOccurrences_disjointFromCancellationPairs
+  · exact trace.cancellationPairs_contain_no_survivor
   · exact trace.sourcePositions_partition
 
 end GreendlingerDehn
