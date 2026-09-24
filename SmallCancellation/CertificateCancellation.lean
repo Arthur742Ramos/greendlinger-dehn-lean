@@ -430,6 +430,55 @@ theorem MinimalAreaRelatorBoundarySeed.no_cyclic_adjacent_inverse_factors
     exact hshortLength
   exact (Nat.not_le_of_gt hstrict) (seed.area_minimal shortCertAtW)
 
+/-- A minimum-area certificate has no nonempty contiguous block of factors
+whose product is the identity: deleting that block preserves the word and
+strictly lowers the certificate area. -/
+theorem MinimalAreaRelatorBoundarySeed.no_nonempty_null_factor_block
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed R w)
+    (pre middle post : List (FreeGroup α))
+    (hshape : seed.boundary.factors = pre ++ middle ++ post)
+    (hmiddle : middle.prod = 1) (hmiddleNonempty : middle ≠ []) :
+    False := by
+  have hshortLabels : ∀ y ∈ pre ++ post, IsRelatorConjugate R y := by
+    intro y hy
+    have hyOriginal : y ∈ seed.boundary.factors := by
+      rw [hshape]
+      rcases List.mem_append.mp hy with hpre | hpost
+      · exact List.mem_append.mpr (Or.inl (List.mem_append.mpr (Or.inl hpre)))
+      · exact List.mem_append.mpr (Or.inr hpost)
+    exact seed.boundary.factor_labels y hyOriginal
+  obtain ⟨shortCert, hshortArea⟩ :=
+    exists_certificate_of_conjugate_factor_labels (R := R) (pre ++ post) hshortLabels
+  have hshortProduct : (pre ++ post).prod = w := by
+    calc
+      (pre ++ post).prod = (pre ++ middle ++ post).prod := by
+        simp [List.prod_append, hmiddle]
+      _ = seed.boundary.factors.prod := by rw [hshape]
+      _ = w := seed.boundary.product_eq
+  let shortCertAtW : RelatorCertificate R w := hshortProduct ▸ shortCert
+  have hshortAreaAtW : shortCertAtW.area = (pre ++ post).length := by
+    dsimp [shortCertAtW]
+    cases hshortProduct
+    exact hshortArea
+  have holdArea : seed.certificate.area = seed.boundary.factors.length := by
+    calc
+      seed.certificate.area = seed.certificate.factors.length :=
+        (RelatorCertificate.factors_length seed.certificate).symm
+      _ = seed.boundary.factors.length := by rw [seed.boundary_factors]
+  have hmiddlePositive : 0 < middle.length := by
+    cases middle with
+    | nil => cases hmiddleNonempty rfl
+    | cons head tail => simp
+  have hshortLength : (pre ++ post).length < seed.boundary.factors.length := by
+    rw [hshape]
+    simp only [List.length_append]
+    omega
+  have hstrict : shortCertAtW.area < seed.certificate.area := by
+    rw [hshortAreaAtW, holdArea]
+    exact hshortLength
+  exact (Nat.not_le_of_gt hstrict) (seed.area_minimal shortCertAtW)
+
 /-- The boundary seed gives a concrete cancellation sequence, hence an exact
 count of how many inverse-letter pairs are removed. -/
 theorem RelatorFactorBoundarySeed.cancellation_count {α : Type*}
