@@ -1,4 +1,5 @@
 import SmallCancellation.Dehn
+import Mathlib.GroupTheory.FreeGroup.CyclicallyReduced
 import Mathlib.Tactic.Group
 
 namespace GreendlingerDehn
@@ -175,6 +176,105 @@ def CyclicGreendlingerProperty (R : List (FreeGroup α)) : Prop :=
   ∀ w : FreeGroup α,
     PresentedGroup.mk (relationSet R) w = 1 → w ≠ 1 →
       ∃ c, IsCyclicRedex R w c
+
+/-- Greendlinger's property restricted to cyclically reduced boundary words.
+The general property follows by cyclically reducing the word and transferring
+the shell occurrence across the conjugating stem. -/
+def CyclicallyReducedGreendlingerProperty (R : List (FreeGroup α)) : Prop :=
+  ∀ w : FreeGroup α,
+    FreeGroup.IsCyclicallyReduced w.toWord →
+    PresentedGroup.mk (relationSet R) w = 1 → w ≠ 1 →
+      ∃ c, IsCyclicRedex R w c
+
+/-- A cyclic redex in the cyclically reduced core of a reduced lollipop word
+transfers to a cyclic redex on the original boundary. The stem is absorbed
+into the prefix and its inverse into the suffix; they cancel at the rotated
+join. -/
+theorem cyclicRedex_of_lollipopBoundary {R : List (FreeGroup α)}
+    {w core : FreeGroup α} {stem coreWord : Word α}
+    (hboundary : w.toWord = stem ++ coreWord ++ FreeGroup.invRev stem)
+    (hcoreWord : core.toWord = coreWord)
+    {d : CyclicRedex α} (hd : IsCyclicRedex R core d) :
+    ∃ c, IsCyclicRedex R w c := by
+  rcases hd with ⟨hcoreSplit, hredex⟩
+  let c : CyclicRedex α :=
+    ⟨stem ++ d.pre, d.suf ++ FreeGroup.invRev stem, d.redex⟩
+  have hsplit : w.toWord = c.pre ++ c.suf := by
+    dsimp [c]
+    rw [hboundary, ← hcoreWord, hcoreSplit]
+    simp only [List.append_assoc]
+  have hrot : FreeGroup.mk (c.suf ++ c.pre) =
+      FreeGroup.mk (d.suf ++ d.pre) := by
+    dsimp [c]
+    repeat rw [← FreeGroup.mul_mk]
+    rw [← FreeGroup.inv_mk]
+    group
+  have hrotWord := congrArg FreeGroup.toWord hrot
+  refine ⟨c, hsplit, ?_⟩
+  change IsRedex R (FreeGroup.mk (c.suf ++ c.pre)).toWord d.redex
+  rw [hrotWord]
+  exact hredex
+
+/-- The cyclically reduced form of a nontrivial null word is nontrivial and
+null, and its Greendlinger occurrence transfers back across the removed stem.
+This converts the cyclically reduced theorem surface to the general one used
+by the executable reducer. -/
+theorem cyclicGreendlinger_of_cyclicallyReducedGreendlingerProperty
+    {R : List (FreeGroup α)}
+    (hgreen : CyclicallyReducedGreendlingerProperty R) :
+    CyclicGreendlingerProperty R := by
+  intro w hnull hne
+  let stem := FreeGroup.reduceCyclically.conjugator w.toWord
+  let coreWord := FreeGroup.reduceCyclically w.toWord
+  let core : FreeGroup α := FreeGroup.mk coreWord
+  have hcyclic := FreeGroup.reduceCyclically.isCyclicallyReduced
+    (FreeGroup.isReduced_toWord : FreeGroup.IsReduced w.toWord)
+  have hcoreWord : core.toWord = coreWord := by
+    change FreeGroup.reduce coreWord = coreWord
+    exact hcyclic.isReduced.reduce_eq
+  have hcoreCyclic : FreeGroup.IsCyclicallyReduced core.toWord := by
+    rw [hcoreWord]
+    exact hcyclic
+  have hboundary : w.toWord = stem ++ coreWord ++ FreeGroup.invRev stem := by
+    dsimp [stem, coreWord]
+    exact (FreeGroup.reduceCyclically.conj_conjugator_reduceCyclically w.toWord).symm
+  have hmkBoundary : w = FreeGroup.mk (stem ++ coreWord ++ FreeGroup.invRev stem) := by
+    calc
+      w = FreeGroup.mk w.toWord := (FreeGroup.mk_toWord).symm
+      _ = FreeGroup.mk (stem ++ coreWord ++ FreeGroup.invRev stem) :=
+        congrArg FreeGroup.mk hboundary
+  have hfree : w = FreeGroup.mk stem * core * (FreeGroup.mk stem)⁻¹ := by
+    calc
+      w = FreeGroup.mk (stem ++ coreWord ++ FreeGroup.invRev stem) := hmkBoundary
+      _ = FreeGroup.mk stem * FreeGroup.mk coreWord *
+          FreeGroup.mk (FreeGroup.invRev stem) := by
+        repeat rw [← FreeGroup.mul_mk]
+      _ = FreeGroup.mk stem * core * (FreeGroup.mk stem)⁻¹ := by
+        rw [← FreeGroup.inv_mk]
+  have hquotientConj : PresentedGroup.mk (relationSet R) w =
+      PresentedGroup.mk (relationSet R) (FreeGroup.mk stem) *
+        PresentedGroup.mk (relationSet R) core *
+          (PresentedGroup.mk (relationSet R) (FreeGroup.mk stem))⁻¹ := by
+    let π := PresentedGroup.mk (relationSet R)
+    change π w = π (FreeGroup.mk stem * core * (FreeGroup.mk stem)⁻¹)
+    rw [hfree]
+  have hcoreNull : PresentedGroup.mk (relationSet R) core = 1 := by
+    have hconjOne :
+        PresentedGroup.mk (relationSet R) (FreeGroup.mk stem) *
+          PresentedGroup.mk (relationSet R) core *
+            (PresentedGroup.mk (relationSet R) (FreeGroup.mk stem))⁻¹ = 1 := by
+      rw [← hquotientConj, hnull]
+    exact (conjugate_eq_one_iff
+      (PresentedGroup.mk (relationSet R) (FreeGroup.mk stem))⁻¹
+      (PresentedGroup.mk (relationSet R) core)).mp (by simpa using hconjOne)
+  have hcoreNe : core ≠ 1 := by
+    intro hone
+    apply hne
+    calc
+      w = FreeGroup.mk stem * core * (FreeGroup.mk stem)⁻¹ := hfree
+      _ = 1 := by rw [hone]; group
+  obtain ⟨d, hd⟩ := hgreen core hcoreCyclic hcoreNull hcoreNe
+  exact cyclicRedex_of_lollipopBoundary hboundary hcoreWord hd
 
 /-- Cyclic Dehn reduction with fuel equal to the original reduced length. Each
 step decreases length after rotating to the representative containing the
