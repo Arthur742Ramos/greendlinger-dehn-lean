@@ -20,3 +20,4 @@ import SmallCancellation.WordPath
 import SmallCancellation.LollipopFolds
 import SmallCancellation.FoldedBoundarySeed
 import SmallCancellation.PairingComponents
+import SmallCancellation.StemPairEndpoints
