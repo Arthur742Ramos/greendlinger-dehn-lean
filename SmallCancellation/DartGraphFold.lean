@@ -3,7 +3,7 @@ import SmallCancellation.Cancellation
 
 namespace GreendlingerDehn
 
-universe u
+universe u v
 
 /-- A combinatorial edge skeleton: every dart has a source and target, and edge
 reversal swaps those endpoints. The same structure can be folded repeatedly. -/
@@ -164,6 +164,360 @@ def folded (α : Type*) (G : LabelledDartGraph α)
   label_reverse := G.foldedLabel_reverse a b hlabels
 
 end LabelledDartGraph
+
+/-- A directed walk whose successive edge labels are exactly a given word.
+The word index makes decomposition and cancellation visible to the kernel. -/
+inductive LabelledWalk {α : Type u} (G : LabelledDartGraph.{u, v} α) :
+    G.toDartGraph.Vertex → G.toDartGraph.Vertex → Word α →
+      Type (max u (v + 1)) where
+  | nil (v : G.toDartGraph.Vertex) : LabelledWalk G v v []
+  | cons {u v w : G.toDartGraph.Vertex} (d : G.toDartGraph.Dart)
+      (source_eq : G.toDartGraph.source d = u)
+      (target_eq : G.toDartGraph.target d = v)
+      {tailWord : Word α}
+      (tail : LabelledWalk G v w tailWord) :
+      LabelledWalk G u w (G.label d :: tailWord)
+
+namespace LabelledWalk
+
+/-- Concatenate two endpoint-compatible walks. -/
+noncomputable def append {α : Type*} {G : LabelledDartGraph α}
+    {u v w : G.toDartGraph.Vertex} {left right : Word α}
+    (first : LabelledWalk G u v left)
+    (second : LabelledWalk G v w right) :
+    LabelledWalk G u w (left ++ right) :=
+  match first with
+  | .nil x => by simpa using second
+  | .cons d hsource htarget tail => by
+      simpa using LabelledWalk.cons d hsource htarget
+        (LabelledWalk.append tail second)
+
+/-- Split a labeled walk at a word concatenation, exposing its middle vertex. -/
+def split {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} (left right : Word α)
+    (walk : LabelledWalk G u v (left ++ right)) :
+    Σ mid, LabelledWalk G u mid left × LabelledWalk G mid v right := by
+  induction left generalizing u with
+  | nil =>
+      exact ⟨u, .nil u, by simpa using walk⟩
+  | cons a left ih =>
+      cases walk with
+      | cons d hsource htarget tail =>
+          obtain ⟨mid, leftWalk, rightWalk⟩ := ih tail
+          exact ⟨mid, .cons d hsource htarget leftWalk, rightWalk⟩
+
+/-- The dart and endpoint data extracted from a one-letter walk. -/
+structure SingleEdgeWalk {α : Type*} (G : LabelledDartGraph α)
+    {u v : G.toDartGraph.Vertex} (a : Letter α) where
+  dart : G.toDartGraph.Dart
+  source_eq : G.toDartGraph.source dart = u
+  target_eq : G.toDartGraph.target dart = v
+  label_eq : G.label dart = a
+
+/-- A walk labeled by one letter consists of one dart with that label. -/
+noncomputable def edgeOf {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {a : Letter α}
+    (walk : LabelledWalk G u v [a]) :
+    SingleEdgeWalk G (u := u) (v := v) a := by
+  cases walk with
+  | cons d hsource htarget tail =>
+      cases tail with
+      | nil x => exact ⟨d, hsource, htarget, rfl⟩
+
+end LabelledWalk
+
+/-- A label-preserving map between signed dart graphs. -/
+structure LabelledGraphHom {α : Type*}
+    (G H : LabelledDartGraph α) where
+  mapVertex : G.toDartGraph.Vertex → H.toDartGraph.Vertex
+  mapDart : G.toDartGraph.Dart → H.toDartGraph.Dart
+  map_reverse : ∀ d,
+    H.toDartGraph.reverse (mapDart d) = mapDart (G.toDartGraph.reverse d)
+  map_source : ∀ d,
+    H.toDartGraph.source (mapDart d) = mapVertex (G.toDartGraph.source d)
+  map_target : ∀ d,
+    H.toDartGraph.target (mapDart d) = mapVertex (G.toDartGraph.target d)
+  map_label : ∀ d, H.label (mapDart d) = G.label d
+
+namespace LabelledGraphHom
+
+/-- Identity map on a labeled dart graph. -/
+def id {α : Type*} (G : LabelledDartGraph α) : LabelledGraphHom G G where
+  mapVertex := fun x => x
+  mapDart := fun x => x
+  map_reverse := by intro d; rfl
+  map_source := by intro d; rfl
+  map_target := by intro d; rfl
+  map_label := by intro d; rfl
+
+/-- The canonical labeled graph map into the quotient made by one fold. -/
+def fold {α : Type*} (G : LabelledDartGraph α)
+    (a b : G.toDartGraph.Dart)
+    (hlabels : G.label a = inverseLetter (G.label b)) :
+    LabelledGraphHom G (G.folded α a b hlabels) where
+  mapVertex := Quotient.mk (VertexFoldSetoid G.toDartGraph a b)
+  mapDart := Quotient.mk (EdgeFoldSetoid G.toDartGraph.reverse a b)
+  map_reverse := by intro d; rfl
+  map_source := by intro d; rfl
+  map_target := by intro d; rfl
+  map_label := by intro d; rfl
+
+/-- Compose two label-preserving graph maps. -/
+def comp {α : Type*} {G H K : LabelledDartGraph α}
+    (second : LabelledGraphHom H K) (first : LabelledGraphHom G H) :
+    LabelledGraphHom G K where
+  mapVertex := second.mapVertex ∘ first.mapVertex
+  mapDart := second.mapDart ∘ first.mapDart
+  map_reverse := by
+    intro d
+    change K.toDartGraph.reverse (second.mapDart (first.mapDart d)) =
+      second.mapDart (first.mapDart (G.toDartGraph.reverse d))
+    rw [second.map_reverse, first.map_reverse]
+  map_source := by
+    intro d
+    change K.toDartGraph.source (second.mapDart (first.mapDart d)) =
+      second.mapVertex (first.mapVertex (G.toDartGraph.source d))
+    rw [second.map_source, first.map_source]
+  map_target := by
+    intro d
+    change K.toDartGraph.target (second.mapDart (first.mapDart d)) =
+      second.mapVertex (first.mapVertex (G.toDartGraph.target d))
+    rw [second.map_target, first.map_target]
+  map_label := by
+    intro d
+    change K.label (second.mapDart (first.mapDart d)) = G.label d
+    rw [second.map_label, first.map_label]
+
+end LabelledGraphHom
+
+namespace LabelledWalk
+
+/-- Apply a label-preserving graph map to every dart in a walk. -/
+noncomputable def map {α : Type*} {G H : LabelledDartGraph α}
+    (f : LabelledGraphHom G H)
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (walk : LabelledWalk G u v word) :
+    LabelledWalk H (f.mapVertex u) (f.mapVertex v) word :=
+  match walk with
+  | .nil x => .nil _
+  | .cons d hsource htarget tail =>
+      (f.map_label d) ▸
+        (LabelledWalk.cons (f.mapDart d)
+          ((f.map_source d).trans (congrArg f.mapVertex hsource))
+          ((f.map_target d).trans (congrArg f.mapVertex htarget))
+          (LabelledWalk.map f tail))
+
+end LabelledWalk
+
+namespace LabelledWalk
+
+/-- Map a labeled walk through a fold whose two selected darts have inverse
+labels. Edge labels and the represented word are preserved by the quotient. -/
+noncomputable def foldMap {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (walk : LabelledWalk G u v word)
+    (a b : G.toDartGraph.Dart)
+    (hlabels : G.label a = inverseLetter (G.label b)) :
+    LabelledWalk (G.folded α a b hlabels)
+      (Quotient.mk (VertexFoldSetoid G.toDartGraph a b) u)
+      (Quotient.mk (VertexFoldSetoid G.toDartGraph a b) v) word :=
+  match walk with
+  | .nil x => .nil _
+  | .cons d hsource htarget tail =>
+      .cons (Quotient.mk (EdgeFoldSetoid G.toDartGraph.reverse a b) d)
+        (congrArg (Quotient.mk (VertexFoldSetoid G.toDartGraph a b)) hsource)
+        (congrArg (Quotient.mk (VertexFoldSetoid G.toDartGraph a b)) htarget)
+        (foldMap tail a b hlabels)
+
+/-- Splice the two surviving parts of a boundary walk after folding a
+consecutive inverse-labeled pair. -/
+noncomputable def spliceAcrossFold {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {preWord sufWord : Word α}
+    (first : G.toDartGraph.Dart) (second : G.toDartGraph.Dart)
+    (before : LabelledWalk G u (G.toDartGraph.source first) preWord)
+    (after : LabelledWalk G (G.toDartGraph.target second) v sufWord)
+    (hlabels : G.label first = inverseLetter (G.label second)) :
+    LabelledWalk (G.folded α first second hlabels)
+      (Quotient.mk (VertexFoldSetoid G.toDartGraph first second) u)
+      (Quotient.mk (VertexFoldSetoid G.toDartGraph first second) v)
+      (preWord ++ sufWord) := by
+  let beforeFold := before.foldMap first second hlabels
+  let afterFold := after.foldMap first second hlabels
+  exact beforeFold.append
+    (DartGraph.foldedEndpointEq G.toDartGraph first second ▸ afterFold)
+
+end LabelledWalk
+
+/-- The result of performing folds on a labeled boundary walk. The graph map
+records how every original vertex and dart is represented in the quotient. -/
+structure WalkFoldResult {α : Type u} (G : LabelledDartGraph.{u, v} α)
+    {u₀ v₀ : G.toDartGraph.Vertex} (word : Word α) :
+    Type (max u (v + 1)) where
+  graph : LabelledDartGraph.{u, v} α
+  hom : LabelledGraphHom G graph
+  walk : LabelledWalk graph (hom.mapVertex u₀) (hom.mapVertex v₀) word
+
+/-- A pair of occurrences in the original graph that may be glued in opposite
+orientations. -/
+structure LabelledDartPair {α : Type*} (G : LabelledDartGraph α) where
+  first : G.toDartGraph.Dart
+  second : G.toDartGraph.Dart
+  inverse_labels : G.label first = inverseLetter (G.label second)
+
+namespace WalkFoldResult
+
+/-- Fold the current images of an original occurrence pair. Earlier folds are
+transported through `state.hom`, so repeated use of a source dart remains
+well-defined. -/
+noncomputable def foldPair {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (state : WalkFoldResult G (u₀ := u) (v₀ := v) word)
+    (pair : LabelledDartPair G) :
+    WalkFoldResult G (u₀ := u) (v₀ := v) word := by
+  let first := state.hom.mapDart pair.first
+  let second := state.hom.mapDart pair.second
+  have hlabels : state.graph.label first = inverseLetter (state.graph.label second) := by
+    rw [state.hom.map_label, state.hom.map_label]
+    exact pair.inverse_labels
+  let quotientMap := LabelledGraphHom.fold state.graph first second hlabels
+  exact ⟨state.graph.folded α first second hlabels,
+    LabelledGraphHom.comp quotientMap state.hom,
+    state.walk.map quotientMap⟩
+
+/-- Fold a finite list of original occurrence pairs successively. Every pair is
+mapped through all preceding quotients before it is folded. -/
+noncomputable def foldPairsFrom {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (state : WalkFoldResult G (u₀ := u) (v₀ := v) word) :
+    (pairs : List (LabelledDartPair G)) →
+      WalkFoldResult G (u₀ := u) (v₀ := v) word
+  | [] => state
+  | pair :: rest => foldPairsFrom (state.foldPair pair) rest
+
+/-- Start a finite sequence of occurrence folds from the original graph and
+its boundary walk. -/
+noncomputable def foldPairs {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (pairs : List (LabelledDartPair G))
+    (walk : LabelledWalk G u v word) :
+    WalkFoldResult G (u₀ := u) (v₀ := v) word :=
+  foldPairsFrom ⟨G, LabelledGraphHom.id G, walk⟩ pairs
+
+end WalkFoldResult
+
+namespace LabelledWalk
+
+/-- Fold one adjacent inverse-letter pair in a labeled walk. This is the
+combinatorial step used to realize a free cancellation as an edge fold. -/
+noncomputable def foldCancellation {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced)
+    (walk : LabelledWalk G u v raw) :
+    WalkFoldResult G (u₀ := u) (v₀ := v) reduced := by
+  cases step with
+  | cancel pre post a =>
+      have walk' : LabelledWalk G u v
+          (pre ++ ([a] ++ ([inverseLetter a] ++ post))) := by
+        simpa [List.append_assoc] using walk
+      let firstSplit := split pre ([a] ++ ([inverseLetter a] ++ post)) walk'
+      rcases firstSplit with ⟨beforeVertex, before, rest⟩
+      let secondSplit := split [a] ([inverseLetter a] ++ post) rest
+      rcases secondSplit with ⟨middleVertex, firstEdge, rest⟩
+      let thirdSplit := split [inverseLetter a] post rest
+      rcases thirdSplit with ⟨afterVertex, secondEdge, after⟩
+      let firstData := edgeOf firstEdge
+      let secondData := edgeOf secondEdge
+      let firstDart := firstData.dart
+      let secondDart := secondData.dart
+      have hfirstSource := firstData.source_eq
+      have hfirstLabel := firstData.label_eq
+      have hsecondTarget := secondData.target_eq
+      have hsecondLabel := secondData.label_eq
+      have hlabels : G.label firstDart = inverseLetter (G.label secondDart) := by
+        calc
+          G.label firstDart = a := hfirstLabel
+          _ = inverseLetter (G.label secondDart) := by
+            rw [hsecondLabel, LabelledDartGraph.inverseLetter_inverse]
+      let before' : LabelledWalk G u (G.toDartGraph.source firstDart) pre :=
+        hfirstSource.symm ▸ before
+      let after' : LabelledWalk G (G.toDartGraph.target secondDart) v post :=
+        hsecondTarget ▸ after
+      refine ⟨G.folded α firstDart secondDart hlabels,
+        LabelledGraphHom.fold G firstDart secondDart hlabels, ?_⟩
+      exact before'.spliceAcrossFold firstDart secondDart after' hlabels
+
+/-- Replay a sequence of adjacent free cancellations as successive graph
+folds. The returned homomorphism tracks the original graph into the final
+quotient, and the remaining boundary walk spells the reduced word. -/
+noncomputable def foldSequence {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced)
+    (walk : LabelledWalk G u v raw) : WalkFoldResult G (u₀ := u) (v₀ := v) reduced :=
+  match steps with
+  | .refl _ => ⟨G, LabelledGraphHom.id G, walk⟩
+  | .cons step rest =>
+      let first := foldCancellation step walk
+      let later := foldSequence rest first.walk
+      ⟨later.graph, LabelledGraphHom.comp later.hom first.hom, later.walk⟩
+
+/-- Every certified free reduction of a boundary word can be realized by a
+finite sequence of labeled edge folds. -/
+noncomputable def foldFreeReduction {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
+    (shape : FreeReductionShape raw reduced)
+    (walk : LabelledWalk G u v raw) :
+    WalkFoldResult G (u₀ := u) (v₀ := v) reduced :=
+  foldSequence shape.to_cancellationSequence walk
+
+end LabelledWalk
+
+namespace WalkFoldResult
+
+/-- First identify any selected inverse-labeled occurrence pairs, then replay
+the boundary's adjacent cancellation trace in the resulting quotient graph. -/
+noncomputable def foldPairsThenReduce {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
+    (pairs : List (LabelledDartPair G))
+    (steps : FreeCancellationSequence raw reduced)
+    (walk : LabelledWalk G u v raw) :
+    WalkFoldResult G (u₀ := u) (v₀ := v) reduced := by
+  let paired := foldPairs pairs walk
+  let reducedState := LabelledWalk.foldSequence steps paired.walk
+  exact ⟨reducedState.graph,
+    LabelledGraphHom.comp reducedState.hom paired.hom,
+    reducedState.walk⟩
+
+end WalkFoldResult
+
+namespace LabelledWalk
+
+/-- A walk with empty label has equal endpoints. -/
+theorem endpoints_eq_of_empty {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v []) : u = v := by
+  cases walk with
+  | nil x => rfl
+
+/-- A freely null labeled loop has its endpoints identified by the successive
+edge folds obtained from its cancellation certificate. -/
+theorem foldFreeReduction_identifiesEndpoints {α : Type*}
+    {G : LabelledDartGraph α} {u v : G.toDartGraph.Vertex}
+    {raw : Word α} (shape : FreeReductionShape raw [])
+    (walk : LabelledWalk G u v raw) :
+    (foldFreeReduction shape walk).hom.mapVertex u =
+      (foldFreeReduction shape walk).hom.mapVertex v := by
+  exact endpoints_eq_of_empty (foldFreeReduction shape walk).walk
+
+/-- The same endpoint-identification result follows directly from equality to
+the identity in the free group. -/
+theorem foldFreeGroupIdentity_identifiesEndpoints {α : Type*}
+    [DecidableEq α] {G : LabelledDartGraph α} {u v : G.toDartGraph.Vertex}
+    {raw : Word α} (h : FreeGroup.mk raw = 1)
+    (walk : LabelledWalk G u v raw) :
+    (foldFreeReduction (FreeReductionShape.of_mk_eq_one h) walk).hom.mapVertex u =
+      (foldFreeReduction (FreeReductionShape.of_mk_eq_one h) walk).hom.mapVertex v :=
+  foldFreeReduction_identifiesEndpoints _ walk
+
+end LabelledWalk
 
 /-- A directed walk recorded by its dart sequence and endpoint equations. -/
 inductive DartWalk (G : DartGraph) : G.Vertex → G.Vertex → Type where
