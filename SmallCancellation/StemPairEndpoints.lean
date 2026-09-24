@@ -1607,6 +1607,259 @@ theorem MinimalAreaRelatorBoundarySeed.card_relatorSideOccurrences_in_component_
   rw [Nat.card_eq_fintype_card]
   exact hcardLeft.trans (hcardMono.trans hcomponent')
 
+/-- Counting each relator-side and surviving boundary occurrence separately,
+the total number of incident ends in one alternating component is at most
+two. The sum keeps a relator side that survives on the boundary as two
+incidences at the same source position. -/
+theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_component_le_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent) :
+      Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) ≤ 2 := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  let leftPairing := componentLeftPairing seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing C
+  let rightPairing := componentRightPairing seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing C
+  let leftSlots := {v : C.supp // leftPairing.partner v = none}
+  let rightSlots := {v : C.supp // rightPairing.partner v = none}
+  let sideIncidences := {side : seed.RelatorSideOccurrence //
+    seed.relatorSideOccurrencePosition side ∈ C.supp}
+  let boundaryIncidences := {i : Fin seed.boundary.reducedLiteralBoundary.length //
+    i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+    i ∈ C.supp}
+  let incidenceSlots := leftSlots ⊕ rightSlots
+  let toIncidenceSlots : sideIncidences ⊕ boundaryIncidences → incidenceSlots :=
+    fun incidence =>
+      match incidence with
+      | Sum.inl side => Sum.inl ⟨⟨seed.relatorSideOccurrencePosition side.1,
+          side.2⟩, by
+            change PartialOccurrencePairing.restrictedPartner
+              seed.balloonStemOccurrencePairing C.supp
+                ⟨seed.relatorSideOccurrencePosition side.1, side.2⟩ = none
+            have hnone := (seed.balloonStemOccurrencePairing_unpaired_iff_not_endpoint
+              (seed.relatorSideOccurrencePosition side.1)).2
+              (seed.relatorSidePosition_unmatched_by_stem side.1.1 side.1.2)
+            cases hpartner : PartialOccurrencePairing.restrictedPartner
+                seed.balloonStemOccurrencePairing C.supp
+                  ⟨seed.relatorSideOccurrencePosition side.1, side.2⟩ with
+            | none => rfl
+            | some v =>
+                have hglobal :=
+                  (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+                    seed.balloonStemOccurrencePairing C.supp
+                    ⟨seed.relatorSideOccurrencePosition side.1, side.2⟩ v).1 hpartner
+                rw [hnone] at hglobal
+                cases hglobal⟩
+      | Sum.inr boundary => Sum.inr ⟨⟨boundary.1, boundary.2.2⟩, by
+            change PartialOccurrencePairing.restrictedPartner
+              seed.boundaryCancellationPairing C.supp
+                ⟨boundary.1, boundary.2.2⟩ = none
+            have hnone :=
+              (IndexedBoundaryTrace.cancellationOccurrencePairing_unpaired_iff_survivor
+                seed.reducedLollipopBoundaryTrace boundary.1).2 boundary.2.1
+            cases hpartner : PartialOccurrencePairing.restrictedPartner
+                seed.boundaryCancellationPairing C.supp
+                  ⟨boundary.1, boundary.2.2⟩ with
+            | none => rfl
+            | some v =>
+                have hglobal :=
+                  (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+                    seed.boundaryCancellationPairing C.supp
+                    ⟨boundary.1, boundary.2.2⟩ v).1 hpartner
+                have hnone' : seed.boundaryCancellationPairing.partner boundary.1 = none := by
+                  simpa [MinimalAreaRelatorBoundarySeed.boundaryCancellationPairing] using hnone
+                rw [hnone'] at hglobal
+                cases hglobal⟩
+  have htoIncidenceSlots : Function.Injective toIncidenceSlots := by
+    intro incidence₁ incidence₂ heq
+    cases incidence₁ with
+    | inl side₁ =>
+        cases incidence₂ with
+        | inl side₂ =>
+            apply congrArg Sum.inl
+            apply Subtype.ext
+            apply seed.relatorSideOccurrencePosition_injective
+            exact congrArg (fun v : leftSlots => v.1.1) (Sum.inl.inj heq)
+        | inr boundary₂ => simp [toIncidenceSlots] at heq
+    | inr boundary₁ =>
+        cases incidence₂ with
+        | inl side₂ => simp [toIncidenceSlots] at heq
+        | inr boundary₂ =>
+            apply congrArg Sum.inr
+            apply Subtype.ext
+            exact congrArg (fun v : rightSlots => v.1.1) (Sum.inr.inj heq)
+  have hconn : (twoPairingGraph leftPairing rightPairing).Connected := by
+    rw [twoPairingGraph_component_eq_induce
+      seed.balloonStemOccurrencePairing seed.boundaryCancellationPairing C]
+    exact C.connected_toSimpleGraph
+  have hbound := card_unpaired_pairing_slots_le_two_of_connected
+    leftPairing rightPairing hconn
+  have hcard : Fintype.card (sideIncidences ⊕ boundaryIncidences) ≤
+      Fintype.card incidenceSlots :=
+    Fintype.card_le_of_injective toIncidenceSlots htoIncidenceSlots
+  rw [Nat.card_eq_fintype_card]
+  exact hcard.trans (by simpa only [Nat.card_eq_fintype_card, incidenceSlots,
+    leftSlots, rightSlots, leftPairing, rightPairing] using hbound)
+
+/-- In the explicit pair-fold quotient, count relator-side occurrences and
+surviving target-boundary occurrences as separate incidences of an
+unoriented edge. Each edge class has at most two such incidences, even when
+the same source position contributes once to each family. -/
+theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_edgeClass_le_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side₀ : seed.RelatorSideOccurrence) :
+    Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          (Quotient.mk
+            (UnorientedDartSetoid
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+              (seed.relatorSideOccurrencePosition side, false)) :
+            UnorientedDartClass
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+          Quotient.mk
+            (UnorientedDartSetoid
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+              (seed.relatorSideOccurrencePosition side₀, false))} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          (Quotient.mk
+            (UnorientedDartSetoid
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart (i, false)) :
+            UnorientedDartClass
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+          Quotient.mk
+            (UnorientedDartSetoid
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+              (seed.relatorSideOccurrencePosition side₀, false))}) ≤ 2 := by
+  classical
+  let graph := twoPairingGraph seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing
+  let C := graph.connectedComponentMk
+    (seed.relatorSideOccurrencePosition side₀)
+  let edgeClass := fun i : Fin seed.boundary.reducedLiteralBoundary.length =>
+    (Quotient.mk
+      (UnorientedDartSetoid
+        seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (i, false)) :
+      UnorientedDartClass seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+  let sourceSides := {side : seed.RelatorSideOccurrence //
+    edgeClass (seed.relatorSideOccurrencePosition side) =
+      edgeClass (seed.relatorSideOccurrencePosition side₀)}
+  let targetSides := {side : seed.RelatorSideOccurrence //
+    seed.relatorSideOccurrencePosition side ∈ C.supp}
+  let sourceBoundary := {i : Fin seed.boundary.reducedLiteralBoundary.length //
+    i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+    edgeClass i = edgeClass (seed.relatorSideOccurrencePosition side₀)}
+  let targetBoundary := {i : Fin seed.boundary.reducedLiteralBoundary.length //
+    i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+    i ∈ C.supp}
+  have hproperty (i : Fin seed.boundary.reducedLiteralBoundary.length) :
+      edgeClass i = edgeClass (seed.relatorSideOccurrencePosition side₀) ↔
+        i ∈ C.supp := by
+    rw [SimpleGraph.ConnectedComponent.mem_supp_iff]
+    change edgeClass i = edgeClass (seed.relatorSideOccurrencePosition side₀) ↔
+      graph.connectedComponentMk i =
+        graph.connectedComponentMk (seed.relatorSideOccurrencePosition side₀)
+    exact seed.unorientedEdgeClass_eq_iff_componentEq i
+      (seed.relatorSideOccurrencePosition side₀)
+  let sideEquiv : sourceSides ≃ targetSides :=
+    { toFun := fun side => ⟨side.1,
+        (hproperty (seed.relatorSideOccurrencePosition side.1)).mp side.2⟩
+      invFun := fun side => ⟨side.1,
+        (hproperty (seed.relatorSideOccurrencePosition side.1)).mpr side.2⟩
+      left_inv := by intro side; apply Subtype.ext; rfl
+      right_inv := by intro side; apply Subtype.ext; rfl }
+  let boundaryEquiv : sourceBoundary ≃ targetBoundary :=
+    { toFun := fun boundary => ⟨boundary.1, boundary.2.1,
+        (hproperty boundary.1).mp boundary.2.2⟩
+      invFun := fun boundary => ⟨boundary.1, boundary.2.1,
+        (hproperty boundary.1).mpr boundary.2.2⟩
+      left_inv := by intro boundary; apply Subtype.ext; rfl
+      right_inv := by intro boundary; apply Subtype.ext; rfl }
+  let incidenceEquiv : sourceSides ⊕ sourceBoundary ≃
+      targetSides ⊕ targetBoundary := Equiv.sumCongr sideEquiv boundaryEquiv
+  calc
+    Nat.card (sourceSides ⊕ sourceBoundary) =
+        Nat.card (targetSides ⊕ targetBoundary) := Nat.card_congr incidenceEquiv
+    _ ≤ 2 := by
+      simpa [sourceSides, targetSides, sourceBoundary, targetBoundary] using
+        seed.card_boundaryIncidences_in_component_le_two C
+
+/-- An edge class containing a surviving target-boundary occurrence has at
+most one relator-side occurrence. This is the boundary-edge half of the
+face/boundary incidence count in the pair-fold quotient. -/
+theorem MinimalAreaRelatorBoundarySeed.card_relatorSideOccurrences_in_boundaryEdge_le_one
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side₀ : seed.RelatorSideOccurrence)
+    (i : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hi : i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst)
+    (hclass :
+      (Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (i, false)) :
+        UnorientedDartClass
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+      Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (seed.relatorSideOccurrencePosition side₀, false))) :
+    Nat.card {side : seed.RelatorSideOccurrence //
+      (Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (seed.relatorSideOccurrencePosition side, false)) :
+        UnorientedDartClass
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+      Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (seed.relatorSideOccurrencePosition side₀, false))} ≤ 1 := by
+  classical
+  let edgeClass := fun j : Fin seed.boundary.reducedLiteralBoundary.length =>
+    (Quotient.mk
+      (UnorientedDartSetoid
+        seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (j, false)) :
+      UnorientedDartClass seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+  let sideIncidences := {side : seed.RelatorSideOccurrence //
+    edgeClass (seed.relatorSideOccurrencePosition side) =
+      edgeClass (seed.relatorSideOccurrencePosition side₀)}
+  let boundaryIncidences := {j : Fin seed.boundary.reducedLiteralBoundary.length //
+    j.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+    edgeClass j = edgeClass (seed.relatorSideOccurrencePosition side₀)}
+  have hbound := seed.card_boundaryIncidences_in_edgeClass_le_two side₀
+  have hsum : Fintype.card (sideIncidences ⊕ boundaryIncidences) ≤ 2 := by
+    simpa only [Nat.card_eq_fintype_card, edgeClass, sideIncidences,
+      boundaryIncidences] using hbound
+  have hboundary : 0 < Fintype.card boundaryIncidences :=
+    Fintype.card_pos_iff.mpr ⟨⟨i, hi, hclass⟩⟩
+  rw [Fintype.card_sum] at hsum
+  have hside : Fintype.card sideIncidences ≤ 1 := by omega
+  rw [Nat.card_eq_fintype_card]
+  exact hside
+
 /-- In the explicit quotient, an unoriented edge class contains at most two
 relator-side occurrences across the whole minimum-area seed. -/
 theorem MinimalAreaRelatorBoundarySeed.card_relatorSideOccurrences_in_edgeClass_le_two
