@@ -1,5 +1,6 @@
 import SmallCancellation.Curvature
 import SmallCancellation.CyclicDehn
+import SmallCancellation.VertexLinks
 
 namespace GreendlingerDehn
 
@@ -151,6 +152,37 @@ theorem positive_curvature_forces_small_shell_of_pieceData
   refine ⟨f, ?_⟩
   simpa [adjustedFaces] using hsmall
 
+/-- The same piece-data argument works for a planar map with cut vertices and
+semi-exterior vertices when its vertex-link accounting supplies total
+curvature at least 2. -/
+theorem positive_curvature_forces_small_shell_of_linkAccounting
+    {α : Type u} [Fintype α] [DecidableEq α]
+    {F : Type*} [Fintype F]
+    (P : SymmetrizedPresentation α)
+    (hc : CPrimeSix P.relators)
+    (faces : F → CurvatureFace)
+    (accounting : LinkCurvatureAccounting faces)
+    (internalData : ∀ f, (faces f).kind = .internal →
+      InternalFacePieceData P (faces f)) :
+    ∃ f : F, (faces f).IsSmallShell := by
+  let adjustedFaces : F → CurvatureFace := fun f =>
+    { faces f with
+      internal_sides := fun hkind => (internalData f hkind).seven_sides hc }
+  have adjustedAccounting : LinkCurvatureAccounting adjustedFaces := by
+    refine ⟨accounting.vertices, accounting.edges, accounting.linkEuler,
+      accounting.euler, ?_, ?_⟩
+    · simpa [adjustedFaces] using accounting.angle_count_lower
+    · simpa [adjustedFaces] using accounting.side_count
+  have htotal : (2 : ℚ) ≤
+      ∑ f : F, (adjustedFaces f).curvature :=
+    adjustedAccounting.total_curvature_ge_two
+  have hsmall := positive_curvature_forces_small_shell_of_ge_two
+    adjustedFaces htotal (fun f =>
+      (adjustedFaces f).curvature_nonpos_of_not_smallShell)
+  rcases hsmall with ⟨f, hsmall⟩
+  refine ⟨f, ?_⟩
+  simpa [adjustedFaces] using hsmall
+
 /-- If the internal arcs of a shell are pieces and each occurs as a prefix of
 a relator of the shell's perimeter, C'(1/6) and the three-arc bound force the
 exterior arc to exceed half the relator boundary. -/
@@ -296,17 +328,37 @@ theorem positive_curvature_forces_cyclicRedex_of_curvature_and_shell_data
     P hc faces accounting internalData
   exact (shellData f hsmall).cyclic_redex hc hsmall
 
-/-- The finite geometric data consumed by the local curvature argument.
-This profile is not yet constructed from an actual van Kampen diagram. -/
+/-- The local shell argument also consumes vertex-link accounting, which
+allows disconnected links at cut and semi-exterior vertices. -/
+theorem positive_curvature_forces_cyclicRedex_of_link_curvature_and_shell_data
+    {α : Type u} [Fintype α] [DecidableEq α]
+    {F : Type*} [Fintype F]
+    (P : SymmetrizedPresentation α)
+    (hc : CPrimeSix P.relators)
+    (w : FreeGroup α)
+    (faces : F → CurvatureFace)
+    (accounting : LinkCurvatureAccounting faces)
+    (internalData : ∀ f, (faces f).kind = .internal →
+      InternalFacePieceData P (faces f))
+    (shellData : ∀ f, (faces f).IsSmallShell →
+      ShellRedexData P w (faces f)) :
+    ∃ c, IsCyclicRedex P.relators w c := by
+  obtain ⟨f, hsmall⟩ := positive_curvature_forces_small_shell_of_linkAccounting
+    P hc faces accounting internalData
+  exact (shellData f hsmall).cyclic_redex hc hsmall
+
+/-- The finite link-incidence and face-boundary data consumed by the local
+curvature argument. The map is not yet constructed from a nullity certificate. -/
 structure CurvatureShellProfile {α : Type u} [Fintype α] [DecidableEq α]
     (P : SymmetrizedPresentation α) (w : FreeGroup α) where
   faceCount : Nat
-  faces : Fin faceCount → CurvatureFace
-  accounting : DiskCurvatureAccounting faces
-  internalData : ∀ f, (faces f).kind = .internal →
-    InternalFacePieceData P (faces f)
-  shellData : ∀ f, (faces f).IsSmallShell →
-    ShellRedexData P w (faces f)
+  vertexCount : Nat
+  edgeCount : Nat
+  incidence : LinkCornerMapData (Fin vertexCount) (Fin edgeCount) (Fin faceCount)
+  internalData : ∀ f, (incidence.faces f).kind = .internal →
+    InternalFacePieceData P (incidence.faces f)
+  shellData : ∀ f, (incidence.faces f).IsSmallShell →
+    ShellRedexData P w (incidence.faces f)
 
 /-- Every cyclically reduced nontrivial null word has a finite curvature/shell
 profile. This is the boundary form naturally supplied by a reduced disk
@@ -333,8 +385,9 @@ theorem cyclicGreendlinger_of_curvatureShellProfileProperty
     CyclicallyReducedGreendlingerProperty P.relators := by
   intro w hcyclic hnull hne
   obtain ⟨profile⟩ := hprofile w hcyclic hnull hne
-  exact positive_curvature_forces_cyclicRedex_of_curvature_and_shell_data
-    P hc w profile.faces profile.accounting profile.internalData profile.shellData
+  exact positive_curvature_forces_cyclicRedex_of_link_curvature_and_shell_data
+    P hc w profile.incidence.faces profile.incidence.toLinkCurvatureAccounting
+    profile.internalData profile.shellData
 
 /-- Profiles for cyclically reduced words suffice for all inputs because a
 cyclic redex transfers across the stem removed by free cyclic reduction. -/

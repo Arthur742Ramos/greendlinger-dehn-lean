@@ -174,6 +174,55 @@ theorem DiskCurvatureAccounting.total_curvature_eq_two
   rw [hangle, hside, hconst]
   nlinarith [heuler]
 
+/-- Curvature accounting for a planar cell map with cut vertices and
+semi-exterior vertices. `linkEuler` is the sum of the Euler characteristics
+of the finite vertex links. For links that are disjoint unions of paths and
+cycles it is nonnegative; a disconnected link contributes at least 2. The
+two incidence equations below are the link-count identities
+`Σ χ(link(v)) = 2E - Σ sides`. The angle inequality allows a semi-exterior
+vertex to contribute angle sum 0, which is at least `2 - χ(link(v))`. -/
+structure LinkCurvatureAccounting {F : Type*} [Fintype F]
+    (faces : F → CurvatureFace) where
+  vertices : Nat
+  edges : Nat
+  linkEuler : Nat
+  euler : vertices + Fintype.card F = edges + 1
+  angle_count_lower :
+    (2 : ℚ) * vertices ≤ (∑ f : F, (faces f).angleSum) + linkEuler
+  side_count :
+    (∑ f : F, ((faces f).sides : ℚ)) + linkEuler = (2 : ℚ) * edges
+
+/-- Ordinary disk accounting is the special case where every vertex link is
+one circle or one interval, so the total link Euler characteristic is the
+boundary vertex count. -/
+def DiskCurvatureAccounting.toLinkCurvatureAccounting
+    {F : Type*} [Fintype F] {faces : F → CurvatureFace}
+    (a : DiskCurvatureAccounting faces) : LinkCurvatureAccounting faces where
+  vertices := a.vertices
+  edges := a.edges
+  linkEuler := a.boundary
+  euler := a.euler
+  angle_count_lower := by linarith [a.angle_count]
+  side_count := a.side_count
+
+/-- The generalized link accounting gives total face curvature at least 2;
+semi-exterior vertices can only increase this lower bound. -/
+theorem LinkCurvatureAccounting.total_curvature_ge_two
+    {F : Type*} [Fintype F] {faces : F → CurvatureFace}
+    (a : LinkCurvatureAccounting faces) :
+    (2 : ℚ) ≤ ∑ f : F, (faces f).curvature := by
+  classical
+  simp only [CurvatureFace.curvature, Finset.sum_sub_distrib]
+  have heuler : (a.vertices : ℚ) + (Fintype.card F : ℚ) =
+      (a.edges : ℚ) + 1 := by exact_mod_cast a.euler
+  have hangle : (2 : ℚ) * a.vertices ≤
+      (∑ f : F, (faces f).angleSum) + a.linkEuler := a.angle_count_lower
+  have hside : (∑ f : F, ((faces f).sides : ℚ)) + a.linkEuler =
+      (2 : ℚ) * a.edges := a.side_count
+  have hconst : (∑ _f : F, (2 : ℚ)) = (Fintype.card F : ℚ) * 2 := by simp
+  rw [hconst]
+  linarith [hangle, hside, heuler]
+
 /-- A shell with at most three internal arcs is the desired Greendlinger face. -/
 def CurvatureFace.IsSmallShell (f : CurvatureFace) : Prop :=
   ∃ i, f.kind = .shell i ∧ i ≤ 3
@@ -269,6 +318,27 @@ theorem positive_curvature_forces_small_shell {F : Type*} [Fintype F]
   apply positive_curvature_forces_small_shell_of_nonpos faces htotal
   intro f hsmall
   exact (faces f).curvature_nonpos_of_not_smallShell hsmall
+
+/-- Any total curvature at least 2 forces a small shell when every other face
+has nonpositive curvature. -/
+theorem positive_curvature_forces_small_shell_of_ge_two
+    {F : Type*} [Fintype F] (faces : F → CurvatureFace)
+    (htotal : (2 : ℚ) ≤ ∑ f : F, (faces f).curvature)
+    (hface_nonpos : ∀ f, ¬ (faces f).IsSmallShell →
+      (faces f).curvature ≤ 0) :
+    ∃ f : F, (faces f).IsSmallShell := by
+  by_contra hnone
+  have hnonpos_all : ∀ f : F, (faces f).curvature ≤ 0 := by
+    intro f
+    apply hface_nonpos
+    intro hsmall
+    exact hnone ⟨f, hsmall⟩
+  have hsum : (∑ f : F, (faces f).curvature) ≤ 0 := by
+    calc
+      (∑ f : F, (faces f).curvature) ≤ ∑ _f : F, (0 : ℚ) :=
+        Finset.sum_le_sum (fun f _ => hnonpos_all f)
+      _ = 0 := by simp
+  linarith
 
 /-- Combining the finite Gauss--Bonnet accounting with the local angle bounds
 forces a face with at most three internal arcs. -/
