@@ -1,4 +1,5 @@
 import Mathlib.GroupTheory.FreeGroup.Reduce
+import Mathlib.GroupTheory.FreeGroup.CyclicallyReduced
 import Mathlib.GroupTheory.PresentedGroup
 
 namespace GreendlingerDehn
@@ -81,6 +82,43 @@ structure SymmetrizedPresentation (α : Type*) [Fintype α] [DecidableEq α] whe
   inverseClosed : ∀ r ∈ relators, r⁻¹ ∈ relators
   rotationClosed : ∀ r ∈ relators, ∀ first rest,
     r.toWord = first :: rest → FreeGroup.mk (rest ++ [first]) ∈ relators
+
+/-- The explicit relator condition implies Mathlib's standard predicate for
+cyclically reduced words. -/
+theorem SymmetrizedPresentation.relator_isCyclicallyReduced
+    {α : Type*} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α) {r : FreeGroup α}
+    (hr : r ∈ P.relators) :
+    FreeGroup.IsCyclicallyReduced r.toWord := by
+  rw [FreeGroup.isCyclicallyReduced_iff]
+  refine ⟨FreeGroup.isReduced_toWord, ?_⟩
+  intro last hlast first hfirst hsame
+  have hword : r.toWord = first :: r.toWord.tail :=
+    List.eq_cons_of_mem_head? hfirst
+  have hcyclic := P.cyclicallyReduced r hr first r.toWord.tail hword
+  cases htail : r.toWord.tail with
+  | nil =>
+      rw [hword, htail] at hlast
+      have hlastEq : first = last := by
+        simpa only [List.getLast?_singleton, Option.mem_def,
+          Option.some.injEq] using hlast
+      rw [← hlastEq]
+  | cons second rest =>
+      rw [hword, htail, List.getLast?_cons_cons] at hlast
+      have hlastTail : last ∈ (second :: rest).getLast? := by
+        exact hlast
+      rw [htail] at hcyclic
+      by_cases hsign : last.2 = first.2
+      · exact hsign
+      · have hflip : last.2 = !first.2 := by
+          cases hfirstBit : first.2 <;> cases hlastBit : last.2 <;>
+            simp [hfirstBit, hlastBit] at hsign ⊢
+        have hletters : last = (first.1, !first.2) := Prod.ext hsame hflip
+        have hmemInverse : (first.1, !first.2) ∈ (second :: rest).getLast? := by
+          exact hletters ▸ hlastTail
+        have hlastInverse : (second :: rest).getLast? = some (first.1, !first.2) := by
+          exact Option.mem_def.mp hmemInverse
+        exact (hcyclic hlastInverse).elim
 
 /-- Moving the first letter of a cyclically reduced word to the end preserves
 free reduction. The only new adjacent pair is controlled by the cyclic

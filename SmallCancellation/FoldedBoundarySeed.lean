@@ -10,6 +10,7 @@ structure RelatorBoundaryLoop {α : Type*} [Fintype α] [DecidableEq α]
     (P : SymmetrizedPresentation α) (G : LabelledDartGraph α) where
   relator : FreeGroup α
   relator_mem : relator ∈ P.relators
+  relator_cyclicallyReduced : FreeGroup.IsCyclicallyReduced relator.toWord
   base : G.toDartGraph.Vertex
   walk : LabelledWalk G base base relator.toWord
 
@@ -112,6 +113,7 @@ noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonRelatorLoopAt
   let balloon := seed.boundary.reducedBalloons.get i
   let loop := seed.balloonRelatorLoopAt i
   refine ⟨balloon.label.relator, balloon.label.relator_mem,
+    P.relator_isCyclicallyReduced balloon.label.relator_mem,
     hom.mapVertex loop.1, ?_⟩
   simpa [balloon] using loop.2.map hom
 
