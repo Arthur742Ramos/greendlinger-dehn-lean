@@ -1,5 +1,6 @@
 import SmallCancellation.PlanarBoundarySeed
 import SmallCancellation.LollipopFolds
+import SmallCancellation.StemPairEndpoints
 import SmallCancellation.FiniteSupport
 
 namespace GreendlingerDehn
@@ -314,6 +315,71 @@ theorem MinimalAreaRelatorBoundarySeed.finiteBalloonFaceSideDart_label
     ((seed.finiteBalloonOccurrenceHom hne i).mapDart (j, false)) = _
   simpa [wordPathGraph] using
     (seed.finiteBalloonOccurrenceHom hne i).map_label (j, false)
+
+/-- The indexed relator sides inside a balloon, transported to the finite
+folded graph. The index is in the defining relator rather than the longer
+lollipop boundary. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonRelatorSideDart
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length)) :
+    seed.finiteFoldedBoundaryGraph.toDartGraph.Dart :=
+  (seed.finiteBalloonOccurrenceHom hne i).mapDart
+    ((seed.boundary.reducedBalloons.get i).relatorSideDart j)
+
+/-- Every transported relator side has exactly its source relator label. -/
+@[simp] theorem MinimalAreaRelatorBoundarySeed.finiteBalloonRelatorSideDart_label
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length)) :
+    seed.finiteFoldedBoundaryGraph.label
+      (seed.finiteBalloonRelatorSideDart hne i j) =
+        (seed.boundary.reducedBalloons.get i).label.relator.toWord[j] := by
+  change seed.finiteFoldedBoundaryGraph.label
+      ((seed.finiteBalloonOccurrenceHom hne i).mapDart
+        ((seed.boundary.reducedBalloons.get i).relatorSideDart j)) = _
+  rw [(seed.finiteBalloonOccurrenceHom hne i).map_label]
+  exact (seed.boundary.reducedBalloons.get i).relatorSideDart_label j
+
+/-- Relator-side endpoints map from the exact position in the lollipop
+occurrence path. -/
+theorem MinimalAreaRelatorBoundarySeed.finiteBalloonRelatorSideDart_source
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length)) :
+    seed.finiteFoldedBoundaryGraph.toDartGraph.source
+      (seed.finiteBalloonRelatorSideDart hne i j) =
+      (seed.finiteBalloonOccurrenceHom hne i).mapVertex
+        ((seed.boundary.reducedBalloons.get i).label.conjugator.toWord.length +
+          j.val) := by
+  change seed.finiteFoldedBoundaryGraph.toDartGraph.source
+      ((seed.finiteBalloonOccurrenceHom hne i).mapDart
+        ((seed.boundary.reducedBalloons.get i).relatorSideDart j)) = _
+  rw [(seed.finiteBalloonOccurrenceHom hne i).map_source]
+  simp [wordPathGraph, ReducedRelatorBalloonData.relatorSideDart_index]
+
+theorem MinimalAreaRelatorBoundarySeed.finiteBalloonRelatorSideDart_target
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length)) :
+    seed.finiteFoldedBoundaryGraph.toDartGraph.target
+      (seed.finiteBalloonRelatorSideDart hne i j) =
+      (seed.finiteBalloonOccurrenceHom hne i).mapVertex
+        ((seed.boundary.reducedBalloons.get i).label.conjugator.toWord.length +
+          j.val + 1) := by
+  change seed.finiteFoldedBoundaryGraph.toDartGraph.target
+      ((seed.finiteBalloonOccurrenceHom hne i).mapDart
+        ((seed.boundary.reducedBalloons.get i).relatorSideDart j)) = _
+  rw [(seed.finiteBalloonOccurrenceHom hne i).map_target]
+  simp [wordPathGraph, ReducedRelatorBalloonData.relatorSideDart_index]
 
 /-- The source of each face-side dart is the corresponding occurrence-path
 vertex under the indexed face map. -/

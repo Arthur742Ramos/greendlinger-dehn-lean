@@ -200,6 +200,51 @@ theorem lollipopStemPairs_endpoint_mem_stem_region {α : Type*}
         rw [hval]
         exact Nat.le_add_right _ _
 
+/-- Every position in the outward or return conjugator segment occurs as an
+endpoint of one of the lollipop's stem pairs. -/
+theorem lollipopStemPosition_mem_endpoint_of_region {α : Type*}
+    (stem relator : Word α)
+    (i : Fin (lollipopBoundaryWord stem relator).length)
+    (hregion : i.val < stem.length ∨
+      stem.length + relator.length ≤ i.val) :
+    (i, false) ∈ labelledDartPairEndpoints (lollipopStemPairs stem relator) := by
+  classical
+  unfold labelledDartPairEndpoints lollipopStemPairs
+  simp only [List.flatMap_map]
+  rcases hregion with hfirst | hreturn
+  · let k : Fin stem.length := ⟨i.val, hfirst⟩
+    have hpos : (lollipopStemPair stem relator k).first = (i, false) := by
+      apply Prod.ext
+      · apply Fin.ext
+        simp [lollipopStemPair, lollipopStemFirstIndex, k]
+      · rfl
+    apply List.mem_flatMap.mpr
+    refine ⟨k, by simp, ?_⟩
+    change (i, false) ∈
+      [(lollipopStemPair stem relator k).first,
+        (lollipopStemPair stem relator k).second]
+    rw [← hpos]
+    exact List.mem_cons_self
+  · have hupper : i.val < 2 * stem.length + relator.length := by
+      have hi := i.isLt
+      simp [lollipopBoundaryWord, FreeGroup.invRev_length] at hi
+      omega
+    let k : Fin stem.length :=
+      ⟨stem.length - 1 - (i.val - (stem.length + relator.length)), by omega⟩
+    have hpos : (lollipopStemPair stem relator k).second = (i, false) := by
+      apply Prod.ext
+      · apply Fin.ext
+        simp [lollipopStemPair, lollipopStemMateIndex, k]
+        omega
+      · rfl
+    apply List.mem_flatMap.mpr
+    refine ⟨k, by simp, ?_⟩
+    change (i, false) ∈
+      [(lollipopStemPair stem relator k).first,
+        (lollipopStemPair stem relator k).second]
+    rw [← hpos]
+    exact List.mem_cons_of_mem _ (List.mem_singleton_self _)
+
 /-- Casting a balloon's lollipop boundary to its stored raw-word presentation
 preserves distinct stem occurrences. -/
 theorem ReducedRelatorBalloonData.stemPairs_endpointList_nodup
@@ -292,8 +337,79 @@ theorem ReducedRelatorBalloonData.stemPairs_endpoint_mem_stem_region
         rw [hval]
         exact hregion
 
+/-- Every stored raw-word position outside the relator interval is represented
+by the balloon's stem pairing. -/
+theorem ReducedRelatorBalloonData.stemPosition_mem_endpoint_of_region
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (p : Fin b.label.rawWord.length)
+    (hregion : p.val < b.label.conjugator.toWord.length ∨
+      b.label.conjugator.toWord.length + b.label.relator.toWord.length ≤ p.val) :
+    (p, false) ∈ labelledDartPairEndpoints b.stemPairs := by
+  let sourceWord := lollipopBoundaryWord b.label.conjugator.toWord
+    b.label.relator.toWord
+  let hraw := b.label.lollipopBoundary_eq_rawWord
+  let pLocal : Fin sourceWord.length :=
+    ⟨p.val, by simpa [sourceWord, hraw] using p.isLt⟩
+  have hregionLocal : pLocal.val < b.label.conjugator.toWord.length ∨
+      b.label.conjugator.toWord.length + b.label.relator.toWord.length ≤ pLocal.val :=
+    hregion
+  have hmemLocal := lollipopStemPosition_mem_endpoint_of_region
+    b.label.conjugator.toWord b.label.relator.toWord pLocal hregionLocal
+  have hmemLocal' :
+      (pLocal, false) ∈ labelledDartPairEndpoints
+        (lollipopStemPairs b.label.conjugator.toWord b.label.relator.toWord) := by
+    simpa [sourceWord] using hmemLocal
+  unfold labelledDartPairEndpoints at hmemLocal'
+  obtain ⟨localPair, hlocalPair, hlocalEndpoint⟩ :=
+    List.mem_flatMap.mp hmemLocal'
+  have hendpoint :
+      (pLocal, false) = localPair.first ∨
+        (pLocal, false) = localPair.second := by
+    rcases List.mem_cons.mp hlocalEndpoint with hfirst | htail
+    · exact Or.inl hfirst
+    · exact Or.inr (List.mem_singleton.mp htail)
+  let rawPair := LabelledDartPair.castWordPath hraw localPair
+  have hrawPair : rawPair ∈ b.stemPairs := by
+    change rawPair ∈ (lollipopStemPairs b.label.conjugator.toWord
+      b.label.relator.toWord).map (LabelledDartPair.castWordPath hraw)
+    exact List.mem_map.mpr ⟨localPair, hlocalPair, rfl⟩
+  have hcastPos :
+      Fin.cast (congrArg List.length hraw) pLocal = p := by
+    apply Fin.ext
+    rfl
+  let castDart := fun d : Fin sourceWord.length × Bool =>
+    (Fin.cast (congrArg List.length hraw) d.1, d.2)
+  have hcastDartPos : castDart (pLocal, false) = (p, false) := by
+    apply Prod.ext
+    · exact hcastPos
+    · rfl
+  unfold labelledDartPairEndpoints
+  apply List.mem_flatMap.mpr
+  refine ⟨rawPair, hrawPair, ?_⟩
+  change (p, false) ∈ [rawPair.first, rawPair.second]
+  rcases hendpoint with hfirst | hsecond
+  · have hrawFirst : (p, false) = rawPair.first := by
+      have hcast := Eq.trans hcastDartPos.symm (congrArg castDart hfirst)
+      simpa [castDart, rawPair, LabelledDartPair.castWordPath] using hcast
+    rw [hrawFirst]
+    change rawPair.first ∈ rawPair.first :: [rawPair.second]
+    simp
+  · have hrawSecond : (p, false) = rawPair.second := by
+      have hcast := Eq.trans hcastDartPos.symm (congrArg castDart hsecond)
+      simpa [castDart, rawPair, LabelledDartPair.castWordPath] using hcast
+    rw [hrawSecond]
+    change rawPair.second ∈ rawPair.first :: [rawPair.second]
+    simp
+
 /-- The forward dart for one side of a balloon's relator boundary, transported
 to the stored raw-word path. -/
+private theorem list_get_cast_eq {α : Type*} {u v : List α} (h : u = v)
+    (i : Fin u.length) :
+    v[Fin.cast (congrArg List.length h) i] = u[i] := by
+  cases h
+  rfl
+
 def ReducedRelatorBalloonData.relatorSideDart
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
@@ -306,6 +422,41 @@ def ReducedRelatorBalloonData.relatorSideDart
       omega⟩
   exact (Fin.cast (congrArg List.length b.label.lollipopBoundary_eq_rawWord
     ) localIndex, false)
+
+@[simp] theorem ReducedRelatorBalloonData.relatorSideDart_index
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (j : Fin b.label.relator.toWord.length) :
+    (b.relatorSideDart j).1.val =
+      b.label.conjugator.toWord.length + j.val := by
+  simp [ReducedRelatorBalloonData.relatorSideDart]
+
+@[simp] theorem ReducedRelatorBalloonData.relatorSideDart_direction
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (j : Fin b.label.relator.toWord.length) :
+    (b.relatorSideDart j).2 = false := rfl
+
+/-- The transported face-side occurrence retains the corresponding literal
+relator letter. -/
+@[simp] theorem ReducedRelatorBalloonData.relatorSideDart_label
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (j : Fin b.label.relator.toWord.length) :
+  (wordPathGraph b.label.rawWord).label (b.relatorSideDart j) =
+      b.label.relator.toWord[j] := by
+  unfold ReducedRelatorBalloonData.relatorSideDart
+  simp only [wordPathGraph, Bool.false_eq_true, ↓reduceIte]
+  let localIndex : Fin (lollipopBoundaryWord b.label.conjugator.toWord
+      b.label.relator.toWord).length :=
+    ⟨b.label.conjugator.toWord.length + j.val, by
+      simp [lollipopBoundaryWord, FreeGroup.invRev_length]
+      omega⟩
+  change b.label.rawWord[
+      Fin.cast (congrArg List.length b.label.lollipopBoundary_eq_rawWord)
+        localIndex] = b.label.relator.toWord[j]
+  rw [list_get_cast_eq b.label.lollipopBoundary_eq_rawWord localIndex]
+  simp [localIndex, lollipopBoundaryWord]
 
 /-- Relator-side occurrences are disjoint from the local balloon stem
 matching. -/
@@ -407,6 +558,85 @@ theorem reducedBalloonOccurrencePathEmbedding_direction {α : Type*}
                 (reducedBalloonOccurrencePathEmbedding tail i)).mapDart d).2 =
                 ((reducedBalloonOccurrencePathEmbedding tail i).mapDart d).2 := rfl
             _ = d.2 := by simpa only [List.get_cons_succ'] using hinner
+
+/-- Every edge position in the flattened balloon boundary belongs to one
+indexed balloon occurrence. This is the position-surjectivity companion to
+the occurrence embeddings' injectivity. -/
+theorem reducedBalloonOccurrencePathEmbedding_position_surjective
+    {α : Type*} [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α} :
+    ∀ (balloons : List (ReducedRelatorBalloonData P))
+      (p : Fin ((balloons.map fun b => b.label.rawWord).flatten).length),
+      ∃ i : Fin balloons.length,
+        ∃ j : Fin (balloons.get i).label.rawWord.length,
+          (((reducedBalloonOccurrencePathEmbedding balloons i).mapDart
+            (j, false)).1).val = p.val := by
+  intro balloons
+  induction balloons with
+  | nil =>
+      intro p
+      exact Fin.elim0 p
+  | cons b tail ih =>
+      intro p
+      let tailWord := (tail.map fun x => x.label.rawWord).flatten
+      have hlength :
+          ((b :: tail).map fun x => x.label.rawWord).flatten.length =
+            b.label.rawWord.length + tailWord.length := by
+        simp [tailWord]
+      by_cases hp : p.val < b.label.rawWord.length
+      · let j : Fin b.label.rawWord.length := ⟨p.val, hp⟩
+        refine ⟨0, j, ?_⟩
+        rw [reducedBalloonOccurrencePathEmbedding_zero]
+        simp [j, wordPathPrefixHom]
+      · have htail : p.val - b.label.rawWord.length < tailWord.length := by
+          have hpbound : p.val < b.label.rawWord.length + tailWord.length := by
+            simpa [tailWord] using p.isLt
+          omega
+        let pTail : Fin tailWord.length := ⟨p.val - b.label.rawWord.length, htail⟩
+        obtain ⟨i, j, hpos⟩ := ih pTail
+        refine ⟨i.succ, j, ?_⟩
+        rw [reducedBalloonOccurrencePathEmbedding_succ]
+        change b.label.rawWord.length +
+          ((reducedBalloonOccurrencePathEmbedding tail i).mapDart
+            (j, false)).1.val = p.val
+        dsimp [pTail] at hpos
+        omega
+
+/-- A stem pair belonging to a particular balloon occurrence remains in the
+flattened pairing at that same indexed occurrence. Using the index avoids
+confusing duplicate balloon values. -/
+theorem reducedBalloonOccurrencePathEmbedding_stemPair_mem
+    {α : Type*} [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α} :
+    ∀ (balloons : List (ReducedRelatorBalloonData P))
+      (i : Fin balloons.length)
+      (pair : LabelledDartPair (wordPathGraph (balloons.get i).label.rawWord)),
+      pair ∈ (balloons.get i).stemPairs →
+        LabelledDartPair.map
+          (reducedBalloonOccurrencePathEmbedding balloons i) pair ∈
+          reducedBalloonStemPairs balloons := by
+  intro balloons
+  induction balloons with
+  | nil =>
+      intro i
+      exact Fin.elim0 i
+  | cons b tail ih =>
+      intro i pair hpair
+      cases i using Fin.cases with
+      | zero =>
+          rw [reducedBalloonOccurrencePathEmbedding_zero,
+            reducedBalloonStemPairs_cons]
+          apply List.mem_append.mpr
+          left
+          exact List.mem_map.mpr ⟨pair, hpair, rfl⟩
+      | succ i =>
+          rw [reducedBalloonOccurrencePathEmbedding_succ,
+            reducedBalloonStemPairs_cons]
+          apply List.mem_append.mpr
+          right
+          apply List.mem_map.mpr
+          refine ⟨LabelledDartPair.map
+            (reducedBalloonOccurrencePathEmbedding tail i) pair,
+            ih i pair (by simpa using hpair), ?_⟩
+          simp
 
 /-- Relator-side occurrences from the entire flattened balloon list have
 distinct source positions. This is the global form of the per-balloon
@@ -1331,6 +1561,32 @@ theorem MinimalAreaRelatorBoundarySeed.card_component_unmatched_by_either_le_two
   exact card_component_unpaired_either_le_two
     seed.balloonStemOccurrencePairing seed.boundaryCancellationPairing C
 
+/-- The two colors of unmatched positions in a connected component have total
+cardinality zero or two. The endpoint colors record whether an end is a
+relator side or a surviving target-boundary occurrence. -/
+theorem MinimalAreaRelatorBoundarySeed.card_component_unmatched_slots_eq_zero_or_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent) :
+    Nat.card
+        ({v : C.supp //
+          (componentLeftPairing seed.balloonStemOccurrencePairing
+            seed.boundaryCancellationPairing C).partner v = none} ⊕
+         {v : C.supp //
+          (componentRightPairing seed.balloonStemOccurrencePairing
+            seed.boundaryCancellationPairing C).partner v = none}) = 0 ∨
+    Nat.card
+        ({v : C.supp //
+          (componentLeftPairing seed.balloonStemOccurrencePairing
+            seed.boundaryCancellationPairing C).partner v = none} ⊕
+         {v : C.supp //
+          (componentRightPairing seed.balloonStemOccurrencePairing
+            seed.boundaryCancellationPairing C).partner v = none}) = 2 := by
+  exact card_component_unpaired_slots_eq_zero_or_two
+    seed.balloonStemOccurrencePairing seed.boundaryCancellationPairing C
+
 /-- A relator face contributes at most two side occurrences to any component
 of the alternating stem/cancellation pairing graph. Each side occurrence is
 unmatched by the stem pairing, and the side positions of one balloon are
@@ -1537,6 +1793,117 @@ theorem MinimalAreaRelatorBoundarySeed.relatorSideOccurrencePosition_injective
     Function.Injective seed.relatorSideOccurrencePosition := by
   exact reducedBalloonRelatorSidePosition_injective seed.boundary.reducedBalloons
 
+/-- Every occurrence left unmatched by the balloon-stem pairing is a literal
+side of exactly one indexed relator boundary. -/
+theorem MinimalAreaRelatorBoundarySeed.exists_relatorSide_of_unmatched_by_stem
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (p : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hp : seed.balloonStemOccurrencePairing.partner p = none) :
+    ∃ side : seed.RelatorSideOccurrence,
+      seed.relatorSideOccurrencePosition side = p := by
+  have hnot : p ∉ occurrencePairEndpoints seed.balloonStemOccurrencePairs :=
+    (seed.balloonStemOccurrencePairing_unpaired_iff_not_endpoint p).mp hp
+  obtain ⟨i, j, hposition⟩ :=
+    reducedBalloonOccurrencePathEmbedding_position_surjective
+      seed.boundary.reducedBalloons p
+  let balloon := seed.boundary.reducedBalloons.get i
+  let embedding := reducedBalloonOccurrencePathEmbedding
+    seed.boundary.reducedBalloons i
+  by_cases hstemRegion :
+      j.val < balloon.label.conjugator.toWord.length ∨
+        balloon.label.conjugator.toWord.length +
+          balloon.label.relator.toWord.length ≤ j.val
+  · have hlocal := balloon.stemPosition_mem_endpoint_of_region j hstemRegion
+    unfold labelledDartPairEndpoints at hlocal
+    obtain ⟨localPair, hlocalPair, hlocalEndpoint⟩ :=
+      List.mem_flatMap.mp hlocal
+    have hendpoint :
+        (j, false) = localPair.first ∨ (j, false) = localPair.second := by
+      rcases List.mem_cons.mp hlocalEndpoint with hfirst | htail
+      · exact Or.inl hfirst
+      · exact Or.inr (List.mem_singleton.mp htail)
+    let globalPair := LabelledDartPair.map embedding localPair
+    have hglobalPair : globalPair ∈ seed.balloonStemPairs := by
+      change globalPair ∈ reducedBalloonStemPairs seed.boundary.reducedBalloons
+      exact reducedBalloonOccurrencePathEmbedding_stemPair_mem
+        seed.boundary.reducedBalloons i localPair hlocalPair
+    have hglobalEndpoints :
+        globalPair.first ∈ labelledDartPairEndpoints seed.balloonStemPairs := by
+      unfold labelledDartPairEndpoints
+      apply List.mem_flatMap.mpr
+      refine ⟨globalPair, hglobalPair, ?_⟩
+      change globalPair.first ∈ [globalPair.first, globalPair.second]
+      exact List.mem_cons.mpr (Or.inl rfl)
+    rcases hendpoint with hfirst | hsecond
+    · have hfirstPos : globalPair.first.1 = p := by
+        apply Fin.ext
+        have hmap := congrArg
+          (fun d => (embedding.mapDart d).1.val) hfirst.symm
+        calc
+          globalPair.first.1.val = (embedding.mapDart localPair.first).1.val := rfl
+          _ = (embedding.mapDart (j, false)).1.val := hmap
+          _ = p.val := hposition
+      have hpGlobal :
+          p ∈ (labelledDartPairEndpoints seed.balloonStemPairs).map
+            (fun d => d.1) := by
+        apply List.mem_map.mpr
+        exact ⟨globalPair.first, hglobalEndpoints, hfirstPos⟩
+      have hpContradiction :
+          p ∈ occurrencePairEndpoints seed.balloonStemOccurrencePairs := by
+        rw [seed.balloonStemOccurrencePairs_endpoints_eq]
+        exact hpGlobal
+      exact False.elim (hnot hpContradiction)
+    · have hsecondPos : globalPair.second.1 = p := by
+        apply Fin.ext
+        have hmap := congrArg
+          (fun d => (embedding.mapDart d).1.val) hsecond.symm
+        calc
+          globalPair.second.1.val = (embedding.mapDart localPair.second).1.val := rfl
+          _ = (embedding.mapDart (j, false)).1.val := hmap
+          _ = p.val := hposition
+      have hglobalSecond :
+          globalPair.second ∈ labelledDartPairEndpoints seed.balloonStemPairs := by
+        unfold labelledDartPairEndpoints
+        apply List.mem_flatMap.mpr
+        refine ⟨globalPair, hglobalPair, ?_⟩
+        change globalPair.second ∈ [globalPair.first, globalPair.second]
+        exact List.mem_cons.mpr
+          (Or.inr (List.mem_singleton.mpr rfl))
+      have hpGlobal :
+          p ∈ (labelledDartPairEndpoints seed.balloonStemPairs).map
+            (fun d => d.1) := by
+        apply List.mem_map.mpr
+        exact ⟨globalPair.second, hglobalSecond, hsecondPos⟩
+      have hpContradiction :
+          p ∈ occurrencePairEndpoints seed.balloonStemOccurrencePairs := by
+        rw [seed.balloonStemOccurrencePairs_endpoints_eq]
+        exact hpGlobal
+      exact False.elim (hnot hpContradiction)
+  · have hbefore : balloon.label.conjugator.toWord.length ≤ j.val := by
+      push_neg at hstemRegion
+      omega
+    have hafter : j.val < balloon.label.conjugator.toWord.length +
+        balloon.label.relator.toWord.length := by
+      push_neg at hstemRegion
+      omega
+    let sideIndex : Fin balloon.label.relator.toWord.length :=
+      ⟨j.val - balloon.label.conjugator.toWord.length, by omega⟩
+    have hsideDart : balloon.relatorSideDart sideIndex = (j, false) := by
+      apply Prod.ext
+      · apply Fin.ext
+        simp only [ReducedRelatorBalloonData.relatorSideDart_index]
+        dsimp [sideIndex]
+        omega
+      · simp
+    refine ⟨⟨i, sideIndex⟩, ?_⟩
+    change ((embedding.mapDart
+      (balloon.relatorSideDart sideIndex)).1) = p
+    rw [hsideDart]
+    apply Fin.ext
+    exact hposition
+
 /-- Across all balloons, a final unoriented edge class contains at most two
 relator-side occurrences. Global flattened-position injectivity makes these
 actual side occurrences distinct endpoints of the alternating pairing
@@ -1608,10 +1975,10 @@ theorem MinimalAreaRelatorBoundarySeed.card_relatorSideOccurrences_in_component_
   exact hcardLeft.trans (hcardMono.trans hcomponent')
 
 /-- Counting each relator-side and surviving boundary occurrence separately,
-the total number of incident ends in one alternating component is at most
-two. The sum keeps a relator side that survives on the boundary as two
-incidences at the same source position. -/
-theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_component_le_two
+the total number of incident ends in one alternating component is zero for a
+cycle and exactly two for a path. The sum keeps a relator side that survives
+on the boundary as two incidences at the same source position. -/
+theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_component_eq_zero_or_two
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w)
@@ -1622,7 +1989,13 @@ theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_component_le_t
           seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
        {i : Fin seed.boundary.reducedLiteralBoundary.length //
           i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
-          i ∈ C.supp}) ≤ 2 := by
+          i ∈ C.supp}) = 0 ∨
+    Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 2 := by
   classical
   letI : Fintype C.supp := Fintype.ofFinite _
   letI : DecidableEq C.supp := Classical.decEq _
@@ -1698,24 +2071,76 @@ theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_component_le_t
             apply congrArg Sum.inr
             apply Subtype.ext
             exact congrArg (fun v : rightSlots => v.1.1) (Sum.inr.inj heq)
+  have htoIncidenceSlots_surjective : Function.Surjective toIncidenceSlots := by
+    intro slot
+    cases slot with
+    | inl left =>
+        have hglobalNone :=
+          (componentLeftPairing_partner_none_iff
+            seed.balloonStemOccurrencePairing
+            seed.boundaryCancellationPairing C left.1).mp left.2
+        obtain ⟨side, hside⟩ :=
+          seed.exists_relatorSide_of_unmatched_by_stem left.1.1 hglobalNone
+        have hsideC : seed.relatorSideOccurrencePosition side ∈ C.supp := by
+          rw [hside]
+          exact left.1.2
+        refine ⟨Sum.inl ⟨side, hsideC⟩, ?_⟩
+        simp only [toIncidenceSlots]
+        apply congrArg Sum.inl
+        apply Subtype.ext
+        apply Subtype.ext
+        exact hside
+    | inr right =>
+        have hglobalNone :=
+          (componentRightPairing_partner_none_iff
+            seed.balloonStemOccurrencePairing
+            seed.boundaryCancellationPairing C right.1).mp right.2
+        have hsurvivor :=
+          (IndexedBoundaryTrace.cancellationOccurrencePairing_unpaired_iff_survivor
+            seed.reducedLollipopBoundaryTrace right.1.1).mp hglobalNone
+        let boundary : boundaryIncidences :=
+          ⟨right.1.1, hsurvivor, right.1.2⟩
+        refine ⟨Sum.inr boundary, ?_⟩
+        simp only [toIncidenceSlots]
+        apply congrArg Sum.inr
+        apply Subtype.ext
+        apply Subtype.ext
+        rfl
   have hconn : (twoPairingGraph leftPairing rightPairing).Connected := by
     rw [twoPairingGraph_component_eq_induce
       seed.balloonStemOccurrencePairing seed.boundaryCancellationPairing C]
     exact C.connected_toSimpleGraph
-  have hbound := card_unpaired_pairing_slots_le_two_of_connected
-    leftPairing rightPairing hconn
-  have hcard : Fintype.card (sideIncidences ⊕ boundaryIncidences) ≤
-      Fintype.card incidenceSlots :=
-    Fintype.card_le_of_injective toIncidenceSlots htoIncidenceSlots
-  rw [Nat.card_eq_fintype_card]
-  exact hcard.trans (by simpa only [Nat.card_eq_fintype_card, incidenceSlots,
-    leftSlots, rightSlots, leftPairing, rightPairing] using hbound)
+  let incidenceEquiv : sideIncidences ⊕ boundaryIncidences ≃ incidenceSlots :=
+    Equiv.ofBijective toIncidenceSlots
+      ⟨htoIncidenceSlots, htoIncidenceSlots_surjective⟩
+  have hcard : Nat.card (sideIncidences ⊕ boundaryIncidences) =
+      Nat.card incidenceSlots := Nat.card_congr incidenceEquiv
+  rw [hcard]
+  simpa only [incidenceSlots, leftSlots, rightSlots, leftPairing, rightPairing] using
+    seed.card_component_unmatched_slots_eq_zero_or_two C
 
-/-- In the explicit pair-fold quotient, count relator-side occurrences and
-surviving target-boundary occurrences as separate incidences of an
-unoriented edge. Each edge class has at most two such incidences, even when
-the same source position contributes once to each family. -/
-theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_edgeClass_le_two
+/-- The exact component incidence count implies the corresponding upper
+bound, retained for edge-class corollaries. -/
+theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_component_le_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent) :
+    Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) ≤ 2 := by
+  have h := seed.card_boundaryIncidences_in_component_eq_zero_or_two C
+  rcases h with h | h <;> omega
+
+/-- In the explicit pair-fold quotient, every edge class containing a
+relator-side occurrence has exactly two incidences when relator sides and
+surviving target-boundary occurrences are counted separately. A side that
+survives on the target boundary contributes to both incidence families. -/
+theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_edgeClass_eq_two
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w)
@@ -1746,7 +2171,7 @@ theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_edgeClass_le_t
             (UnorientedDartSetoid
               seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
             (seed.boundaryOccurrenceDartPairFold.hom.mapDart
-              (seed.relatorSideOccurrencePosition side₀, false))}) ≤ 2 := by
+              (seed.relatorSideOccurrencePosition side₀, false))}) = 2 := by
   classical
   let graph := twoPairingGraph seed.balloonStemOccurrencePairing
     seed.boundaryCancellationPairing
@@ -1794,12 +2219,61 @@ theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_edgeClass_le_t
       right_inv := by intro boundary; apply Subtype.ext; rfl }
   let incidenceEquiv : sourceSides ⊕ sourceBoundary ≃
       targetSides ⊕ targetBoundary := Equiv.sumCongr sideEquiv boundaryEquiv
+  have hcomponent := seed.card_boundaryIncidences_in_component_eq_zero_or_two C
+  have hcomponent' :
+      Nat.card (targetSides ⊕ targetBoundary) = 0 ∨
+        Nat.card (targetSides ⊕ targetBoundary) = 2 := by
+    simpa [targetSides, targetBoundary] using hcomponent
+  have hcard : Nat.card (sourceSides ⊕ sourceBoundary) =
+      Nat.card (targetSides ⊕ targetBoundary) := Nat.card_congr incidenceEquiv
+  have hpositive : 0 < Nat.card (sourceSides ⊕ sourceBoundary) := by
+    rw [Nat.card_eq_fintype_card]
+    exact Fintype.card_pos_iff.mpr ⟨Sum.inl ⟨side₀, rfl⟩⟩
   calc
     Nat.card (sourceSides ⊕ sourceBoundary) =
-        Nat.card (targetSides ⊕ targetBoundary) := Nat.card_congr incidenceEquiv
-    _ ≤ 2 := by
-      simpa [sourceSides, targetSides, sourceBoundary, targetBoundary] using
-        seed.card_boundaryIncidences_in_component_le_two C
+        Nat.card (targetSides ⊕ targetBoundary) := hcard
+    _ = 2 := by
+      rcases hcomponent' with hzero | htwo
+      · rw [hcard, hzero] at hpositive
+        omega
+      · exact htwo
+
+/-- The exact edge-class incidence count provides the upper bound used by
+the boundary-edge corollary. -/
+theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_edgeClass_le_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side₀ : seed.RelatorSideOccurrence) :
+    Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          (Quotient.mk
+            (UnorientedDartSetoid
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+              (seed.relatorSideOccurrencePosition side, false)) :
+            UnorientedDartClass
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+          Quotient.mk
+            (UnorientedDartSetoid
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+              (seed.relatorSideOccurrencePosition side₀, false))} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          (Quotient.mk
+            (UnorientedDartSetoid
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart (i, false)) :
+            UnorientedDartClass
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+          Quotient.mk
+            (UnorientedDartSetoid
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+              (seed.relatorSideOccurrencePosition side₀, false))}) ≤ 2 := by
+  have h := seed.card_boundaryIncidences_in_edgeClass_eq_two side₀
+  omega
 
 /-- An edge class containing a surviving target-boundary occurrence has at
 most one relator-side occurrence. This is the boundary-edge half of the

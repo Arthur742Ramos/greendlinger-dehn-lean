@@ -1,5 +1,6 @@
 import Mathlib.Combinatorics.SimpleGraph.Acyclic
 import Mathlib.Combinatorics.SimpleGraph.DegreeSum
+import Mathlib.Combinatorics.SimpleGraph.Matching
 import SmallCancellation.PlanarCancellation
 
 /-!
@@ -190,6 +191,32 @@ def twoPairingGraph {V : Type*} (P Q : PartialOccurrencePairing V) :
       · exact Q.partner_ne hq
   }
 
+/-- The edges supplied by one pairing form a matching subgraph of the union
+graph. -/
+def pairingSubgraph {V : Type*} [DecidableEq V]
+    (P Q : PartialOccurrencePairing V) : (twoPairingGraph P Q).Subgraph where
+  verts := {v | P.partner v ≠ none}
+  Adj v w := P.partner v = some w
+  adj_sub := fun h => Or.inl h
+  edge_vert := by
+    intro v w h
+    change P.partner v ≠ none
+    simp [h]
+  symm := { symm _ _ h := P.partner_symm h }
+
+theorem pairingSubgraph_isMatching {V : Type*} [DecidableEq V]
+    (P Q : PartialOccurrencePairing V) :
+    (pairingSubgraph P Q).IsMatching := by
+  classical
+  intro v hv
+  change P.partner v ≠ none at hv
+  cases h : P.partner v with
+  | none => contradiction
+  | some w =>
+      refine ⟨w, h, ?_⟩
+      intro z hz
+      exact Option.some.inj ((Eq.symm hz).trans h)
+
 instance twoPairingGraphDecidableRel {V : Type*} [DecidableEq V]
     (P Q : PartialOccurrencePairing V) :
     DecidableRel (twoPairingGraph P Q).Adj := by
@@ -324,6 +351,151 @@ theorem card_unpaired_pairing_slots_le_two_of_connected
       Fintype.card_subtype_or_disjoint leftPred rightPred hdisjoint
     rw [Nat.card_eq_fintype_card, Fintype.card_sum, ← hcardEither]
     exact card_unpaired_either_le_two_of_connected P Q hconn
+
+/-- On any finite occurrence set, the total number of unmatched slots in two
+partial pairings is even. Each pairing matches an even number of occurrences,
+so its unmatched count has the parity of the full occurrence set. -/
+theorem card_unpaired_pairing_slots_even
+    {V : Type*} [Fintype V] [DecidableEq V]
+    (P Q : PartialOccurrencePairing V) :
+    Even (Nat.card
+      ({v : V // P.partner v = none} ⊕ {v : V // Q.partner v = none})) := by
+  classical
+  let unmatchedP := {v : V // P.partner v = none}
+  let unmatchedQ := {v : V // Q.partner v = none}
+  let matchedP := {v : V // P.partner v ≠ none}
+  let matchedQ := {v : V // Q.partner v ≠ none}
+  let matchedPCount : Nat := (pairingSubgraph P Q).verts.ncard
+  let matchedQCount : Nat := (pairingSubgraph Q P).verts.ncard
+  have hmatchedP : Even matchedPCount := by
+    dsimp [matchedPCount]
+    rw [Set.ncard_eq_toFinset_card']
+    exact (pairingSubgraph_isMatching P Q).even_card
+  have hmatchedQ : Even matchedQCount := by
+    dsimp [matchedQCount]
+    rw [Set.ncard_eq_toFinset_card']
+    exact (pairingSubgraph_isMatching Q P).even_card
+  have hmatchedPCount : matchedPCount = Fintype.card matchedP := by
+    let e : matchedP ≃ (pairingSubgraph P Q).verts := {
+      toFun := fun v => ⟨v.1, v.2⟩
+      invFun := fun v => ⟨v.1, v.2⟩
+      left_inv := by intro v; apply Subtype.ext; rfl
+      right_inv := by intro v; apply Subtype.ext; rfl
+    }
+    calc
+      matchedPCount = Fintype.card (pairingSubgraph P Q).verts := by
+        dsimp [matchedPCount]
+        exact (Set.fintypeCard_eq_ncard (pairingSubgraph P Q).verts).symm
+      _ = Fintype.card matchedP := (Fintype.card_congr e).symm
+  have hmatchedQCount : matchedQCount = Fintype.card matchedQ := by
+    let e : matchedQ ≃ (pairingSubgraph Q P).verts := {
+      toFun := fun v => ⟨v.1, v.2⟩
+      invFun := fun v => ⟨v.1, v.2⟩
+      left_inv := by intro v; apply Subtype.ext; rfl
+      right_inv := by intro v; apply Subtype.ext; rfl
+    }
+    calc
+      matchedQCount = Fintype.card (pairingSubgraph Q P).verts := by
+        dsimp [matchedQCount]
+        exact (Set.fintypeCard_eq_ncard (pairingSubgraph Q P).verts).symm
+      _ = Fintype.card matchedQ := (Fintype.card_congr e).symm
+  have hpartitionP :
+      Fintype.card unmatchedP + Fintype.card matchedP = Fintype.card V := by
+    let e : V ≃ unmatchedP ⊕ matchedP := {
+      toFun := fun v =>
+        if h : P.partner v = none then Sum.inl ⟨v, h⟩ else Sum.inr ⟨v, h⟩
+      invFun := fun x => Sum.elim Subtype.val Subtype.val x
+      left_inv := by
+        intro v
+        by_cases h : P.partner v = none <;> simp [h]
+      right_inv := by
+        intro x
+        rcases x with x | x
+        · simp [x.2]
+        · simp [x.2]
+    }
+    calc
+      Fintype.card unmatchedP + Fintype.card matchedP =
+          Fintype.card (unmatchedP ⊕ matchedP) := by simp
+      _ = Fintype.card V := (Fintype.card_congr e).symm
+  have hpartitionQ :
+      Fintype.card unmatchedQ + Fintype.card matchedQ = Fintype.card V := by
+    let e : V ≃ unmatchedQ ⊕ matchedQ := {
+      toFun := fun v =>
+        if h : Q.partner v = none then Sum.inl ⟨v, h⟩ else Sum.inr ⟨v, h⟩
+      invFun := fun x => Sum.elim Subtype.val Subtype.val x
+      left_inv := by
+        intro v
+        by_cases h : Q.partner v = none <;> simp [h]
+      right_inv := by
+        intro x
+        rcases x with x | x
+        · simp [x.2]
+        · simp [x.2]
+    }
+    calc
+      Fintype.card unmatchedQ + Fintype.card matchedQ =
+          Fintype.card (unmatchedQ ⊕ matchedQ) := by simp
+      _ = Fintype.card V := (Fintype.card_congr e).symm
+  rcases hmatchedP with ⟨kP, hkP⟩
+  rcases hmatchedQ with ⟨kQ, hkQ⟩
+  have hkP' : matchedPCount = 2 * kP := by
+    simpa [two_mul] using hkP
+  have hkQ' : matchedQCount = 2 * kQ := by
+    simpa [two_mul] using hkQ
+  have hpartitionP' : Fintype.card unmatchedP + 2 * kP = Fintype.card V := by
+    calc
+      Fintype.card unmatchedP + 2 * kP =
+          Fintype.card unmatchedP + Fintype.card matchedP := by
+            rw [← hmatchedPCount, ← hkP']
+      _ = Fintype.card V := hpartitionP
+  have hpartitionQ' : Fintype.card unmatchedQ + 2 * kQ = Fintype.card V := by
+    calc
+      Fintype.card unmatchedQ + 2 * kQ =
+          Fintype.card unmatchedQ + Fintype.card matchedQ := by
+            rw [← hmatchedQCount, ← hkQ']
+      _ = Fintype.card V := hpartitionQ
+  have hslots : Even (Fintype.card unmatchedP + Fintype.card unmatchedQ) := by
+    rcases le_total kP kQ with hPQ | hQP
+    · refine ⟨Fintype.card unmatchedQ + (kQ - kP), ?_⟩
+      have hdiff := Nat.sub_add_cancel hPQ
+      have hcancel : Fintype.card unmatchedP =
+          Fintype.card unmatchedQ + 2 * (kQ - kP) := by
+        omega
+      omega
+    · refine ⟨Fintype.card unmatchedP + (kP - kQ), ?_⟩
+      have hdiff := Nat.sub_add_cancel hQP
+      have hcancel : Fintype.card unmatchedQ =
+          Fintype.card unmatchedP + 2 * (kP - kQ) := by
+        omega
+      omega
+  rw [Nat.card_eq_fintype_card, Fintype.card_sum]
+  simpa [unmatchedP, unmatchedQ, Nat.add_comm] using hslots
+
+/-- A connected component of two partial pairings has either no unmatched
+colored slots (an alternating cycle) or exactly two (an alternating path).
+The upper bound is the degree-two endpoint lemma; parity rules out one. -/
+theorem card_unpaired_pairing_slots_eq_zero_or_two_of_connected
+    {V : Type*} [Fintype V] [DecidableEq V]
+    (P Q : PartialOccurrencePairing V)
+    (hconn : (twoPairingGraph P Q).Connected) :
+    Nat.card
+      ({v : V // P.partner v = none} ⊕ {v : V // Q.partner v = none}) = 0 ∨
+    Nat.card
+      ({v : V // P.partner v = none} ⊕ {v : V // Q.partner v = none}) = 2 := by
+  classical
+  have hbound := card_unpaired_pairing_slots_le_two_of_connected P Q hconn
+  have heven := card_unpaired_pairing_slots_even P Q
+  rw [Nat.card_eq_fintype_card, Fintype.card_sum] at hbound heven
+  rw [Nat.card_eq_fintype_card, Fintype.card_sum]
+  have hnotOne :
+      Fintype.card {v : V // P.partner v = none} +
+        Fintype.card {v : V // Q.partner v = none} ≠ 1 := by
+    intro hone
+    have htemp := heven
+    rw [hone] at htemp
+    norm_num at htemp
+  omega
 
 /-- In a connected component generated by two occurrence pairings, at most
 two occurrences can be unmatched by the first pairing. Each such occurrence
@@ -542,6 +714,96 @@ noncomputable def componentRightPairing {V : Type*} (P Q : PartialOccurrencePair
     PartialOccurrencePairing C.supp :=
   Q.restrictToSet C.supp
 
+/-- On a connected-component support, restricting a pairing preserves exactly
+which vertices have no partner. -/
+theorem componentLeftPairing_partner_none_iff
+    {V : Type*} [DecidableEq V]
+    (P Q : PartialOccurrencePairing V)
+    (C : (twoPairingGraph P Q).ConnectedComponent)
+    (v : C.supp) :
+    (componentLeftPairing P Q C).partner v = none ↔ P.partner v.1 = none := by
+  classical
+  change PartialOccurrencePairing.restrictedPartner P C.supp v = none ↔
+    P.partner v.1 = none
+  constructor
+  · intro hnone
+    cases hpartner : P.partner v.1 with
+    | none => rfl
+    | some w =>
+        have hadj : (twoPairingGraph P Q).Adj v.1 w := Or.inl hpartner
+        have hreach : (twoPairingGraph P Q).Reachable v.1 w :=
+          ⟨SimpleGraph.Walk.cons hadj SimpleGraph.Walk.nil⟩
+        have hcomponentEq :
+            (twoPairingGraph P Q).connectedComponentMk v.1 =
+              (twoPairingGraph P Q).connectedComponentMk w :=
+          SimpleGraph.ConnectedComponent.eq.mpr hreach
+        have hv :
+            (twoPairingGraph P Q).connectedComponentMk v.1 = C :=
+          (SimpleGraph.ConnectedComponent.mem_supp_iff C v.1).mp v.2
+        have hw : w ∈ C.supp :=
+          (SimpleGraph.ConnectedComponent.mem_supp_iff C w).mpr
+            (hcomponentEq.symm.trans hv)
+        have hsome :=
+          (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+            P C.supp v ⟨w, hw⟩).2 hpartner
+        rw [hnone] at hsome
+        cases hsome
+  · intro hnone
+    cases hrestricted :
+        PartialOccurrencePairing.restrictedPartner P C.supp v with
+    | none => rfl
+    | some w =>
+        have hsome :=
+          (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+            P C.supp v w).1 hrestricted
+        rw [hnone] at hsome
+        cases hsome
+
+/-- The corresponding unmatched-vertex characterization for the right
+pairing. -/
+theorem componentRightPairing_partner_none_iff
+    {V : Type*} [DecidableEq V]
+    (P Q : PartialOccurrencePairing V)
+    (C : (twoPairingGraph P Q).ConnectedComponent)
+    (v : C.supp) :
+    (componentRightPairing P Q C).partner v = none ↔ Q.partner v.1 = none := by
+  classical
+  change PartialOccurrencePairing.restrictedPartner Q C.supp v = none ↔
+    Q.partner v.1 = none
+  constructor
+  · intro hnone
+    cases hpartner : Q.partner v.1 with
+    | none => rfl
+    | some w =>
+        have hadj : (twoPairingGraph P Q).Adj v.1 w := Or.inr hpartner
+        have hreach : (twoPairingGraph P Q).Reachable v.1 w :=
+          ⟨SimpleGraph.Walk.cons hadj SimpleGraph.Walk.nil⟩
+        have hcomponentEq :
+            (twoPairingGraph P Q).connectedComponentMk v.1 =
+              (twoPairingGraph P Q).connectedComponentMk w :=
+          SimpleGraph.ConnectedComponent.eq.mpr hreach
+        have hv :
+            (twoPairingGraph P Q).connectedComponentMk v.1 = C :=
+          (SimpleGraph.ConnectedComponent.mem_supp_iff C v.1).mp v.2
+        have hw : w ∈ C.supp :=
+          (SimpleGraph.ConnectedComponent.mem_supp_iff C w).mpr
+            (hcomponentEq.symm.trans hv)
+        have hsome :=
+          (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+            Q C.supp v ⟨w, hw⟩).2 hpartner
+        rw [hnone] at hsome
+        cases hsome
+  · intro hnone
+    cases hrestricted :
+        PartialOccurrencePairing.restrictedPartner Q C.supp v with
+    | none => rfl
+    | some w =>
+        have hsome :=
+          (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+            Q C.supp v w).1 hrestricted
+        rw [hnone] at hsome
+        cases hsome
+
 theorem twoPairingGraph_component_eq_induce {V : Type*} [DecidableEq V]
     (P Q : PartialOccurrencePairing V)
     (C : (twoPairingGraph P Q).ConnectedComponent) :
@@ -604,6 +866,46 @@ theorem card_component_unpaired_either_le_two
       (componentRightPairing P Q C).partner v = none} ≤ 2
   rw [Nat.card_eq_fintype_card]
   exact hbound
+
+/-- The colored endpoint slots in a connected component form either an
+alternating cycle, with no free slots, or an alternating path, with two free
+slots. This keeps the color of each endpoint, which is needed when boundary
+and relator incidences are counted separately. -/
+theorem card_component_unpaired_slots_eq_zero_or_two
+    {V : Type*} [Fintype V] [DecidableEq V]
+    (P Q : PartialOccurrencePairing V)
+    (C : (twoPairingGraph P Q).ConnectedComponent) :
+    Nat.card
+        ({v : C.supp //
+          (componentLeftPairing P Q C).partner v = none} ⊕
+         {v : C.supp //
+          (componentRightPairing P Q C).partner v = none}) = 0 ∨
+    Nat.card
+        ({v : C.supp //
+          (componentLeftPairing P Q C).partner v = none} ⊕
+         {v : C.supp //
+          (componentRightPairing P Q C).partner v = none}) = 2 := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  have hconn :
+      (twoPairingGraph (componentLeftPairing P Q C)
+        (componentRightPairing P Q C)).Connected := by
+    rw [twoPairingGraph_component_eq_induce P Q C]
+    exact C.connected_toSimpleGraph
+  have hslots := card_unpaired_pairing_slots_eq_zero_or_two_of_connected
+    (componentLeftPairing P Q C) (componentRightPairing P Q C) hconn
+  change Nat.card
+      ({v : C.supp //
+        (componentLeftPairing P Q C).partner v = none} ⊕
+       {v : C.supp //
+        (componentRightPairing P Q C).partner v = none}) = 0 ∨
+    Nat.card
+      ({v : C.supp //
+        (componentLeftPairing P Q C).partner v = none} ⊕
+       {v : C.supp //
+        (componentRightPairing P Q C).partner v = none}) = 2
+  exact hslots
 
 /-- Reify the cancellation endpoints in an indexed boundary trace as finite
 occurrence indices, retaining their original pair order. -/
