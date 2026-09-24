@@ -9,6 +9,25 @@ def shiftCancellationPairs (offset : Nat) (pairs : List (Nat × Nat)) :
     List (Nat × Nat) :=
   pairs.map fun p => (offset + p.1, offset + p.2)
 
+/-- Flatten the two source endpoints of every cancellation pair. -/
+def pairEndpoints (pairs : List (Nat × Nat)) : List Nat :=
+  pairs.flatMap fun p => [p.1, p.2]
+
+theorem pairEndpoints_shiftCancellationPairs {pairs : List (Nat × Nat)}
+    (offset : Nat) :
+    pairEndpoints (shiftCancellationPairs offset pairs) =
+      (pairEndpoints pairs).map (offset + ·) := by
+  simp [pairEndpoints, shiftCancellationPairs, List.flatMap_map,
+    List.map_flatMap]
+
+theorem pairEndpoints_length (pairs : List (Nat × Nat)) :
+    (pairEndpoints pairs).length = 2 * pairs.length := by
+  induction pairs with
+  | nil => rfl
+  | cons p ps _ =>
+      simp [pairEndpoints]
+      omega
+
 /-- Shift surviving letter occurrences when their source word is embedded in a
 larger concatenation. Each occurrence retains its source position and label. -/
 def shiftLetterOccurrences (offset : Nat) (occurrences : List (Nat × Letter α)) :
@@ -20,6 +39,12 @@ theorem shiftLetterOccurrences_preservesLabels {α : Type*} (offset : Nat)
     (shiftLetterOccurrences offset occurrences).map Prod.snd =
       occurrences.map Prod.snd := by
   simp [shiftLetterOccurrences, Function.comp_def]
+
+theorem shiftLetterOccurrences_positions {α : Type*} (offset : Nat)
+    (occurrences : List (Nat × Letter α)) :
+    (shiftLetterOccurrences offset occurrences).map Prod.fst =
+      (occurrences.map Prod.fst).map (offset + ·) := by
+  simp [shiftLetterOccurrences, List.map_map, Function.comp_def]
 
 /-- Two ordered cancellation intervals are compatible when they are disjoint
 or one contains the other. -/
@@ -154,6 +179,38 @@ theorem survivorOccurrences_inBounds {raw reduced : Word α}
         List.length_nil]
       omega
 
+theorem survivorOccurrencePositions_nodup {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    (h.survivorOccurrences.map Prod.fst).Nodup := by
+  induction h with
+  | empty => simp [survivorOccurrences]
+  | letter a => simp [survivorOccurrences]
+  | @append u u' v v' left right ihLeft ihRight =>
+      simp only [survivorOccurrences, List.map_append,
+        shiftLetterOccurrences_positions]
+      change List.Pairwise (fun x y : Nat => x ≠ y)
+        (left.survivorOccurrences.map Prod.fst ++
+          (right.survivorOccurrences.map Prod.fst).map
+            (left.inputWord.length + ·))
+      rw [List.pairwise_append]
+      refine ⟨ihLeft, ?_, ?_⟩
+      · apply List.Nodup.map
+        · intro x y hxy
+          exact Nat.add_left_cancel hxy
+        · exact ihRight
+      · intro x hx y hy hxy
+        rcases List.mem_map.mp hx with ⟨o, ho, rfl⟩
+        rcases List.mem_map.mp hy with ⟨z, hz, rfl⟩
+        have hbound := left.survivorOccurrences_inBounds o ho
+        omega
+  | @bracket a inner suffix result innerShape suffixShape ihInner ihSuffix =>
+      simp only [survivorOccurrences, shiftLetterOccurrences_positions]
+      have hinjective : Function.Injective
+          (fun x : Nat => innerShape.inputWord.length + 2 + x) := by
+        intro x y hxy
+        exact Nat.add_left_cancel hxy
+      exact ihSuffix.map hinjective
+
 theorem survivorOccurrences_are_sourceLetters {raw reduced : Word α}
     (h : FreeReductionShape raw reduced) :
     ∀ o ∈ h.survivorOccurrences, raw[o.1]? = some o.2 := by
@@ -259,6 +316,187 @@ theorem cancellationPairs_inBounds {raw reduced : Word α}
           subst p
           simp only [inputWord, List.length_append, List.length_cons,
             List.length_nil]
+          constructor <;> omega
+
+theorem cancellationEndpoints_length {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    (pairEndpoints h.cancellationPairs).length = 2 * h.cancellationCount := by
+  rw [pairEndpoints_length, h.cancellationPairs_length]
+
+theorem cancellationEndpoints_inBounds {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    ∀ i ∈ pairEndpoints h.cancellationPairs, i < h.inputWord.length := by
+  intro i hi
+  rcases List.mem_flatMap.mp hi with ⟨p, hp, hpi⟩
+  have hbounds := h.cancellationPairs_inBounds p hp
+  simp only [List.mem_cons, List.not_mem_nil] at hpi
+  rcases hpi with hpi | hpi
+  · rw [hpi]
+    exact Nat.lt_trans hbounds.1 hbounds.2
+  · rcases hpi with hpi | hnil
+    · rw [hpi]
+      exact hbounds.2
+    · cases hnil
+
+theorem cancellationEndpoints_nodup {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    (pairEndpoints h.cancellationPairs).Nodup := by
+  induction h with
+  | empty => simp [cancellationPairs, pairEndpoints]
+  | letter a => simp [cancellationPairs, pairEndpoints]
+  | @append u u' v v' left right ihLeft ihRight =>
+      simp only [cancellationPairs]
+      rw [show pairEndpoints (left.cancellationPairs ++
+          shiftCancellationPairs left.inputWord.length right.cancellationPairs) =
+          pairEndpoints left.cancellationPairs ++
+            pairEndpoints (shiftCancellationPairs left.inputWord.length
+              right.cancellationPairs) by
+        simp [pairEndpoints, List.flatMap_append]]
+      rw [pairEndpoints_shiftCancellationPairs]
+      change List.Pairwise (fun x y : Nat => x ≠ y)
+        (pairEndpoints left.cancellationPairs ++
+          (pairEndpoints right.cancellationPairs).map
+            (left.inputWord.length + ·))
+      rw [List.pairwise_append]
+      refine ⟨ihLeft, ?_, ?_⟩
+      · apply List.Nodup.map
+        · intro x y hxy
+          exact Nat.add_left_cancel hxy
+        · exact ihRight
+      · intro x hx y hy hxy
+        rcases List.mem_map.mp hy with ⟨z, hz, rfl⟩
+        have hbound := left.cancellationEndpoints_inBounds x hx
+        have hoffset : left.inputWord.length = u.length := by simp [inputWord]
+        omega
+  | @bracket a inner suffix result innerShape suffixShape ihInner ihSuffix =>
+      let n := innerShape.inputWord.length
+      let inside := (pairEndpoints innerShape.cancellationPairs).map (1 + ·)
+      let after := (pairEndpoints suffixShape.cancellationPairs).map (n + 2 + ·)
+      have hinnerInjective : Function.Injective (fun x : Nat => 1 + x) := by
+        intro x y hxy
+        exact Nat.add_left_cancel hxy
+      have hafterInjective :
+          Function.Injective (fun x : Nat => n + 2 + x) := by
+        intro x y hxy
+        exact Nat.add_left_cancel hxy
+      have hinsideNodup : inside.Nodup := by
+        dsimp [inside]
+        exact ihInner.map hinnerInjective
+      have hafterNodup : after.Nodup := by
+        dsimp [after]
+        exact ihSuffix.map hafterInjective
+      have hinsideBounds : ∀ x ∈ inside, 1 ≤ x ∧ x < n + 1 := by
+        intro x hx
+        rcases List.mem_map.mp hx with ⟨y, hy, rfl⟩
+        have hybound := innerShape.cancellationEndpoints_inBounds y hy
+        omega
+      have hafterLower : ∀ x ∈ after, n + 2 ≤ x := by
+        intro x hx
+        rcases List.mem_map.mp hx with ⟨y, hy, rfl⟩
+        omega
+      have hrootNodup : ([0, n + 1] : List Nat).Nodup := by
+        simp [n]
+      have hfirst : List.Pairwise (fun x y : Nat => x ≠ y)
+          ([0, n + 1] ++ inside) := by
+        rw [List.pairwise_append]
+        refine ⟨hrootNodup, hinsideNodup, ?_⟩
+        intro x hx y hy hxy
+        have hybounds := hinsideBounds y hy
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+        rcases hx with rfl | rfl <;> omega
+      have hwhole : List.Pairwise (fun x y : Nat => x ≠ y)
+          (([0, n + 1] ++ inside) ++ after) := by
+        rw [List.pairwise_append]
+        refine ⟨hfirst, hafterNodup, ?_⟩
+        intro x hx y hy hxy
+        have hybound := hafterLower y hy
+        rcases List.mem_append.mp hx with hxRoot | hxInside
+        · simp only [List.mem_cons, List.not_mem_nil, or_false] at hxRoot
+          rcases hxRoot with rfl | rfl <;> omega
+        · have hxBounds := hinsideBounds x hxInside
+          omega
+      simp only [cancellationPairs]
+      rw [show pairEndpoints ((0, innerShape.inputWord.length + 1) ::
+          (shiftCancellationPairs 1 innerShape.cancellationPairs ++
+            shiftCancellationPairs (innerShape.inputWord.length + 2)
+              suffixShape.cancellationPairs)) =
+          [0, innerShape.inputWord.length + 1] ++
+            (pairEndpoints (shiftCancellationPairs 1
+              innerShape.cancellationPairs) ++
+              pairEndpoints (shiftCancellationPairs
+                (innerShape.inputWord.length + 2)
+                suffixShape.cancellationPairs)) by
+        simp [pairEndpoints, List.flatMap_append]]
+      rw [pairEndpoints_shiftCancellationPairs, pairEndpoints_shiftCancellationPairs]
+      rw [← List.append_assoc]
+      change List.Pairwise (fun x y : Nat => x ≠ y)
+        (([0, n + 1] ++ inside) ++ after)
+      exact hwhole
+
+theorem survivorAndCancellationEndpointCount {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    (pairEndpoints h.cancellationPairs).length +
+        h.survivorOccurrences.length = h.inputWord.length := by
+  rw [cancellationEndpoints_length, h.survivorOccurrences_length]
+  have hlength := h.length_eq_cancellationCount
+  simp only [inputWord] at hlength ⊢
+  omega
+
+/-- A retained source letter is never an endpoint of a cancellation pair.
+This keeps the eventual exterior boundary disjoint from the glued edge sides. -/
+theorem survivorOccurrences_disjointFromCancellationPairs
+    {raw reduced : Word α} (h : FreeReductionShape raw reduced) :
+    ∀ o ∈ h.survivorOccurrences, ∀ p ∈ h.cancellationPairs,
+      o.1 ≠ p.1 ∧ o.1 ≠ p.2 := by
+  induction h with
+  | empty => simp [survivorOccurrences, cancellationPairs]
+  | letter a => simp [survivorOccurrences, cancellationPairs]
+  | @append u u' v v' left right ihLeft ihRight =>
+      intro o ho p hp
+      simp only [survivorOccurrences, cancellationPairs,
+        List.mem_append] at ho hp
+      rcases ho with hoLeft | hoRight
+      · rcases hp with hpLeft | hpRight
+        · exact ihLeft o hoLeft p hpLeft
+        · rcases List.mem_map.mp hpRight with ⟨q, hq, hqp⟩
+          subst p
+          have hbound := left.survivorOccurrences_inBounds o hoLeft
+          have hleft : o.1 < u.length := by simpa [inputWord] using hbound
+          have hoffset : left.inputWord.length = u.length := by simp [inputWord]
+          constructor <;> omega
+      · rcases List.mem_map.mp hoRight with ⟨q, hq, hqo⟩
+        subst o
+        rcases hp with hpLeft | hpRight
+        · have hbound := left.cancellationPairs_inBounds p hpLeft
+          have hleft : p.2 < u.length := by simpa [inputWord] using hbound.2
+          have hoffset : left.inputWord.length = u.length := by simp [inputWord]
+          constructor <;> omega
+        · rcases List.mem_map.mp hpRight with ⟨r, hr, hrp⟩
+          subst p
+          have hdisjoint := ihRight q hq r hr
+          have hoffset : left.inputWord.length = u.length := by simp [inputWord]
+          constructor <;> omega
+  | @bracket a inner suffix result innerShape suffixShape ihInner ihSuffix =>
+      intro o ho p hp
+      simp only [survivorOccurrences, shiftLetterOccurrences] at ho
+      rcases List.mem_map.mp ho with ⟨q, hq, hqo⟩
+      subst o
+      simp only [cancellationPairs, List.mem_cons, List.mem_append] at hp
+      rcases hp with hpRoot | hpRest
+      · subst p
+        simp only [inputWord]
+        constructor <;> omega
+      · rcases hpRest with hpInner | hpSuffix
+        · rcases List.mem_map.mp hpInner with ⟨r, hr, hrp⟩
+          subst p
+          have hbound := innerShape.cancellationPairs_inBounds r hr
+          have hinner : r.2 < inner.length := by simpa [inputWord] using hbound.2
+          simp only [inputWord]
+          constructor <;> omega
+        · rcases List.mem_map.mp hpSuffix with ⟨r, hr, hrp⟩
+          subst p
+          have hdisjoint := ihSuffix q hq r hr
+          simp only [inputWord]
           constructor <;> omega
 
 /-- Each positional cancellation pair records inverse letters in the raw
@@ -442,6 +680,87 @@ theorem cancellationPairs_noncrossing {raw reduced : Word α}
                 (List.mem_map.mpr ⟨p₀, hp₀, rfl⟩)
                 (inner.length + 2 + q₀.1, inner.length + 2 + q₀.2)
                 (List.mem_map.mpr ⟨q₀, hq₀, rfl⟩)
+
+end FreeReductionShape
+
+namespace FreeReductionShape
+
+variable {α : Type*}
+
+/-- Every position in the unreduced source word is used exactly once by the
+cancellation endpoints or the retained output occurrences. The disjointness,
+boundedness, and count statements together establish coverage by finite-set
+cardinality. -/
+theorem sourcePositions_partition {raw reduced : Word α}
+    (h : FreeReductionShape raw reduced) :
+    ∀ i, i < h.inputWord.length →
+      i ∈ pairEndpoints h.cancellationPairs ∨
+        i ∈ h.survivorOccurrences.map Prod.fst := by
+  classical
+  let endpoints := pairEndpoints h.cancellationPairs
+  let survivors := h.survivorOccurrences.map Prod.fst
+  let endpointSet := endpoints.toFinset
+  let survivorSet := survivors.toFinset
+  let n := h.inputWord.length
+  have hEndpointCard : endpointSet.card = endpoints.length := by
+    change endpoints.toFinset.card = endpoints.length
+    exact List.toFinset_card_of_nodup h.cancellationEndpoints_nodup
+  have hSurvivorCard : survivorSet.card = survivors.length := by
+    change survivors.toFinset.card = survivors.length
+    exact List.toFinset_card_of_nodup h.survivorOccurrencePositions_nodup
+  have hDisjoint : Disjoint endpointSet survivorSet := by
+    rw [Finset.disjoint_left]
+    intro i hiEndpoint hiSurvivor
+    have hiEndpoint' : i ∈ endpoints := by
+      simpa [endpointSet] using hiEndpoint
+    have hiSurvivor' : i ∈ survivors := by
+      simpa [survivorSet] using hiSurvivor
+    rcases List.mem_flatMap.mp hiEndpoint' with ⟨p, hp, hpi⟩
+    rcases List.mem_map.mp hiSurvivor' with ⟨o, ho, hoi⟩
+    have hAvoid := h.survivorOccurrences_disjointFromCancellationPairs o ho p hp
+    simp only [List.mem_cons, List.not_mem_nil] at hpi
+    rcases hpi with hpi | hpi
+    · have hEq : o.1 = p.1 := by
+        calc
+          o.1 = i := hoi
+          _ = p.1 := hpi
+      exact hAvoid.1 hEq
+    · rcases hpi with hpi | hfalse
+      · have hEq : o.1 = p.2 := by
+          calc
+            o.1 = i := hoi
+            _ = p.2 := hpi
+        exact hAvoid.2 hEq
+      · cases hfalse
+  have hEndpointSubset : endpointSet ⊆ Finset.range n := by
+    intro i hi
+    have hi' : i ∈ endpoints := by simpa [endpointSet] using hi
+    exact Finset.mem_range.mpr (h.cancellationEndpoints_inBounds i hi')
+  have hSurvivorSubset : survivorSet ⊆ Finset.range n := by
+    intro i hi
+    have hi' : i ∈ survivors := by simpa [survivorSet] using hi
+    rcases List.mem_map.mp hi' with ⟨o, ho, hoi⟩
+    have hbound := h.survivorOccurrences_inBounds o ho
+    exact Finset.mem_range.mpr (by omega)
+  have hUnionCard : (endpointSet ∪ survivorSet).card = (Finset.range n).card := by
+    calc
+      (endpointSet ∪ survivorSet).card = endpointSet.card + survivorSet.card :=
+        Finset.card_union_of_disjoint hDisjoint
+      _ = endpoints.length + survivors.length := by rw [hEndpointCard, hSurvivorCard]
+      _ = n := by
+        simpa [endpoints, survivors, n] using h.survivorAndCancellationEndpointCount
+      _ = (Finset.range n).card := by simp
+  have hUnionSubset : endpointSet ∪ survivorSet ⊆ Finset.range n :=
+    Finset.union_subset hEndpointSubset hSurvivorSubset
+  have hUnionEq : endpointSet ∪ survivorSet = Finset.range n :=
+    Finset.eq_of_subset_of_card_le hUnionSubset (le_of_eq hUnionCard.symm)
+  intro i hi
+  have hiUnion : i ∈ endpointSet ∪ survivorSet := by
+    rw [hUnionEq]
+    exact Finset.mem_range.mpr hi
+  rcases Finset.mem_union.mp hiUnion with hiEndpoint | hiSurvivor
+  · exact Or.inl (by simpa [endpointSet, endpoints] using hiEndpoint)
+  · exact Or.inr (by simpa [survivorSet, survivors] using hiSurvivor)
 
 end FreeReductionShape
 

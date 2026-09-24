@@ -32,20 +32,41 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryTrace {α : Type*}
           seed.boundary.literalBoundary[p.2]? = some (inverseLetter a)) ∧
       (∀ p ∈ trace.cancellationPairs,
         p.1 < p.2 ∧ p.2 < trace.inputWord.length) ∧
+      (pairEndpoints trace.cancellationPairs).Nodup ∧
+      (pairEndpoints trace.cancellationPairs).length =
+        2 * trace.cancellationCount ∧
+      (∀ i ∈ pairEndpoints trace.cancellationPairs,
+        i < trace.inputWord.length) ∧
       trace.survivorOccurrences.map Prod.snd = w.toWord ∧
       trace.survivorOccurrences.length = w.toWord.length ∧
+      (trace.survivorOccurrences.map Prod.fst).Nodup ∧
+      (pairEndpoints trace.cancellationPairs).length +
+          (trace.survivorOccurrences.map Prod.fst).length =
+        trace.inputWord.length ∧
       (∀ o ∈ trace.survivorOccurrences,
         seed.boundary.literalBoundary[o.1]? = some o.2) ∧
-      (∀ o ∈ trace.survivorOccurrences, o.1 < trace.inputWord.length) := by
+      (∀ o ∈ trace.survivorOccurrences, o.1 < trace.inputWord.length) ∧
+      (∀ o ∈ trace.survivorOccurrences, ∀ p ∈ trace.cancellationPairs,
+        o.1 ≠ p.1 ∧ o.1 ≠ p.2) ∧
+      (∀ i, i < trace.inputWord.length →
+        i ∈ pairEndpoints trace.cancellationPairs ∨
+          i ∈ trace.survivorOccurrences.map Prod.fst) := by
   let trace := seed.boundary.to_boundaryShape
-  refine ⟨trace, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨trace, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact trace.cancellationPairs_length
   · exact trace.cancellationPairs_noncrossing
   · exact trace.cancellationPairs_are_inverseLetterOccurrences
   · exact trace.cancellationPairs_inBounds
+  · exact trace.cancellationEndpoints_nodup
+  · exact trace.cancellationEndpoints_length
+  · exact trace.cancellationEndpoints_inBounds
   · exact trace.survivorOccurrences_labels
   · exact trace.survivorOccurrences_length
+  · exact trace.survivorOccurrencePositions_nodup
+  · simpa using trace.survivorAndCancellationEndpointCount
   · exact trace.survivorOccurrences_are_sourceLetters
   · exact trace.survivorOccurrences_inBounds
+  · exact trace.survivorOccurrences_disjointFromCancellationPairs
+  · exact trace.sourcePositions_partition
 
 end GreendlingerDehn
