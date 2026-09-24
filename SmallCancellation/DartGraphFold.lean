@@ -17,6 +17,22 @@ structure DartGraph where
   source_reverse : ∀ d, source (reverse d) = target d
   target_reverse : ∀ d, target (reverse d) = source d
 
+/-- Forget dart orientation by quotienting the darts of a graph by its
+reversal relation. -/
+def UnorientedDartSetoid (G : DartGraph) : Setoid G.Dart :=
+  Relation.EqvGen.setoid (fun d e => d = G.reverse e)
+
+/-- The unoriented edge class represented by a dart. -/
+abbrev UnorientedDartClass (G : DartGraph) :=
+  Quotient (UnorientedDartSetoid G)
+
+theorem unorientedDartClass_eq_of_reverse {G : DartGraph} {d e : G.Dart}
+    (h : d = G.reverse e) :
+    (Quotient.mk (UnorientedDartSetoid G) d : UnorientedDartClass G) =
+      Quotient.mk (UnorientedDartSetoid G) e := by
+  apply Quotient.sound
+  exact Relation.EqvGen.rel _ _ h
+
 /-- Vertex identifications forced by folding the oppositely traversed darts
 `a` and `b`. -/
 def VertexFoldGenerator (G : DartGraph) (a b : G.Dart)
@@ -571,6 +587,23 @@ theorem foldPairs_pair_reverse {α : Type*} {G : LabelledDartGraph α}
       (foldPairs pairs walk).graph.toDartGraph.reverse
         ((foldPairs pairs walk).hom.mapDart pair.first) := by
   exact (LabelledDartPairFoldResult.foldAll G pairs).pairs_folded pair hpair
+
+/-- Every requested fold identifies the unoriented edge classes of its two
+source occurrences. -/
+theorem foldPairs_pair_unorientedClass_eq {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (pairs : List (LabelledDartPair G))
+    (walk : LabelledWalk G u v word) (pair : LabelledDartPair G)
+    (hpair : pair ∈ pairs) :
+    (Quotient.mk
+      (UnorientedDartSetoid (foldPairs pairs walk).graph.toDartGraph)
+      ((foldPairs pairs walk).hom.mapDart pair.second) :
+      UnorientedDartClass (foldPairs pairs walk).graph.toDartGraph) =
+      Quotient.mk
+        (UnorientedDartSetoid (foldPairs pairs walk).graph.toDartGraph)
+        ((foldPairs pairs walk).hom.mapDart pair.first) := by
+  apply unorientedDartClass_eq_of_reverse
+  exact foldPairs_pair_reverse pairs walk pair hpair
 
 end WalkFoldResult
 

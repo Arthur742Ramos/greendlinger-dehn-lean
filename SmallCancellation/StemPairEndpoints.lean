@@ -860,6 +860,157 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold_cancellati
     (seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs)
     seed.balloonBoundaryLoop pair (List.mem_append_right _ hpair)
 
+theorem MinimalAreaRelatorBoundarySeed.boundaryBalloonStemPairs_positions
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    seed.boundaryBalloonStemPairs.map
+      (fun pair => (pair.first.1, pair.second.1)) =
+        seed.balloonStemOccurrencePairs := by
+  simp [MinimalAreaRelatorBoundarySeed.boundaryBalloonStemPairs,
+    MinimalAreaRelatorBoundarySeed.balloonStemOccurrencePairs,
+    LabelledDartPair.map, MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
+    wordPathBoundaryHomWithJoins, Function.comp_def]
+
+theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold_positions
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    (seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs).map
+        (fun pair => (pair.first.1, pair.second.1)) =
+      seed.balloonStemOccurrencePairs ++
+        seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs := by
+  rw [List.map_append, seed.boundaryBalloonStemPairs_positions,
+    seed.boundaryCancellationDartPairs_positions]
+
+theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold_forward
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (pair : LabelledDartPair seed.balloonBoundaryGraph)
+    (hpair : pair ∈
+      seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs) :
+    pair.first.2 = false ∧ pair.second.2 = false := by
+  rw [List.mem_append] at hpair
+  rcases hpair with hstem | hcancel
+  · unfold MinimalAreaRelatorBoundarySeed.boundaryBalloonStemPairs at hstem
+    rcases List.mem_map.mp hstem with ⟨sourcePair, hsource, rfl⟩
+    have hforward := reducedBalloonStemPairs_forward
+      seed.boundary.reducedBalloons sourcePair hsource
+    simpa [LabelledDartPair.map,
+      MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
+      wordPathBoundaryHomWithJoins] using hforward
+  · unfold MinimalAreaRelatorBoundarySeed.boundaryCancellationDartPairs at hcancel
+    rcases List.mem_map.mp hcancel with ⟨sourcePair, hsource, rfl⟩
+    unfold IndexedBoundaryTrace.cancellationOccurrenceDartPairs at hsource
+    rcases List.mem_map.mp hsource with ⟨entry, hentry, rfl⟩
+    constructor <;>
+      simpa [LabelledDartPair.map,
+        MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
+        wordPathBoundaryHomWithJoins]
+
+/-- Any edge of the alternating occurrence graph is sent to a single
+unoriented dart class by the explicit pair-fold quotient. -/
+theorem MinimalAreaRelatorBoundarySeed.edgeClass_eq_of_occurrencePairRel
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (v x : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hrel : occurrencePairRel
+      (seed.balloonStemOccurrencePairs ++
+        seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs) v x) :
+    let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+    (Quotient.mk (UnorientedDartSetoid G)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (v, false)) :
+      UnorientedDartClass G) =
+    Quotient.mk (UnorientedDartSetoid G)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, false)) := by
+  classical
+  let pairs := seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs
+  have hpositions := seed.boundaryOccurrenceDartPairFold_positions
+  rw [← hpositions] at hrel
+  rcases hrel with ⟨p, hp, hpvx | hpwx⟩
+  · rcases List.mem_map.mp hp with ⟨pair, hpair, hpos⟩
+    have hfirstDirection := seed.boundaryOccurrenceDartPairFold_forward pair hpair |>.1
+    have hsecondDirection := seed.boundaryOccurrenceDartPairFold_forward pair hpair |>.2
+    have hfold := WalkFoldResult.foldPairs_pair_unorientedClass_eq
+      pairs seed.balloonBoundaryLoop pair hpair
+    have hfirst : pair.first = (v, false) :=
+      Prod.ext ((congrArg Prod.fst hpos).trans hpvx.1) hfirstDirection
+    have hsecond : pair.second = (x, false) :=
+      Prod.ext ((congrArg Prod.snd hpos).trans hpvx.2) hsecondDirection
+    dsimp [pairs, MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold]
+      at hfold ⊢
+    simpa [hfirst, hsecond] using hfold.symm
+  · rcases List.mem_map.mp hp with ⟨pair, hpair, hpos⟩
+    have hfirstDirection := seed.boundaryOccurrenceDartPairFold_forward pair hpair |>.1
+    have hsecondDirection := seed.boundaryOccurrenceDartPairFold_forward pair hpair |>.2
+    have hfold := WalkFoldResult.foldPairs_pair_unorientedClass_eq
+      pairs seed.balloonBoundaryLoop pair hpair
+    have hfirst : pair.first = (x, false) :=
+      Prod.ext ((congrArg Prod.fst hpos).trans hpwx.1) hfirstDirection
+    have hsecond : pair.second = (v, false) :=
+      Prod.ext ((congrArg Prod.snd hpos).trans hpwx.2) hsecondDirection
+    dsimp [pairs, MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold]
+      at hfold ⊢
+    simpa [hfirst, hsecond] using hfold
+
+theorem MinimalAreaRelatorBoundarySeed.edgeClass_eq_of_pairingGraph_adj
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (v x : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hadj : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).Adj v x) :
+    let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+    (Quotient.mk (UnorientedDartSetoid G)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (v, false)) :
+      UnorientedDartClass G) =
+    Quotient.mk (UnorientedDartSetoid G)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, false)) := by
+  have hadj' : seed.balloonStemOccurrencePairing.partner v = some x ∨
+      seed.boundaryCancellationPairing.partner v = some x := by
+    exact hadj
+  have hrel : occurrencePairRel
+      (seed.balloonStemOccurrencePairs ++
+        seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs) v x := by
+    rw [occurrencePairRel_append_iff]
+    rcases hadj' with hstem | hcancel
+    · exact Or.inl (seed.balloonStemOccurrencePairing_spec v x |>.1 hstem)
+    · exact Or.inr
+        (seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairing_spec
+          v x |>.1 hcancel)
+  exact seed.edgeClass_eq_of_occurrencePairRel v x hrel
+
+/-- The explicit fold map is constant, up to orientation, on every connected
+component of the two occurrence-pairing graph. -/
+theorem MinimalAreaRelatorBoundarySeed.unorientedEdgeClass_eq_in_component
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (v x : C.supp) :
+    let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+    (Quotient.mk (UnorientedDartSetoid G)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (v.1, false)) :
+      UnorientedDartClass G) =
+    Quotient.mk (UnorientedDartSetoid G)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (x.1, false)) := by
+  let graph := twoPairingGraph seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing
+  have hcomponent : graph.connectedComponentMk v.1 = graph.connectedComponentMk x.1 :=
+    v.2.trans x.2.symm
+  have hreachable : graph.Reachable v.1 x.1 :=
+    SimpleGraph.ConnectedComponent.eq.mp hcomponent
+  exact hreachable.map_eq_of_adj
+    (fun i => Quotient.mk
+      (UnorientedDartSetoid seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (i, false)))
+    (by
+      intro a b hab
+      exact seed.edgeClass_eq_of_pairingGraph_adj a b hab)
+
 /-- In each connected component of the two occurrence pairings, at most two
 positions can be unmatched by either the balloon-stem folds or the boundary
 cancellations. This is the alternating-component endpoint bound for the

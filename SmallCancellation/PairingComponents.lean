@@ -63,6 +63,23 @@ theorem card_degree_le_one_le_two (G : SimpleGraph V)
 
 end SimpleGraph
 
+namespace SimpleGraph
+
+theorem Walk.map_eq_of_adj {V : Type*} {G : SimpleGraph V}
+    {u v : V} {β : Sort*} (walk : G.Walk u v) (f : V → β)
+    (hstep : ∀ x y, G.Adj x y → f x = f y) : f u = f v := by
+  induction walk with
+  | nil => rfl
+  | @cons x y z hadj tail ih => exact (hstep x y hadj).trans ih
+
+theorem Reachable.map_eq_of_adj {V : Type*} {G : SimpleGraph V}
+    {u v : V} {β : Sort*} (hreach : G.Reachable u v) (f : V → β)
+    (hstep : ∀ x y, G.Adj x y → f x = f y) : f u = f v := by
+  rcases hreach with ⟨walk⟩
+  exact walk.map_eq_of_adj f hstep
+
+end SimpleGraph
+
 namespace GreendlingerDehn
 
 /-- A finite partial pairing of occurrences. Every occurrence has at most one
@@ -320,6 +337,20 @@ theorem occurrencePairRel_exists_iff_mem_endpoints {V : Type*}
     rcases hpv' with hpv | hpv
     · exact ⟨p.2, p, hp, Or.inl ⟨hpv.symm, rfl⟩⟩
     · exact ⟨p.1, p, hp, Or.inr ⟨rfl, hpv.symm⟩⟩
+
+theorem occurrencePairRel_append_iff {V : Type*}
+    (left right : List (V × V)) (v w : V) :
+    occurrencePairRel (left ++ right) v w ↔
+      occurrencePairRel left v w ∨ occurrencePairRel right v w := by
+  constructor
+  · rintro ⟨p, hp, h⟩
+    rw [List.mem_append] at hp
+    rcases hp with hp | hp
+    · exact Or.inl ⟨p, hp, h⟩
+    · exact Or.inr ⟨p, hp, h⟩
+  · rintro (⟨p, hp, h⟩ | ⟨p, hp, h⟩)
+    · exact ⟨p, List.mem_append_left _ hp, h⟩
+    · exact ⟨p, List.mem_append_right _ hp, h⟩
 
 theorem occurrencePairLists_disjoint_endpoints {V : Type*}
     {pairs : List (V × V)} (hnodup : (occurrencePairEndpoints pairs).Nodup)
