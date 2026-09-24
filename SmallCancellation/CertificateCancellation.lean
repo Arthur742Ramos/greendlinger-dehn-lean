@@ -293,6 +293,76 @@ theorem MinimalAreaRelatorBoundarySeed.factorOccurrenceCount_eq_area
     _ = seed.certificate.factors.length := by rw [seed.boundary_factors]
     _ = seed.certificate.area := RelatorCertificate.factors_length seed.certificate
 
+/-- A list of labelled conjugates has a relator certificate whose area is
+exactly its number of factors. -/
+theorem exists_certificate_of_conjugate_factor_labels {α : Type*}
+    {R : List (FreeGroup α)} (xs : List (FreeGroup α))
+    (hlabels : ∀ x ∈ xs, IsRelatorConjugate R x) :
+    ∃ c : RelatorCertificate R xs.prod, c.area = xs.length := by
+  induction xs with
+  | nil => exact ⟨RelatorCertificate.one, rfl⟩
+  | cons x xs ih =>
+      have hx : IsRelatorConjugate R x := hlabels x (by simp)
+      rcases hx with ⟨g, r, hr, hxEq⟩
+      have htail : ∀ y ∈ xs, IsRelatorConjugate R y := by
+        intro y hy
+        exact hlabels y (by simp [hy])
+      obtain ⟨tailCert, htailArea⟩ := ih htail
+      let headCert : RelatorCertificate R x :=
+        hxEq.symm ▸ RelatorCertificate.conjugate g r hr
+      have hheadArea : headCert.area = 1 := by
+        cases hxEq
+        rfl
+      refine ⟨.mul headCert tailCert, ?_⟩
+      change headCert.area + tailCert.area = xs.length + 1
+      rw [hheadArea, htailArea]
+      omega
+
+/-- Minimum area rules out adjacent inverse relator-conjugate factors. Such a
+pair would cancel in the product and produce a certificate with two fewer
+relator occurrences. This is an algebraic reducedness condition; it does not
+by itself establish reducedness of a planar van Kampen diagram. -/
+theorem MinimalAreaRelatorBoundarySeed.no_adjacent_inverse_factors
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed R w)
+    (pre post : List (FreeGroup α)) (x : FreeGroup α)
+    (hshape : seed.boundary.factors = pre ++ x :: x⁻¹ :: post) :
+    False := by
+  have hshortLabels : ∀ y ∈ pre ++ post, IsRelatorConjugate R y := by
+    intro y hy
+    have hyOriginal : y ∈ seed.boundary.factors := by
+      rw [hshape]
+      rcases List.mem_append.mp hy with hpre | hpost
+      · exact List.mem_append.mpr (Or.inl hpre)
+      · exact List.mem_append.mpr (Or.inr (by simp [hpost]))
+    exact seed.boundary.factor_labels y hyOriginal
+  obtain ⟨shortCert, hshortArea⟩ :=
+    exists_certificate_of_conjugate_factor_labels (R := R) (pre ++ post) hshortLabels
+  have hshortProduct : (pre ++ post).prod = w := by
+    calc
+      (pre ++ post).prod = seed.boundary.factors.prod := by
+        rw [hshape]
+        simp [List.prod_append, List.prod_cons]
+      _ = w := seed.boundary.product_eq
+  let shortCertAtW : RelatorCertificate R w := hshortProduct ▸ shortCert
+  have hshortAreaAtW : shortCertAtW.area = (pre ++ post).length := by
+    dsimp [shortCertAtW]
+    cases hshortProduct
+    exact hshortArea
+  have holdArea : seed.certificate.area = seed.boundary.factors.length := by
+    calc
+      seed.certificate.area = seed.certificate.factors.length :=
+        (RelatorCertificate.factors_length seed.certificate).symm
+      _ = seed.boundary.factors.length := by rw [seed.boundary_factors]
+  have hshortLength : (pre ++ post).length < seed.boundary.factors.length := by
+    rw [hshape]
+    simp only [List.length_append, List.length_cons]
+    omega
+  have hstrict : shortCertAtW.area < seed.certificate.area := by
+    rw [hshortAreaAtW, holdArea]
+    exact hshortLength
+  exact (Nat.not_le_of_gt hstrict) (seed.area_minimal shortCertAtW)
+
 /-- The boundary seed gives a concrete cancellation sequence, hence an exact
 count of how many inverse-letter pairs are removed. -/
 theorem RelatorFactorBoundarySeed.cancellation_count {α : Type*}
