@@ -10,3 +10,4 @@ import SmallCancellation.Cancellation
 import SmallCancellation.CertificateCancellation
 import SmallCancellation.DiskMap
 import SmallCancellation.PlanarCancellation
+import SmallCancellation.PlanarBoundarySeed
