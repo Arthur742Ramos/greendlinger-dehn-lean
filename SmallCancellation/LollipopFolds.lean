@@ -372,20 +372,20 @@ def reducedBalloonEndpointPairs {α : Type*} [Fintype α] [DecidableEq α]
            (wordPathSuffixHom b.label.rawWord
             ((tail.map (fun x => x.label.rawWord)).flatten)).mapVertex pair.2))
 
-/-- Each balloon occurrence has its own path embedding into the flattened
-boundary. Indexing by `Fin` preserves duplicate balloon values as distinct face
-occurrences. -/
-theorem reducedBalloonOccurrencePathEmbedding {α : Type*} [Fintype α]
+/-- Each balloon occurrence has its own path embedding and endpoint join in
+the flattened boundary. The recursion follows the `Fin` index, so duplicate
+balloon values still use their own source positions. -/
+noncomputable def reducedBalloonOccurrenceEmbeddingData {α : Type*} [Fintype α]
     [DecidableEq α] {P : SymmetrizedPresentation α}
     (balloons : List (ReducedRelatorBalloonData P))
     (i : Fin balloons.length) :
-    ∃ f : LabelledGraphHom
+    {f : LabelledGraphHom
         (wordPathGraph (balloons.get i).label.rawWord)
         (wordPathGraph ((balloons.map
-          (fun b => b.label.rawWord)).flatten)),
+          (fun b => b.label.rawWord)).flatten)) //
       (f.mapVertex (0 : Nat),
         f.mapVertex (balloons.get i).label.rawWord.length) ∈
-        reducedBalloonEndpointPairs balloons := by
+        reducedBalloonEndpointPairs balloons} := by
   induction balloons with
   | nil => exact Fin.elim0 i
   | cons head tail ih =>
@@ -403,7 +403,7 @@ theorem reducedBalloonOccurrencePathEmbedding {α : Type*} [Fintype α]
         reducedBalloonEndpointPairs (head :: tail)
       exact List.Mem.head _
     | succ i =>
-      obtain ⟨tailEmbedding, htail⟩ := ih i
+      obtain ⟨tailEmbedding, htailMem⟩ := ih i
       let suffix := wordPathSuffixHom head.label.rawWord
         ((tail.map (fun b => b.label.rawWord)).flatten)
       let f : LabelledGraphHom
@@ -422,7 +422,30 @@ theorem reducedBalloonOccurrencePathEmbedding {α : Type*} [Fintype α]
       right
       apply List.mem_map.mpr
       exact ⟨(tailEmbedding.mapVertex (0 : Nat),
-        tailEmbedding.mapVertex ((tail.get i).label.rawWord.length)), htail, rfl⟩
+        tailEmbedding.mapVertex ((tail.get i).label.rawWord.length)), htailMem, rfl⟩
+
+/-- The path embedding of the selected balloon occurrence. -/
+noncomputable def reducedBalloonOccurrencePathEmbedding {α : Type*}
+    [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α}
+    (balloons : List (ReducedRelatorBalloonData P))
+    (i : Fin balloons.length) :
+    LabelledGraphHom
+      (wordPathGraph (balloons.get i).label.rawWord)
+      (wordPathGraph ((balloons.map
+        (fun b => b.label.rawWord)).flatten)) :=
+  (reducedBalloonOccurrenceEmbeddingData balloons i).val
+
+/-- The selected occurrence's endpoints are joined in the flattened
+boundary. -/
+theorem reducedBalloonOccurrencePathEmbedding_endpoints_mem {α : Type*}
+    [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α}
+    (balloons : List (ReducedRelatorBalloonData P))
+    (i : Fin balloons.length) :
+    ((reducedBalloonOccurrencePathEmbedding balloons i).mapVertex (0 : Nat),
+      (reducedBalloonOccurrencePathEmbedding balloons i).mapVertex
+        ((balloons.get i).label.rawWord.length)) ∈
+      reducedBalloonEndpointPairs balloons :=
+  (reducedBalloonOccurrenceEmbeddingData balloons i).property
 
 /-- Each balloon boundary has a corresponding pair of endpoint positions in
 the flattened occurrence path. -/

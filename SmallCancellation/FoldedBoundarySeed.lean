@@ -194,8 +194,7 @@ noncomputable def MinimalAreaRelatorBoundarySeed.balloonOccurrenceEmbedding
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w)
     (i : Fin seed.boundary.reducedBalloons.length) :=
-  Classical.choose
-    (reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons i)
+  reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons i
 
 /-- Its two endpoint positions are the indexed balloon's own endpoint join,
 so repeated equal balloon values remain distinct occurrences. -/
@@ -210,8 +209,8 @@ theorem MinimalAreaRelatorBoundarySeed.balloonOccurrenceEmbedding_endpoints_mem
       seed.balloonEndpointPairs := by
   simpa [MinimalAreaRelatorBoundarySeed.balloonOccurrenceEmbedding,
     MinimalAreaRelatorBoundarySeed.balloonEndpointPairs] using
-    Classical.choose_spec
-      (reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons i)
+    reducedBalloonOccurrencePathEmbedding_endpoints_mem
+      seed.boundary.reducedBalloons i
 
 /-- An individual oriented side occurrence of an indexed balloon face. -/
 abbrev RelatorBalloonFaceSide {α : Type*} [Fintype α] [DecidableEq α]
