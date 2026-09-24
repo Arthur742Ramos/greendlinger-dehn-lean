@@ -26,6 +26,14 @@ theorem toWord_mk_reduced {α : Type*} [DecidableEq α]
     {xs : Word α} (h : FreeGroup.IsReduced xs) :
     (FreeGroup.mk xs).toWord = xs := h.reduce_eq
 
+theorem RelatorConjugateWitness.rawWord_length_eq {α : Type*} [DecidableEq α]
+    {R : List (FreeGroup α)} {factor : FreeGroup α}
+    (d : RelatorConjugateWitness R factor) :
+    d.rawWord.length = 2 * d.conjugator.toWord.length + d.relator.toWord.length := by
+  simp [RelatorConjugateWitness.rawWord, FreeGroup.toWord_inv,
+    FreeGroup.invRev_length, List.length_append]
+  omega
+
 theorem reducedAdjacent_of_ne_inverse {α : Type*} {x y : Letter α}
     (h : x ≠ inverseLetter y) : x.1 = y.1 → x.2 = y.2 := by
   intro hgen
@@ -170,7 +178,9 @@ theorem exists_reducedRelatorConjugateWitness
     (P : SymmetrizedPresentation α) {factor : FreeGroup α}
     (h : IsRelatorConjugate P.relators factor) :
     ∃ d : RelatorConjugateWitness P.relators factor,
-      FreeGroup.IsReduced d.rawWord ∧ d.rawWord = factor.toWord := by
+      FreeGroup.IsReduced d.rawWord ∧ d.rawWord = factor.toWord ∧
+        ∀ e : RelatorConjugateWitness P.relators factor,
+          d.conjugator.toWord.length ≤ e.conjugator.toWord.length := by
   classical
   let lengthWitness : Nat → Prop := fun n =>
     ∃ d : RelatorConjugateWitness P.relators factor,
@@ -267,7 +277,10 @@ theorem exists_reducedRelatorConjugateWitness
       d.rawWord = FreeGroup.reduce d.rawWord := hraw.symm
       _ = FreeGroup.reduce factor.toWord := hreduce
       _ = factor.toWord := hnormal
-  exact ⟨d, hrawReduced, hrawEq⟩
+  exact ⟨d, hrawReduced, hrawEq, fun e => by
+    calc
+      d.conjugator.toWord.length = minLength := hdLength
+      _ ≤ e.conjugator.toWord.length := hminimum e⟩
 
 /-- A relator-conjugate factor equipped with a cancellation-free literal
 lollipop boundary. The label retains the actual relator and conjugator. -/
@@ -277,6 +290,16 @@ structure ReducedRelatorBalloonData {α : Type*} [Fintype α] [DecidableEq α]
   label : RelatorConjugateWitness P.relators factor
   boundary_reduced : FreeGroup.IsReduced label.rawWord
   boundary_eq_factorWord : label.rawWord = factor.toWord
+  conjugator_minimal : ∀ e : RelatorConjugateWitness P.relators factor,
+    label.conjugator.toWord.length ≤ e.conjugator.toWord.length
+
+theorem ReducedRelatorBalloonData.factorWord_length_eq
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P) :
+    b.factor.toWord.length =
+      2 * b.label.conjugator.toWord.length + b.label.relator.toWord.length := by
+  rw [← b.boundary_eq_factorWord]
+  exact b.label.rawWord_length_eq
 
 noncomputable def ReducedRelatorBalloonData.of_isRelatorConjugate
     {α : Type*} [Fintype α] [DecidableEq α]
@@ -285,7 +308,8 @@ noncomputable def ReducedRelatorBalloonData.of_isRelatorConjugate
     ReducedRelatorBalloonData P := by
   let hn := exists_reducedRelatorConjugateWitness P h
   exact ⟨factor, Classical.choose hn,
-    (Classical.choose_spec hn).1, (Classical.choose_spec hn).2⟩
+    (Classical.choose_spec hn).1, (Classical.choose_spec hn).2.1,
+    (Classical.choose_spec hn).2.2⟩
 
 @[simp]
 theorem ReducedRelatorBalloonData.of_isRelatorConjugate_factor
@@ -348,5 +372,17 @@ noncomputable def RelatorFactorBoundarySeed.reducedLiteralBoundaryShape
   have hshape := seed.cancellation
   rw [← seed.reducedLiteralBoundary_eq_rawProductWord] at hshape
   exact hshape
+
+theorem RelatorFactorBoundarySeed.reducedLiteralBoundary_length_eq
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : RelatorFactorBoundarySeed P.relators w) :
+    seed.reducedLiteralBoundary.length =
+      w.toWord.length + 2 * seed.cancellation.cancellationCount := by
+  calc
+    seed.reducedLiteralBoundary.length = (rawProductWord seed.factors).length :=
+      congrArg List.length seed.reducedLiteralBoundary_eq_rawProductWord
+    _ = w.toWord.length + 2 * seed.cancellation.cancellationCount :=
+      seed.cancellation.length_eq_cancellationCount
 
 end GreendlingerDehn
