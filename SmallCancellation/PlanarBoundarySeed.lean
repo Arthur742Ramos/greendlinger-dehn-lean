@@ -1,6 +1,7 @@
 import SmallCancellation.CertificateCancellation
 import SmallCancellation.PlanarCancellation
 import SmallCancellation.ReducedLollipop
+import SmallCancellation.CyclicDehn
 
 namespace GreendlingerDehn
 
@@ -110,5 +111,94 @@ theorem MinimalAreaRelatorBoundarySeed.reducedBalloonCount_eq_area
       simp [RelatorFactorBoundarySeed.reducedBalloons]
     _ = seed.certificate.factors.length := by rw [seed.boundary_factors]
     _ = seed.certificate.area := RelatorCertificate.factors_length seed.certificate
+
+/-- A null word certified by one relator occurrence already contains a full
+relator as a Dehn redex. This is the zero-overlap base case for arguments that
+build diagrams by increasing minimum area. -/
+theorem MinimalAreaRelatorBoundarySeed.cyclicGreendlinger_of_area_one
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (harea : seed.certificate.area = 1) :
+    ∃ c, IsCyclicRedex P.relators w c := by
+  have hfactorLength : seed.boundary.factors.length = 1 := by
+    calc
+      seed.boundary.factors.length = seed.certificate.factors.length :=
+        congrArg List.length seed.boundary_factors
+      _ = seed.certificate.area := RelatorCertificate.factors_length seed.certificate
+      _ = 1 := harea
+  obtain ⟨factor, hfactor⟩ : ∃ factor, seed.boundary.factors = [factor] := by
+    cases hlist : seed.boundary.factors with
+    | nil => simp [hlist] at hfactorLength
+    | cons head tail =>
+      have htail : tail = [] := by
+        cases tail with
+        | nil => rfl
+        | cons next rest => simp [hlist] at hfactorLength
+      subst tail
+      exact ⟨head, rfl⟩
+  have hfactorW : factor = w := by
+    have h := seed.boundary.product_eq
+    simpa [hfactor] using h
+  have hlabel : IsRelatorConjugate P.relators factor :=
+    seed.boundary.factor_labels factor (by simp [hfactor])
+  let balloon := ReducedRelatorBalloonData.of_isRelatorConjugate P hlabel
+  have hballoonFactor : balloon.factor = factor := by
+    simp [balloon]
+  let d := balloon.label
+  have hraw : d.rawWord = w.toWord := by
+    calc
+      d.rawWord = balloon.factor.toWord := balloon.boundary_eq_factorWord
+      _ = factor.toWord := by rw [hballoonFactor]
+      _ = w.toWord := by rw [hfactorW]
+  have hrelatorLength : 0 < d.relator.toWord.length := by
+    by_contra hpos
+    have hzero : d.relator.toWord.length = 0 := Nat.eq_zero_of_not_pos hpos
+    have hnil : d.relator.toWord = [] := by
+      cases hword : d.relator.toWord with
+      | nil => rfl
+      | cons letter tail => simp [hword] at hzero
+    have hone : d.relator = 1 := by
+      apply FreeGroup.toWord_injective
+      rw [hnil, FreeGroup.toWord_one]
+    exact P.nontrivial d.relator d.relator_mem hone
+  let redex : Redex α :=
+    ⟨d.conjugator.toWord, d.relator.toWord,
+      FreeGroup.invRev d.conjugator.toWord, d.relator, []⟩
+  refine ⟨⟨[], w.toWord, redex⟩, ?_⟩
+  constructor
+  · simp
+  · have hrotate : (FreeGroup.mk (w.toWord ++ [])).toWord = w.toWord := by
+      simp
+    rw [hrotate]
+    refine ⟨?_, d.relator_mem, ?_, ?_⟩
+    · calc
+        w.toWord = d.rawWord := hraw.symm
+        _ = d.conjugator.toWord ++ d.relator.toWord ++
+            FreeGroup.invRev d.conjugator.toWord := by
+              simp [RelatorConjugateWitness.rawWord, FreeGroup.toWord_inv]
+    · simp [redex]
+    · simp only [redex, List.length_nil]
+      exact hrelatorLength
+
+/-- A nontrivial null word with any relator certificate of area at most one
+has a cyclic Dehn redex. Minimum area rules out area zero, reducing to the
+one-occurrence base case above. -/
+theorem cyclicGreendlinger_of_certificate_area_le_one
+    {α : Type*} [Fintype α] [DecidableEq α]
+    (P : SymmetrizedPresentation α) (w : FreeGroup α)
+    (hnull : PresentedGroup.mk (relationSet P.relators) w = 1)
+    (hne : w ≠ 1)
+    (certificate : RelatorCertificate P.relators w)
+    (harea : certificate.area ≤ 1) :
+    ∃ c, IsCyclicRedex P.relators w c := by
+  let seed := MinimalAreaRelatorBoundarySeed.of_quotient_eq_one
+    P.inverseClosed hnull
+  have hminimum : seed.certificate.area ≤ 1 :=
+    (seed.area_minimal certificate).trans harea
+  have hpositive : 0 < seed.certificate.area :=
+    seed.certificate.area_pos_of_ne_one hne
+  have hminimumArea : seed.certificate.area = 1 := by omega
+  exact seed.cyclicGreendlinger_of_area_one hminimumArea
 
 end GreendlingerDehn
