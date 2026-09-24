@@ -3,6 +3,7 @@ import SmallCancellation.FiniteCheck
 import SmallCancellation.Dehn
 import SmallCancellation.CyclicDehn
 import SmallCancellation.Curvature
+import SmallCancellation.EdgeFold
 import SmallCancellation.VertexLinks
 import SmallCancellation.Shell
 import SmallCancellation.Certificates
