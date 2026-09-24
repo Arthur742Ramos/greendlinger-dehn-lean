@@ -751,6 +751,45 @@ theorem MinimalAreaRelatorBoundarySeed.balloonStemOccurrencePairing_unpaired_iff
     (occurrencePair_noLoop_of_endpoints_nodup
       seed.balloonStemOccurrencePairs_endpoints_nodup) i
 
+/-- Turn the absolute cancellation positions of an indexed boundary trace into
+inverse-labeled forward-dart pairs on the word occurrence path. -/
+noncomputable def IndexedBoundaryTrace.cancellationOccurrenceDartPairs
+    {α : Type*} {raw reduced : Word α}
+    (trace : IndexedBoundaryTrace raw reduced) :
+    List (LabelledDartPair (wordPathGraph raw)) :=
+  trace.cancellationPairs.attach.map fun entry =>
+    let p := entry.1
+    let hp := entry.2
+    let bounds := trace.pairs_inBounds p hp
+    let first : Fin raw.length := ⟨p.1, by omega⟩
+    let second : Fin raw.length := ⟨p.2, bounds.2⟩
+    {
+      first := (first, false)
+      second := (second, false)
+      inverse_labels := by
+        rcases trace.pairs_are_inverseLetters p hp with ⟨a, hfirst, hsecond⟩
+        have hfirst' : raw.get first = a := by
+          change raw[p.1]? = some a at hfirst
+          rw [List.getElem?_eq_getElem first.isLt] at hfirst
+          exact Option.some.inj hfirst
+        have hsecond' : raw.get second = inverseLetter a := by
+          change raw[p.2]? = some (inverseLetter a) at hsecond
+          rw [List.getElem?_eq_getElem second.isLt] at hsecond
+          exact Option.some.inj hsecond
+        change raw.get first = inverseLetter (raw.get second)
+        rw [hfirst', hsecond']
+        simp
+    }
+
+theorem IndexedBoundaryTrace.cancellationOccurrenceDartPairs_positions
+    {α : Type*} {raw reduced : Word α}
+    (trace : IndexedBoundaryTrace raw reduced) :
+    trace.cancellationOccurrenceDartPairs.map
+      (fun pair => (pair.first.1, pair.second.1)) =
+        trace.cancellationOccurrencePairs := by
+  simp [IndexedBoundaryTrace.cancellationOccurrenceDartPairs,
+    IndexedBoundaryTrace.cancellationOccurrencePairs]
+
 /-- Boundary cancellations are the second partial pairing on the same finite
 set of literal source positions. -/
 noncomputable def MinimalAreaRelatorBoundarySeed.boundaryCancellationPairing
@@ -758,6 +797,68 @@ noncomputable def MinimalAreaRelatorBoundarySeed.boundaryCancellationPairing
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) :=
   seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairing
+
+/-- The cancellation matching, now with its source positions represented as
+forward darts on the same literal boundary graph as the stem folds. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.boundaryCancellationDartPairs
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    List (LabelledDartPair
+      seed.balloonBoundaryGraph) :=
+  seed.reducedLollipopBoundaryTrace.cancellationOccurrenceDartPairs.map
+    (LabelledDartPair.map seed.balloonBoundaryHom)
+
+theorem MinimalAreaRelatorBoundarySeed.boundaryCancellationDartPairs_positions
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+  seed.boundaryCancellationDartPairs.map
+      (fun pair => (pair.first.1, pair.second.1)) =
+        seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs := by
+  simpa [MinimalAreaRelatorBoundarySeed.boundaryCancellationDartPairs,
+    LabelledDartPair.map, MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
+    wordPathBoundaryHomWithJoins, Function.comp_def] using
+    seed.reducedLollipopBoundaryTrace.cancellationOccurrenceDartPairs_positions
+
+/-- Fold both families of occurrence pairs directly on the same literal
+boundary graph. This explicit quotient presents the edge identifications
+whose connected components are tracked by the occurrence pairing graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :=
+  WalkFoldResult.foldPairs
+    (seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs)
+    seed.balloonBoundaryLoop
+
+theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold_stem_reverse
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (pair : LabelledDartPair
+      seed.balloonBoundaryGraph)
+    (hpair : pair ∈ seed.boundaryBalloonStemPairs) :
+    seed.boundaryOccurrenceDartPairFold.hom.mapDart pair.second =
+      seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart pair.first) := by
+  exact WalkFoldResult.foldPairs_pair_reverse
+    (seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs)
+    seed.balloonBoundaryLoop pair (List.mem_append_left _ hpair)
+
+theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold_cancellation_reverse
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (pair : LabelledDartPair
+      seed.balloonBoundaryGraph)
+    (hpair : pair ∈ seed.boundaryCancellationDartPairs) :
+    seed.boundaryOccurrenceDartPairFold.hom.mapDart pair.second =
+      seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart pair.first) := by
+  exact WalkFoldResult.foldPairs_pair_reverse
+    (seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs)
+    seed.balloonBoundaryLoop pair (List.mem_append_right _ hpair)
 
 /-- In each connected component of the two occurrence pairings, at most two
 positions can be unmatched by either the balloon-stem folds or the boundary
