@@ -104,6 +104,130 @@ structure IndexedBoundaryTrace {α : Type*} (raw reduced : Word α) where
     i ∈ pairEndpoints cancellationPairs ∨
       i ∈ survivorOccurrences.map Prod.fst
 
+theorem IndexedBoundaryTrace.pair_endpoints_disjoint
+    {α : Type*} {raw reduced : Word α} (trace : IndexedBoundaryTrace raw reduced)
+    {p q : Nat × Nat} (hp : p ∈ trace.cancellationPairs)
+    (hq : q ∈ trace.cancellationPairs) (hne : p ≠ q) :
+    List.Disjoint [p.1, p.2] [q.1, q.2] := by
+  have hsymm : Std.Symm (Function.onFun List.Disjoint
+      (fun a : Nat × Nat => [a.1, a.2])) :=
+    ⟨fun a b h => List.disjoint_comm.mp h⟩
+  have hpairwise := (List.nodup_flatMap.mp (by
+    simpa [pairEndpoints] using trace.endpoints_nodup)).2
+  exact @List.Pairwise.forall (Nat × Nat)
+    (Function.onFun List.Disjoint (fun a => [a.1, a.2]))
+    trace.cancellationPairs hsymm hpairwise p hp q hq hne
+
+theorem IndexedBoundaryTrace.pair_endpoints_ne
+    {α : Type*} {raw reduced : Word α} (trace : IndexedBoundaryTrace raw reduced)
+    {p q : Nat × Nat} (hp : p ∈ trace.cancellationPairs)
+    (hq : q ∈ trace.cancellationPairs) (hne : p ≠ q) :
+    p.1 ≠ q.1 ∧ p.1 ≠ q.2 ∧ p.2 ≠ q.1 ∧ p.2 ≠ q.2 := by
+  have hdisjoint := trace.pair_endpoints_disjoint hp hq hne
+  have hdisjointNe := List.disjoint_iff_ne.mp hdisjoint
+  exact ⟨hdisjointNe _ (by simp) _ (by simp),
+    hdisjointNe _ (by simp) _ (by simp),
+    hdisjointNe _ (by simp) _ (by simp),
+    hdisjointNe _ (by simp) _ (by simp)⟩
+
+theorem IndexedBoundaryTrace.interior_pair_is_strictly_nested
+    {α : Type*} {raw reduced : Word α} (trace : IndexedBoundaryTrace raw reduced)
+    {p q : Nat × Nat} (hp : p ∈ trace.cancellationPairs)
+    (hq : q ∈ trace.cancellationPairs) (hforward : q.1 < q.2)
+    {i : Nat} (hleft : p.1 < i) (hright : i < p.2)
+    (hendpoint : i = q.1 ∨ i = q.2) :
+    p.1 < q.1 ∧ q.2 < p.2 := by
+  have hpne : p ≠ q := by
+    intro heq
+    subst q
+    rcases hendpoint with h | h <;> omega
+  have hendpointsNe := trace.pair_endpoints_ne hp hq hpne
+  have hcompat := trace.pairs_noncrossing p hp q hq
+  rcases hcompat with hsep | hsep | ⟨hpq₁, hqp₂⟩ | ⟨hqp₁, hpq₂⟩
+  · rcases hendpoint with h | h <;> omega
+  · rcases hendpoint with h | h <;> omega
+  · rcases hendpoint with h | h
+    · subst i
+      constructor
+      · exact hleft
+      · omega
+    · subst i
+      constructor
+      · omega
+      · exact hright
+  · rcases hendpoint with h | h <;> omega
+
+theorem IndexedBoundaryTrace.interior_position_has_pair
+    {α : Type*} {raw reduced : Word α} (trace : IndexedBoundaryTrace raw reduced)
+    {p : Nat × Nat} (hp : p ∈ trace.cancellationPairs)
+    {i : Nat} (hleft : p.1 < i) (hright : i < p.2) :
+    ∃ q ∈ trace.cancellationPairs,
+      p.1 < q.1 ∧ q.2 < p.2 ∧ (i = q.1 ∨ i = q.2) := by
+  have hpBound := trace.pairs_inBounds p hp
+  have hInRaw : i < raw.length := Nat.lt_trans hright hpBound.2
+  rcases trace.sourcePositions_partition i hInRaw with hiEndpoint | hiSurvivor
+  · rcases List.mem_flatMap.mp hiEndpoint with ⟨q, hq, hiq⟩
+    simp only [List.mem_cons, List.not_mem_nil] at hiq
+    rcases hiq with hiq | hiq
+    · have hforward := (trace.pairs_inBounds q hq).1
+      obtain ⟨hfirst, hsecond⟩ :=
+        trace.interior_pair_is_strictly_nested hp hq hforward hleft hright
+          (Or.inl hiq)
+      exact ⟨q, hq, hfirst, hsecond, Or.inl hiq⟩
+    · rcases hiq with hiq | hfalse
+      · have hforward := (trace.pairs_inBounds q hq).1
+        obtain ⟨hfirst, hsecond⟩ :=
+          trace.interior_pair_is_strictly_nested hp hq hforward hleft hright
+            (Or.inr hiq)
+        exact ⟨q, hq, hfirst, hsecond, Or.inr hiq⟩
+      · cases hfalse
+  · rcases List.mem_map.mp hiSurvivor with ⟨o, ho, hio⟩
+    have hpos : o.1 = i := by simpa using hio
+    exact False.elim (trace.no_survivor_inside_pair p hp o ho
+      (by omega) (by omega))
+
+theorem IndexedBoundaryTrace.first_interior_position_starts_pair
+    {α : Type*} {raw reduced : Word α} (trace : IndexedBoundaryTrace raw reduced)
+    {p : Nat × Nat} (hp : p ∈ trace.cancellationPairs)
+    (hgap : p.1 + 1 < p.2) :
+  ∃ q ∈ trace.cancellationPairs,
+      q.1 = p.1 + 1 ∧ q.2 < p.2 := by
+  obtain ⟨q, hq, hpq₁, hqp₂, hendpoint⟩ :=
+    trace.interior_position_has_pair (i := p.1 + 1) hp (by omega) hgap
+  rcases hendpoint with hq₁ | hq₂
+  · exact ⟨q, hq, hq₁.symm, hqp₂⟩
+  · exfalso
+    have hqForward := (trace.pairs_inBounds q hq).1
+    omega
+
+theorem IndexedBoundaryTrace.next_interior_position_starts_pair
+    {α : Type*} {raw reduced : Word α} (trace : IndexedBoundaryTrace raw reduced)
+    {p q : Nat × Nat} (hp : p ∈ trace.cancellationPairs)
+    (hq : q ∈ trace.cancellationPairs)
+    (hqFirst : q.1 = p.1 + 1)
+    (hgap : q.2 + 1 < p.2) :
+    ∃ r ∈ trace.cancellationPairs,
+      r.1 = q.2 + 1 ∧ r.2 < p.2 := by
+  have hqForward := (trace.pairs_inBounds q hq).1
+  obtain ⟨r, hr, hpr₁, hpr₂, hendpoint⟩ :=
+    trace.interior_position_has_pair (i := q.2 + 1) hp (by omega) hgap
+  rcases hendpoint with hstart | hclose
+  · exact ⟨r, hr, hstart.symm, hpr₂⟩
+  · exfalso
+    have hrForward := (trace.pairs_inBounds r hr).1
+    have hr2Eq : r.2 = q.2 + 1 := by omega
+    have hne : q ≠ r := by
+      intro heq
+      have heq₂ : q.2 = r.2 := congrArg Prod.snd heq
+      omega
+    have hcompat := trace.pairs_noncrossing q hq r hr
+    rcases hcompat with hsep | hsep | ⟨hq₁, hr₂⟩ | ⟨hr₁, hq₂⟩
+    · omega
+    · omega
+    · omega
+    · have hendpointsNe := trace.pair_endpoints_ne hq hr hne
+      exact hendpointsNe.1 (by omega)
+
 theorem CancellationIntervalsCompatible.map_strictMono {p q : Nat × Nat}
     {f : Nat → Nat} (hf : ∀ ⦃x y⦄, x < y → f x < f y)
     (h : CancellationIntervalsCompatible p q) :
