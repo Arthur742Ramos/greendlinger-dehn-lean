@@ -1011,6 +1011,174 @@ theorem MinimalAreaRelatorBoundarySeed.unorientedEdgeClass_eq_in_component
       intro a b hab
       exact seed.edgeClass_eq_of_pairingGraph_adj a b hab)
 
+/-- The exact fold-setoid relation preserves connected components of the
+alternating occurrence-pairing graph, regardless of dart orientation. -/
+theorem MinimalAreaRelatorBoundarySeed.boundaryPairFoldSetoid_component_eq
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (v x : Fin seed.boundary.reducedLiteralBoundary.length)
+    (vDirection xDirection : Bool)
+    (h : (LabelledDartPairFoldSetoid
+      (seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs)).r
+      (v, vDirection) (x, xDirection)) :
+    (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).connectedComponentMk v =
+    (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).connectedComponentMk x := by
+  classical
+  let pairs := seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs
+  let graph := twoPairingGraph seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing
+  have hpair_adj : ∀ pair ∈ pairs, graph.Adj pair.first.1 pair.second.1 := by
+    intro pair hpair
+    have hmem : (pair.first.1, pair.second.1) ∈
+        pairs.map (fun p => (p.first.1, p.second.1)) :=
+      List.mem_map.mpr ⟨pair, hpair, rfl⟩
+    have hocc : occurrencePairRel
+        (seed.balloonStemOccurrencePairs ++
+          seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs)
+        pair.first.1 pair.second.1 := by
+      rw [← seed.boundaryOccurrenceDartPairFold_positions]
+      exact ⟨(pair.first.1, pair.second.1), hmem, Or.inl ⟨rfl, rfl⟩⟩
+    have hparts := (occurrencePairRel_append_iff
+      seed.balloonStemOccurrencePairs
+      seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs
+      pair.first.1 pair.second.1).1 hocc
+    change seed.balloonStemOccurrencePairing.partner pair.first.1 =
+        some pair.second.1 ∨
+      seed.boundaryCancellationPairing.partner pair.first.1 =
+        some pair.second.1
+    rcases hparts with hstem | hcancel
+    · exact Or.inl ((seed.balloonStemOccurrencePairing_spec
+        pair.first.1 pair.second.1).2 hstem)
+    · exact Or.inr ((seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairing_spec
+        pair.first.1 pair.second.1).2 hcancel)
+  have hstep : ∀ a b,
+      LabelledDartPairFoldGenerator pairs a b →
+      graph.connectedComponentMk a.1 = graph.connectedComponentMk b.1 := by
+    intro a b hgen
+    rcases hgen with ⟨pair, hpair, hfold⟩
+    have hadj := hpair_adj pair hpair
+    have hfirstReverse :
+        (seed.balloonBoundaryGraph.toDartGraph.reverse pair.first).1 =
+          pair.first.1 := by
+      simp [MinimalAreaRelatorBoundarySeed.balloonBoundaryGraph,
+        wordBoundaryGraphWithJoins, wordPathGraph]
+    have hsecondReverse :
+        (seed.balloonBoundaryGraph.toDartGraph.reverse pair.second).1 =
+          pair.second.1 := by
+      simp [MinimalAreaRelatorBoundarySeed.balloonBoundaryGraph,
+        wordBoundaryGraphWithJoins, wordPathGraph]
+    rcases hfold with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · rw [hsecondReverse]
+      exact SimpleGraph.ConnectedComponent.connectedComponentMk_eq_of_adj hadj
+    · rw [hfirstReverse]
+      exact SimpleGraph.ConnectedComponent.connectedComponentMk_eq_of_adj hadj
+  change Relation.EqvGen (LabelledDartPairFoldGenerator pairs)
+    (v, vDirection) (x, xDirection) at h
+  have hmap : ∀ {a b}, Relation.EqvGen (LabelledDartPairFoldGenerator pairs) a b →
+      graph.connectedComponentMk a.1 = graph.connectedComponentMk b.1 := by
+    intro a b hab
+    induction hab with
+    | rel a b hgen => exact hstep a b hgen
+    | refl a => rfl
+    | symm a b _ ih => exact ih.symm
+    | trans a b c _ _ ih₁ ih₂ => exact ih₁.trans ih₂
+  exact hmap h
+
+/-- Equal final unoriented dart classes come from the same alternating
+occurrence-pairing component. Together with the forward theorem above, this
+identifies the edge classes exactly. -/
+theorem MinimalAreaRelatorBoundarySeed.component_eq_of_unorientedEdgeClass_eq
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (v x : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hclass :
+      let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+      (Quotient.mk (UnorientedDartSetoid G)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (v, false)) :
+        UnorientedDartClass G) =
+      Quotient.mk (UnorientedDartSetoid G)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, false))) :
+    (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).connectedComponentMk v =
+    (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).connectedComponentMk x := by
+  classical
+  let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+  let pairs := seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs
+  have hclass' :
+      (Quotient.mk (UnorientedDartSetoid G)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (v, false)) :
+        UnorientedDartClass G) =
+      Quotient.mk (UnorientedDartSetoid G)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, false)) := hclass
+  rcases (unorientedDartClass_eq_iff
+    (seed.boundaryOccurrenceDartPairFold.hom.mapDart (v, false))
+    (seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, false))).1 hclass' with
+    heq | hreverse
+  · have hsetoid : (LabelledDartPairFoldSetoid pairs).r
+        (v, false) (x, false) := by
+      apply (LabelledDartPairFoldResult.foldAll_mapDart_eq_iff_pairFoldSetoid
+        (G := seed.balloonBoundaryGraph) pairs (v, false) (x, false)).1
+      simpa [G, pairs,
+        MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold,
+        WalkFoldResult.foldPairs] using heq
+    exact seed.boundaryPairFoldSetoid_component_eq v x false false hsetoid
+  · have hmapReverse :
+        seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, true) =
+          G.reverse
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, false)) := by
+      change seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (seed.balloonBoundaryGraph.toDartGraph.reverse (x, false)) = _
+      exact (seed.boundaryOccurrenceDartPairFold.hom.map_reverse (x, false)).symm
+    have heq' :
+        seed.boundaryOccurrenceDartPairFold.hom.mapDart (v, false) =
+          seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, true) :=
+      hreverse.trans hmapReverse.symm
+    have hsetoid : (LabelledDartPairFoldSetoid pairs).r
+        (v, false) (x, true) := by
+      apply (LabelledDartPairFoldResult.foldAll_mapDart_eq_iff_pairFoldSetoid
+        (G := seed.balloonBoundaryGraph) pairs (v, false) (x, true)).1
+      simpa [G, pairs,
+        MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold,
+        WalkFoldResult.foldPairs] using heq'
+    exact seed.boundaryPairFoldSetoid_component_eq v x false true hsetoid
+
+/-- Exact correspondence between alternating occurrence components and
+unoriented edges in the explicit pair-fold quotient. -/
+theorem MinimalAreaRelatorBoundarySeed.unorientedEdgeClass_eq_iff_componentEq
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (v x : Fin seed.boundary.reducedLiteralBoundary.length) :
+    (let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+     (Quotient.mk (UnorientedDartSetoid G)
+       (seed.boundaryOccurrenceDartPairFold.hom.mapDart (v, false)) :
+       UnorientedDartClass G) =
+     Quotient.mk (UnorientedDartSetoid G)
+       (seed.boundaryOccurrenceDartPairFold.hom.mapDart (x, false))) ↔
+    (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).connectedComponentMk v =
+    (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).connectedComponentMk x := by
+  constructor
+  · exact seed.component_eq_of_unorientedEdgeClass_eq v x
+  · intro hcomponent
+    let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+    let graph := twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing
+    have hreachable : graph.Reachable v x :=
+      SimpleGraph.ConnectedComponent.eq.mp hcomponent
+    exact hreachable.map_eq_of_adj
+      (fun i => Quotient.mk (UnorientedDartSetoid G)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (i, false)))
+      (by
+        intro a b hadj
+        exact seed.edgeClass_eq_of_pairingGraph_adj a b hadj)
+
 /-- In each connected component of the two occurrence pairings, at most two
 positions can be unmatched by either the balloon-stem folds or the boundary
 cancellations. This is the alternating-component endpoint bound for the
@@ -1105,6 +1273,108 @@ theorem MinimalAreaRelatorBoundarySeed.card_balloonRelatorSides_in_component_le_
     simpa only [Nat.card_eq_fintype_card, unmatchedEither] using hcomponent
   rw [Nat.card_eq_fintype_card]
   exact hcardLeft.trans (hcardMono.trans hcomponent')
+
+/-- A fixed balloon has at most two side occurrences in any one unoriented
+edge class of the explicit pair-fold quotient. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.relatorSidePosition
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin
+      (seed.boundary.reducedBalloons.get i).label.relator.toWord.length) :
+    Fin seed.boundary.reducedLiteralBoundary.length :=
+  ((reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons i).mapDart
+    ((seed.boundary.reducedBalloons.get i).relatorSideDart j)).1
+
+theorem MinimalAreaRelatorBoundarySeed.card_balloonRelatorSides_in_edgeClass_le_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j₀ : Fin
+      (seed.boundary.reducedBalloons.get i).label.relator.toWord.length) :
+    Nat.card {j : Fin
+        (seed.boundary.reducedBalloons.get i).label.relator.toWord.length //
+      (Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (seed.relatorSidePosition i j, false)) :
+        UnorientedDartClass
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+       Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (seed.relatorSidePosition i j₀, false))} ≤ 2 := by
+  classical
+  let sidePosition := seed.relatorSidePosition i
+  let graph := twoPairingGraph seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing
+  let C := graph.connectedComponentMk (sidePosition j₀)
+  let S := {j : Fin
+      (seed.boundary.reducedBalloons.get i).label.relator.toWord.length //
+    (Quotient.mk
+      (UnorientedDartSetoid seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+      (seed.boundaryOccurrenceDartPairFold.hom.mapDart (sidePosition j, false)) :
+      UnorientedDartClass
+        seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+      Quotient.mk
+        (UnorientedDartSetoid seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (sidePosition j₀, false))}
+  let T := {j : Fin
+      (seed.boundary.reducedBalloons.get i).label.relator.toWord.length //
+    sidePosition j ∈ C.supp}
+  have hproperty (j : Fin
+      (seed.boundary.reducedBalloons.get i).label.relator.toWord.length) :
+      (Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (sidePosition j, false)) :
+        UnorientedDartClass
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+      Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (sidePosition j₀, false)) ↔
+      sidePosition j ∈ C.supp := by
+    rw [SimpleGraph.ConnectedComponent.mem_supp_iff]
+    change (Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (sidePosition j, false)) :
+        UnorientedDartClass
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+      Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart (sidePosition j₀, false)) ↔
+      graph.connectedComponentMk (sidePosition j) =
+        graph.connectedComponentMk (sidePosition j₀)
+    exact seed.unorientedEdgeClass_eq_iff_componentEq
+      (sidePosition j) (sidePosition j₀)
+  let e : S ≃ T :=
+    { toFun := fun j => ⟨j.1, (hproperty j.1).mp j.2⟩
+      invFun := fun j => ⟨j.1, (hproperty j.1).mpr j.2⟩
+      left_inv := by intro j; apply Subtype.ext; rfl
+      right_inv := by intro j; apply Subtype.ext; rfl }
+  calc
+    Nat.card {j : Fin
+        (seed.boundary.reducedBalloons.get i).label.relator.toWord.length //
+      (Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (sidePosition j, false)) :
+        UnorientedDartClass
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) =
+      Quotient.mk
+        (UnorientedDartSetoid
+          seed.boundaryOccurrenceDartPairFold.graph.toDartGraph)
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (sidePosition j₀, false))} = Nat.card T := Nat.card_congr e
+    _ ≤ 2 := seed.card_balloonRelatorSides_in_component_le_two i C
 
 /-- A source position that survives the boundary cancellation trace is
 unmatched by its pairing. -/
