@@ -364,6 +364,113 @@ structure LabelledDartPair {α : Type*} (G : LabelledDartGraph α) where
   second : G.toDartGraph.Dart
   inverse_labels : G.label first = inverseLetter (G.label second)
 
+namespace LabelledDartPair
+
+/-- Move an inverse-labeled occurrence pair through a label-preserving graph
+map. -/
+def map {α : Type*} {G H : LabelledDartGraph α}
+    (f : LabelledGraphHom G H) (pair : LabelledDartPair G) :
+    LabelledDartPair H where
+  first := f.mapDart pair.first
+  second := f.mapDart pair.second
+  inverse_labels := by
+    rw [f.map_label, f.map_label]
+    exact pair.inverse_labels
+
+end LabelledDartPair
+
+namespace LabelledGraphHom
+
+/-- If a graph map sends the second occurrence of a pair to the reverse of
+the first, it identifies the second source with the first target. -/
+theorem mapVertex_source_second_eq_target_first {α : Type*}
+    {G H : LabelledDartGraph α} (f : LabelledGraphHom G H)
+    (pair : LabelledDartPair G)
+    (hpair : f.mapDart pair.second =
+      H.toDartGraph.reverse (f.mapDart pair.first)) :
+    f.mapVertex (G.toDartGraph.source pair.second) =
+      f.mapVertex (G.toDartGraph.target pair.first) := by
+  calc
+    f.mapVertex (G.toDartGraph.source pair.second) =
+        H.toDartGraph.source (f.mapDart pair.second) :=
+      (f.map_source pair.second).symm
+    _ = H.toDartGraph.source
+          (H.toDartGraph.reverse (f.mapDart pair.first)) :=
+      congrArg H.toDartGraph.source hpair
+    _ = H.toDartGraph.target (f.mapDart pair.first) :=
+      H.toDartGraph.source_reverse _
+    _ = f.mapVertex (G.toDartGraph.target pair.first) :=
+      f.map_target pair.first
+
+end LabelledGraphHom
+
+/-- A successive fold of a list of inverse-labeled dart pairs, together with
+the fact that every requested pair becomes opposite orientations of one
+quotient edge. -/
+structure LabelledDartPairFoldResult {α : Type u}
+    (G : LabelledDartGraph.{u, v} α) (pairs : List (LabelledDartPair G)) where
+  graph : LabelledDartGraph.{u, v} α
+  hom : LabelledGraphHom G graph
+  pairs_folded : ∀ pair ∈ pairs,
+    hom.mapDart pair.second = graph.toDartGraph.reverse (hom.mapDart pair.first)
+
+namespace LabelledDartPairFoldResult
+
+/-- The first fold in a pair list identifies its second dart with the reverse
+of its first dart. -/
+theorem oneFold_pair_reverse {α : Type u}
+    {G : LabelledDartGraph.{u, v} α}
+    (pair : LabelledDartPair G) :
+    (LabelledGraphHom.fold G pair.first pair.second pair.inverse_labels).mapDart
+        pair.second =
+      (G.folded α pair.first pair.second pair.inverse_labels).toDartGraph.reverse
+        ((LabelledGraphHom.fold G pair.first pair.second pair.inverse_labels).mapDart
+          pair.first) := by
+  change Quotient.mk (EdgeFoldSetoid G.toDartGraph.reverse pair.first pair.second)
+      pair.second =
+    foldedReverse pair.first pair.second G.toDartGraph.reverse_involutive
+      (Quotient.mk (EdgeFoldSetoid G.toDartGraph.reverse pair.first pair.second)
+        pair.first)
+  rw [foldedReverse_mk]
+  exact (fold_twin_darts_eq pair.first pair.second
+    G.toDartGraph.reverse_involutive).symm
+
+/-- Fold all requested pairs in order, transporting each later pair through
+the quotients already constructed. -/
+noncomputable def foldAll {α : Type u} (G : LabelledDartGraph.{u, v} α) :
+    (pairs : List (LabelledDartPair G)) → LabelledDartPairFoldResult G pairs
+  | [] => ⟨G, LabelledGraphHom.id G, by simp⟩
+  | pair :: rest => by
+      let firstGraph := G.folded α pair.first pair.second pair.inverse_labels
+      let firstHom := LabelledGraphHom.fold G pair.first pair.second pair.inverse_labels
+      let transported := rest.map (LabelledDartPair.map firstHom)
+      let later := foldAll firstGraph transported
+      refine ⟨later.graph, LabelledGraphHom.comp later.hom firstHom, ?_⟩
+      intro current hmem
+      simp only [List.mem_cons] at hmem
+      rcases hmem with hhead | htail
+      · subst current
+        change later.hom.mapDart (firstHom.mapDart pair.second) =
+          later.graph.toDartGraph.reverse
+            (later.hom.mapDart (firstHom.mapDart pair.first))
+        calc
+          later.hom.mapDart (firstHom.mapDart pair.second) =
+              later.hom.mapDart
+                (firstGraph.toDartGraph.reverse (firstHom.mapDart pair.first)) :=
+            congrArg later.hom.mapDart (oneFold_pair_reverse pair)
+          _ = later.graph.toDartGraph.reverse
+                (later.hom.mapDart (firstHom.mapDart pair.first)) :=
+            (later.hom.map_reverse _).symm
+      · have htransported : LabelledDartPair.map firstHom current ∈ transported :=
+          List.mem_map.mpr ⟨current, htail, rfl⟩
+        have hfolded := later.pairs_folded (LabelledDartPair.map firstHom current)
+          htransported
+        simpa [LabelledGraphHom.comp, LabelledDartPair.map] using hfolded
+termination_by pairs => pairs.length
+decreasing_by simp
+
+end LabelledDartPairFoldResult
+
 namespace WalkFoldResult
 
 /-- Fold the current images of an original occurrence pair. Earlier folds are
@@ -400,8 +507,21 @@ noncomputable def foldPairs {α : Type*} {G : LabelledDartGraph α}
     {u v : G.toDartGraph.Vertex} {word : Word α}
     (pairs : List (LabelledDartPair G))
     (walk : LabelledWalk G u v word) :
-    WalkFoldResult G (u₀ := u) (v₀ := v) word :=
-  foldPairsFrom ⟨G, LabelledGraphHom.id G, walk⟩ pairs
+    WalkFoldResult G (u₀ := u) (v₀ := v) word := by
+  let folded := LabelledDartPairFoldResult.foldAll G pairs
+  exact ⟨folded.graph, folded.hom, walk.map folded.hom⟩
+
+/-- Every supplied occurrence pair is opposite-oriented in the final graph
+after the complete successive fold chain. -/
+theorem foldPairs_pair_reverse {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (pairs : List (LabelledDartPair G))
+    (walk : LabelledWalk G u v word) (pair : LabelledDartPair G)
+    (hpair : pair ∈ pairs) :
+    (foldPairs pairs walk).hom.mapDart pair.second =
+      (foldPairs pairs walk).graph.toDartGraph.reverse
+        ((foldPairs pairs walk).hom.mapDart pair.first) := by
+  exact (LabelledDartPairFoldResult.foldAll G pairs).pairs_folded pair hpair
 
 end WalkFoldResult
 
@@ -486,6 +606,31 @@ noncomputable def foldPairsThenReduce {α : Type*} {G : LabelledDartGraph α}
   exact ⟨reducedState.graph,
     LabelledGraphHom.comp reducedState.hom paired.hom,
     reducedState.walk⟩
+
+/-- Later adjacent-cancellation folds preserve the opposite orientation of
+every occurrence pair already folded in the source graph. -/
+theorem foldPairsThenReduce_pair_reverse {α : Type*}
+    {G : LabelledDartGraph α} {u v : G.toDartGraph.Vertex}
+    {raw reduced : Word α}
+    (pairs : List (LabelledDartPair G))
+    (steps : FreeCancellationSequence raw reduced)
+    (walk : LabelledWalk G u v raw) (pair : LabelledDartPair G)
+    (hpair : pair ∈ pairs) :
+    (foldPairsThenReduce pairs steps walk).hom.mapDart pair.second =
+      (foldPairsThenReduce pairs steps walk).graph.toDartGraph.reverse
+        ((foldPairsThenReduce pairs steps walk).hom.mapDart pair.first) := by
+  let paired := foldPairs pairs walk
+  let reducedState := LabelledWalk.foldSequence steps paired.walk
+  have hfolded := foldPairs_pair_reverse pairs walk pair hpair
+  change (LabelledGraphHom.comp reducedState.hom paired.hom).mapDart pair.second =
+    reducedState.graph.toDartGraph.reverse
+      ((LabelledGraphHom.comp reducedState.hom paired.hom).mapDart pair.first)
+  calc
+    _ = reducedState.hom.mapDart (paired.hom.mapDart pair.second) := rfl
+    _ = reducedState.hom.mapDart
+          (paired.graph.toDartGraph.reverse (paired.hom.mapDart pair.first)) :=
+      congrArg reducedState.hom.mapDart hfolded
+    _ = _ := (reducedState.hom.map_reverse _).symm
 
 end WalkFoldResult
 

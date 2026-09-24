@@ -1,5 +1,5 @@
 import SmallCancellation.PlanarBoundarySeed
-import SmallCancellation.WordPath
+import SmallCancellation.LollipopFolds
 
 namespace GreendlingerDehn
 
@@ -11,8 +11,7 @@ noncomputable def MinimalAreaRelatorBoundarySeed.foldedBoundaryWalk
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) :=
-  LabelledWalk.foldFreeReduction seed.boundary.reducedLiteralBoundaryShape
-    (wordBoundaryLoop seed.boundary.reducedLiteralBoundary)
+  seed.foldedBalloonBoundaryWalk
 
 /-- The sequential folds preserve a based closed walk and reduce its label to
 the canonical word for the null element. -/
@@ -22,11 +21,11 @@ noncomputable def MinimalAreaRelatorBoundarySeed.foldedBoundaryWalk_isLoop
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
     LabelledWalk seed.foldedBoundaryWalk.graph
       (seed.foldedBoundaryWalk.hom.mapVertex
-        (Quotient.mk (BoundaryVertexSetoid
-          seed.boundary.reducedLiteralBoundary.length) 0))
+        (Quotient.mk (BoundaryVertexJoinSetoid
+          seed.boundary.reducedLiteralBoundary.length seed.balloonEndpointPairs) 0))
       (seed.foldedBoundaryWalk.hom.mapVertex
-        (Quotient.mk (BoundaryVertexSetoid
-          seed.boundary.reducedLiteralBoundary.length) 0)) w.toWord :=
+        (Quotient.mk (BoundaryVertexJoinSetoid
+          seed.boundary.reducedLiteralBoundary.length seed.balloonEndpointPairs) 0)) w.toWord :=
   seed.foldedBoundaryWalk.walk
 
 end GreendlingerDehn
