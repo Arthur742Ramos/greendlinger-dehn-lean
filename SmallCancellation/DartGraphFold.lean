@@ -262,6 +262,16 @@ def fold {α : Type*} (G : LabelledDartGraph α)
   map_target := by intro d; rfl
   map_label := by intro d; rfl
 
+/-- The dart map for a single fold is a quotient map and is surjective. -/
+theorem fold_mapDart_surjective {α : Type*} (G : LabelledDartGraph α)
+    (a b : G.toDartGraph.Dart)
+    (hlabels : G.label a = inverseLetter (G.label b)) :
+    Function.Surjective (fold G a b hlabels).mapDart := by
+  intro d
+  refine Quotient.inductionOn d ?_
+  intro original
+  exact ⟨original, rfl⟩
+
 /-- Compose two label-preserving graph maps. -/
 def comp {α : Type*} {G H K : LabelledDartGraph α}
     (second : LabelledGraphHom H K) (first : LabelledGraphHom G H) :
@@ -356,6 +366,7 @@ structure WalkFoldResult {α : Type u} (G : LabelledDartGraph.{u, v} α)
   graph : LabelledDartGraph.{u, v} α
   hom : LabelledGraphHom G graph
   walk : LabelledWalk graph (hom.mapVertex u₀) (hom.mapVertex v₀) word
+  hom_surjective : Function.Surjective hom.mapDart
 
 /-- A pair of occurrences in the original graph that may be glued in opposite
 orientations. -/
@@ -413,6 +424,7 @@ structure LabelledDartPairFoldResult {α : Type u}
   hom : LabelledGraphHom G graph
   pairs_folded : ∀ pair ∈ pairs,
     hom.mapDart pair.second = graph.toDartGraph.reverse (hom.mapDart pair.first)
+  hom_surjective : Function.Surjective hom.mapDart
 
 namespace LabelledDartPairFoldResult
 
@@ -439,33 +451,44 @@ theorem oneFold_pair_reverse {α : Type u}
 the quotients already constructed. -/
 noncomputable def foldAll {α : Type u} (G : LabelledDartGraph.{u, v} α) :
     (pairs : List (LabelledDartPair G)) → LabelledDartPairFoldResult G pairs
-  | [] => ⟨G, LabelledGraphHom.id G, by simp⟩
+  | [] => ⟨G, LabelledGraphHom.id G, by simp, by
+      intro d
+      exact ⟨d, rfl⟩⟩
   | pair :: rest => by
       let firstGraph := G.folded α pair.first pair.second pair.inverse_labels
       let firstHom := LabelledGraphHom.fold G pair.first pair.second pair.inverse_labels
       let transported := rest.map (LabelledDartPair.map firstHom)
       let later := foldAll firstGraph transported
-      refine ⟨later.graph, LabelledGraphHom.comp later.hom firstHom, ?_⟩
-      intro current hmem
-      simp only [List.mem_cons] at hmem
-      rcases hmem with hhead | htail
-      · subst current
-        change later.hom.mapDart (firstHom.mapDart pair.second) =
-          later.graph.toDartGraph.reverse
-            (later.hom.mapDart (firstHom.mapDart pair.first))
-        calc
-          later.hom.mapDart (firstHom.mapDart pair.second) =
-              later.hom.mapDart
-                (firstGraph.toDartGraph.reverse (firstHom.mapDart pair.first)) :=
-            congrArg later.hom.mapDart (oneFold_pair_reverse pair)
-          _ = later.graph.toDartGraph.reverse
-                (later.hom.mapDart (firstHom.mapDart pair.first)) :=
-            (later.hom.map_reverse _).symm
-      · have htransported : LabelledDartPair.map firstHom current ∈ transported :=
-          List.mem_map.mpr ⟨current, htail, rfl⟩
-        have hfolded := later.pairs_folded (LabelledDartPair.map firstHom current)
-          htransported
-        simpa [LabelledGraphHom.comp, LabelledDartPair.map] using hfolded
+      refine ⟨later.graph, LabelledGraphHom.comp later.hom firstHom, ?_, ?_⟩
+      · intro current hmem
+        simp only [List.mem_cons] at hmem
+        rcases hmem with hhead | htail
+        · subst current
+          change later.hom.mapDart (firstHom.mapDart pair.second) =
+            later.graph.toDartGraph.reverse
+              (later.hom.mapDart (firstHom.mapDart pair.first))
+          calc
+            later.hom.mapDart (firstHom.mapDart pair.second) =
+                later.hom.mapDart
+                  (firstGraph.toDartGraph.reverse (firstHom.mapDart pair.first)) :=
+              congrArg later.hom.mapDart (oneFold_pair_reverse pair)
+            _ = later.graph.toDartGraph.reverse
+                  (later.hom.mapDart (firstHom.mapDart pair.first)) :=
+              (later.hom.map_reverse _).symm
+        · have htransported : LabelledDartPair.map firstHom current ∈ transported :=
+            List.mem_map.mpr ⟨current, htail, rfl⟩
+          have hfolded := later.pairs_folded (LabelledDartPair.map firstHom current)
+            htransported
+          simpa [LabelledGraphHom.comp, LabelledDartPair.map] using hfolded
+      · intro d
+        obtain ⟨middle, hmiddle⟩ := later.hom_surjective d
+        obtain ⟨original, horiginal⟩ :=
+          LabelledGraphHom.fold_mapDart_surjective G pair.first pair.second
+            pair.inverse_labels middle
+        exact ⟨original, by
+          calc
+            _ = later.hom.mapDart middle := congrArg later.hom.mapDart horiginal
+            _ = d := hmiddle⟩
 termination_by pairs => pairs.length
 decreasing_by simp
 
@@ -489,7 +512,15 @@ noncomputable def foldPair {α : Type*} {G : LabelledDartGraph α}
   let quotientMap := LabelledGraphHom.fold state.graph first second hlabels
   exact ⟨state.graph.folded α first second hlabels,
     LabelledGraphHom.comp quotientMap state.hom,
-    state.walk.map quotientMap⟩
+    state.walk.map quotientMap, by
+      intro d
+      obtain ⟨middle, hmiddle⟩ :=
+        LabelledGraphHom.fold_mapDart_surjective state.graph first second hlabels d
+      obtain ⟨original, horiginal⟩ := state.hom_surjective middle
+      exact ⟨original, by
+        calc
+          _ = quotientMap.mapDart middle := congrArg quotientMap.mapDart horiginal
+          _ = d := hmiddle⟩⟩
 
 /-- Fold a finite list of original occurrence pairs successively. Every pair is
 mapped through all preceding quotients before it is folded. -/
@@ -509,7 +540,7 @@ noncomputable def foldPairs {α : Type*} {G : LabelledDartGraph α}
     (walk : LabelledWalk G u v word) :
     WalkFoldResult G (u₀ := u) (v₀ := v) word := by
   let folded := LabelledDartPairFoldResult.foldAll G pairs
-  exact ⟨folded.graph, folded.hom, walk.map folded.hom⟩
+  exact ⟨folded.graph, folded.hom, walk.map folded.hom, folded.hom_surjective⟩
 
 /-- Every supplied occurrence pair is opposite-oriented in the final graph
 after the complete successive fold chain. -/
@@ -563,8 +594,10 @@ noncomputable def foldCancellation {α : Type*} {G : LabelledDartGraph α}
       let after' : LabelledWalk G (G.toDartGraph.target secondDart) v post :=
         hsecondTarget ▸ after
       refine ⟨G.folded α firstDart secondDart hlabels,
-        LabelledGraphHom.fold G firstDart secondDart hlabels, ?_⟩
-      exact before'.spliceAcrossFold firstDart secondDart after' hlabels
+        LabelledGraphHom.fold G firstDart secondDart hlabels, ?_, ?_⟩
+      · exact before'.spliceAcrossFold firstDart secondDart after' hlabels
+      · exact LabelledGraphHom.fold_mapDart_surjective G
+          firstDart secondDart hlabels
 
 /-- Replay a sequence of adjacent free cancellations as successive graph
 folds. The returned homomorphism tracks the original graph into the final
@@ -574,11 +607,17 @@ noncomputable def foldSequence {α : Type*} {G : LabelledDartGraph α}
     (steps : FreeCancellationSequence raw reduced)
     (walk : LabelledWalk G u v raw) : WalkFoldResult G (u₀ := u) (v₀ := v) reduced :=
   match steps with
-  | .refl _ => ⟨G, LabelledGraphHom.id G, walk⟩
+  | .refl _ => ⟨G, LabelledGraphHom.id G, walk, by
+      intro d
+      exact ⟨d, rfl⟩⟩
   | .cons step rest =>
       let first := foldCancellation step walk
       let later := foldSequence rest first.walk
-      ⟨later.graph, LabelledGraphHom.comp later.hom first.hom, later.walk⟩
+      ⟨later.graph, LabelledGraphHom.comp later.hom first.hom, later.walk, by
+        intro d
+        obtain ⟨middle, hmiddle⟩ := later.hom_surjective d
+        obtain ⟨original, horiginal⟩ := first.hom_surjective middle
+        exact ⟨original, by simp [LabelledGraphHom.comp, hmiddle, horiginal]⟩⟩
 
 /-- Every certified free reduction of a boundary word can be realized by a
 finite sequence of labeled edge folds. -/
@@ -605,7 +644,11 @@ noncomputable def foldPairsThenReduce {α : Type*} {G : LabelledDartGraph α}
   let reducedState := LabelledWalk.foldSequence steps paired.walk
   exact ⟨reducedState.graph,
     LabelledGraphHom.comp reducedState.hom paired.hom,
-    reducedState.walk⟩
+    reducedState.walk, by
+      intro d
+      obtain ⟨middle, hmiddle⟩ := reducedState.hom_surjective d
+      obtain ⟨original, horiginal⟩ := paired.hom_surjective middle
+      exact ⟨original, by simp [LabelledGraphHom.comp, hmiddle, horiginal]⟩⟩
 
 /-- Later adjacent-cancellation folds preserve the opposite orientation of
 every occurrence pair already folded in the source graph. -/
