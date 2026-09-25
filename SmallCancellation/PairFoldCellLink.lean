@@ -617,7 +617,7 @@ private theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkEndpointDart_eq_g
       pairFoldCellLinkAt,
       pairFoldFaceCornerEndDarts]
 
-private noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldCellLinkEndpointFiberEquiv
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldCellLinkEndpointFiberEquiv
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)

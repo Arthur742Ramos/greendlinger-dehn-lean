@@ -385,6 +385,160 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkGraph_degree_eq_two_iff_e
       cases hnone
     · exact htwo
 
+/-- The degree of an actual corner-incidence link vertex is one exactly when
+its incident face germ is exposed to the boundary. The endpoint-germ
+equivalence identifies the multigraph's incidence fiber with the fiber of the
+map from face germs to oriented edge ends. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAt_degree_eq_one_iff_edgeMate_none
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+      (seed.pairFoldFaceCornerAtVertexFintype hne v)
+      (seed.pairFoldFaceGermOutDart hne germ)
+      (seed.pairFoldCellLinkEndpointFiberFintype hne
+        (seed.pairFoldFaceGermOutDart hne germ)) = 1 ↔
+      seed.pairFoldFaceEdgeMateAtVertex? hne germ = none := by
+  classical
+  let d := seed.pairFoldFaceGermOutDart hne germ
+  let endpointFiber := {endpoint : seed.PairFoldCellLinkEndpoint hne v //
+    seed.pairFoldCellLinkEndpointDart hne endpoint = d}
+  let germFiber := {other : seed.PairFoldFaceGermsAtVertex hne v //
+    seed.pairFoldFaceGermOutDart hne other = d}
+  letI : Fintype endpointFiber := seed.pairFoldCellLinkEndpointFiberFintype hne d
+  letI : Fintype germFiber := seed.pairFoldFaceGermOutDartFiberFintype hne d
+  have hcardFibers : Fintype.card endpointFiber = Fintype.card germFiber :=
+    Fintype.card_congr (seed.pairFoldCellLinkEndpointFiberEquiv hne d)
+  have hcardOne : Fintype.card germFiber = 1 ↔
+      seed.pairFoldFaceEdgeMateAtVertex? hne germ = none := by
+    have hle : Fintype.card germFiber ≤ 2 := by
+      simpa only [germFiber, d] using
+        seed.pairFoldFaceGermOutDart_fiber_card_le_two hne d
+          ⟨germ, rfl⟩
+    constructor
+    · intro hone
+      cases hmate : seed.pairFoldFaceEdgeMateAtVertex? hne germ with
+      | none => rfl
+      | some other =>
+          have hstep := seed.pairFoldFaceEdgeMateAtVertex?_spec
+            hne germ other hmate
+          have hother : seed.pairFoldFaceGermOutDart hne other = d := by
+            dsimp [d]
+            exact (seed.pairFoldFaceGermOutDart_eq_of_edgeStep
+              hne germ other hstep).symm
+          have hneGerm : germ ≠ other := by
+            intro heq
+            apply hstep.2
+            exact congrArg Prod.snd (congrArg Subtype.val heq)
+          let pair : Fin 2 → germFiber := fun i =>
+            if i.val = 0 then ⟨germ, rfl⟩ else ⟨other, hother⟩
+          have hinj : Function.Injective pair := by
+            intro i j hij
+            fin_cases i <;> fin_cases j
+            · rfl
+            · exact False.elim (hneGerm (congrArg Subtype.val hij))
+            · exact False.elim (hneGerm.symm (congrArg Subtype.val hij))
+            · rfl
+          have htwo : 2 ≤ Fintype.card germFiber := by
+            have h := Fintype.card_le_of_injective pair hinj
+            simpa [pair] using h
+          omega
+    · intro hnone
+      have huniq : ∀ x : germFiber, x.1 = germ := by
+        intro x
+        have houtputs : seed.pairFoldFaceGermOutDart hne germ =
+            seed.pairFoldFaceGermOutDart hne x.1 := by
+          simpa [d] using x.2.symm
+        rcases (seed.pairFoldFaceGermOutDart_eq_iff hne germ x.1).mp houtputs with
+          heq | hedge
+        · exact heq.symm
+        · have hmate := seed.pairFoldFaceEdgeMateAtVertex?_of_edgeStep
+            hne germ x.1 hedge
+          rw [hnone] at hmate
+          cases hmate
+      apply Fintype.card_eq_one_iff.mpr
+      refine ⟨⟨germ, rfl⟩, ?_⟩
+      intro x
+      apply Subtype.ext
+      exact huniq x
+  unfold FiniteIncidenceMultigraph.degree
+  change Fintype.card endpointFiber = 1 ↔ _
+  rw [hcardFibers]
+  exact hcardOne
+
+/-- Every edge end represented by a face germ has actual corner degree one or
+two: one at an exposed end and two where a second face meets across the edge. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAt_degree_eq_one_or_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+      (seed.pairFoldFaceCornerAtVertexFintype hne v)
+      (seed.pairFoldFaceGermOutDart hne germ)
+      (seed.pairFoldCellLinkEndpointFiberFintype hne
+        (seed.pairFoldFaceGermOutDart hne germ)) = 1 ∨
+    @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+      (seed.pairFoldFaceCornerAtVertexFintype hne v)
+      (seed.pairFoldFaceGermOutDart hne germ)
+      (seed.pairFoldCellLinkEndpointFiberFintype hne
+        (seed.pairFoldFaceGermOutDart hne germ)) = 2 := by
+  classical
+  cases hmate : seed.pairFoldFaceEdgeMateAtVertex? hne germ with
+  | none =>
+      left
+      exact (seed.pairFoldCellLinkAt_degree_eq_one_iff_edgeMate_none
+        hne germ).2 hmate
+  | some other =>
+      right
+      have hle :
+          @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+            (seed.pairFoldFaceCornerAtVertexFintype hne v)
+            (seed.pairFoldFaceGermOutDart hne germ)
+            (seed.pairFoldCellLinkEndpointFiberFintype hne
+              (seed.pairFoldFaceGermOutDart hne germ)) ≤ 2 := by
+        simpa [FiniteIncidenceMultigraph.degree,
+          FiniteIncidenceMultigraph.endpointVertex,
+          MinimalAreaRelatorBoundarySeed.pairFoldCellLinkEndpointDart,
+          MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAt] using
+          seed.pairFoldCellLinkAt_degree_le_two hne
+            (seed.pairFoldFaceGermOutDart hne germ)
+      have hneOne :
+          @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+            (seed.pairFoldFaceCornerAtVertexFintype hne v)
+            (seed.pairFoldFaceGermOutDart hne germ)
+            (seed.pairFoldCellLinkEndpointFiberFintype hne
+              (seed.pairFoldFaceGermOutDart hne germ)) ≠ 1 := by
+        intro hdegree
+        have hnone :=
+          (seed.pairFoldCellLinkAt_degree_eq_one_iff_edgeMate_none hne germ).1 hdegree
+        rw [hmate] at hnone
+        cases hnone
+      have hpos :
+          0 < @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+            (seed.pairFoldFaceCornerAtVertexFintype hne v)
+            (seed.pairFoldFaceGermOutDart hne germ)
+            (seed.pairFoldCellLinkEndpointFiberFintype hne
+              (seed.pairFoldFaceGermOutDart hne germ)) := by
+        have hpos' :
+            0 < @Fintype.card
+              {endpoint : seed.PairFoldCellLinkEndpoint hne v //
+                seed.pairFoldCellLinkEndpointDart hne endpoint =
+                  seed.pairFoldFaceGermOutDart hne germ}
+              (seed.pairFoldCellLinkEndpointFiberFintype hne
+                (seed.pairFoldFaceGermOutDart hne germ)) := by
+          apply Fintype.card_pos_iff.mpr
+          exact ⟨(seed.pairFoldCellLinkEndpointFiberEquiv hne
+            (seed.pairFoldFaceGermOutDart hne germ)).symm ⟨germ, rfl⟩⟩
+        simpa [FiniteIncidenceMultigraph.degree,
+          FiniteIncidenceMultigraph.endpointVertex,
+          MinimalAreaRelatorBoundarySeed.pairFoldCellLinkEndpointDart,
+          MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAt] using hpos'
+      omega
+
 /-- In each connected component of the face-germ link, the across-edge
 pairing has either zero or two unmatched germs. The corner pairing is total,
 so these are exactly the closed-cycle and exposed-path cases. -/
@@ -440,8 +594,8 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkComponent_boundary_count_
         hcard.symm
       _ = 2 := htwo
 
-/-- In the actual local face link, each connected component has either no
-degree-one vertices (a closed cycle) or exactly two (an exposed path). -/
+/-- In the face-germ transition graph, each connected component has either no
+degree-one germs or exactly two exposed germs. -/
 theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkComponent_degree_one_count_zero_or_two
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
@@ -489,6 +643,100 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkComponent_degree_one_coun
   · right
     calc
       Nat.card degreeOne = Nat.card exposed := Nat.card_congr degreeOneEquivExposed
+      _ = 2 := htwo
+
+/-- The face-germ endpoint count transfers to the actual corner-incidence
+multigraph: within one transition component, its degree-one oriented edge ends
+are in bijection with the degree-one face germs. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkComponent_degree_one_dart_count_zero_or_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent) :
+    Nat.card {d : seed.PairFoldVertexLinkDart hne v //
+      (∃ germ : C.supp,
+        seed.pairFoldFaceGermOutDart hne germ.1 = d) ∧
+      @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+        (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+        (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 1} = 0 ∨
+    Nat.card {d : seed.PairFoldVertexLinkDart hne v //
+      (∃ germ : C.supp,
+        seed.pairFoldFaceGermOutDart hne germ.1 = d) ∧
+      @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+        (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+        (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 1} = 2 := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  letI : Fintype (seed.pairFoldCellLinkAt hne v).Edge :=
+    seed.pairFoldFaceCornerAtVertexFintype hne v
+  let germDegreeOne := {germ : C.supp //
+    ((seed.pairFoldFaceLinkGraph hne v).neighborFinset germ.1).card = 1}
+  let linkDegreeOne := {d : seed.PairFoldVertexLinkDart hne v //
+    (∃ germ : C.supp, seed.pairFoldFaceGermOutDart hne germ.1 = d) ∧
+      @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+        (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+        (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 1}
+  let toLinkDegreeOne : germDegreeOne → linkDegreeOne := fun germ =>
+    ⟨seed.pairFoldFaceGermOutDart hne germ.1.1,
+      ⟨⟨germ.1, rfl⟩,
+        (seed.pairFoldCellLinkAt_degree_eq_one_iff_edgeMate_none
+          hne germ.1.1).2
+          ((seed.pairFoldFaceLinkGraph_degree_eq_one_iff_edgeMate_none
+            hne germ.1.1).1 germ.2)⟩⟩
+  have hmate_none (germ : germDegreeOne) :
+      seed.pairFoldFaceEdgeMateAtVertex? hne germ.1.1 = none :=
+    (seed.pairFoldFaceLinkGraph_degree_eq_one_iff_edgeMate_none
+      hne germ.1.1).1 germ.2
+  have hinjective : Function.Injective toLinkDegreeOne := by
+    intro germA germB heq
+    apply Subtype.ext
+    apply Subtype.ext
+    have houtputs : seed.pairFoldFaceGermOutDart hne germA.1.1 =
+        seed.pairFoldFaceGermOutDart hne germB.1.1 := by
+      exact congrArg Subtype.val heq
+    rcases (seed.pairFoldFaceGermOutDart_eq_iff hne
+      germA.1.1 germB.1.1).mp houtputs with heqGerm | hedge
+    · exact heqGerm
+    · have hmate := seed.pairFoldFaceEdgeMateAtVertex?_of_edgeStep
+        hne germA.1.1 germB.1.1 hedge
+      rw [hmate_none germA] at hmate
+      cases hmate
+  have hsurjective : Function.Surjective toLinkDegreeOne := by
+    intro d
+    rcases d.2 with ⟨⟨germ, hout⟩, hdegree⟩
+    have hdegreeOut :
+        @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+          (seed.pairFoldFaceCornerAtVertexFintype hne v)
+          (seed.pairFoldFaceGermOutDart hne germ.1)
+          (seed.pairFoldCellLinkEndpointFiberFintype hne
+            (seed.pairFoldFaceGermOutDart hne germ.1)) = 1 := by
+      rw [hout]
+      exact hdegree
+    have hmate := (seed.pairFoldCellLinkAt_degree_eq_one_iff_edgeMate_none
+      hne germ.1).1 hdegreeOut
+    have hfaceDegree :=
+      (seed.pairFoldFaceLinkGraph_degree_eq_one_iff_edgeMate_none
+        hne germ.1).2 hmate
+    refine ⟨⟨germ, hfaceDegree⟩, ?_⟩
+    apply Subtype.ext
+    exact hout
+  let linkEquiv : germDegreeOne ≃ linkDegreeOne :=
+    Equiv.ofBijective toLinkDegreeOne ⟨hinjective, hsurjective⟩
+  have hfaceCount := seed.pairFoldFaceLinkComponent_degree_one_count_zero_or_two
+    hne C
+  rcases hfaceCount with hzero | htwo
+  · left
+    calc
+      Nat.card linkDegreeOne = Nat.card germDegreeOne :=
+        Nat.card_congr linkEquiv.symm
+      _ = 0 := hzero
+  · right
+    calc
+      Nat.card linkDegreeOne = Nat.card germDegreeOne :=
+        Nat.card_congr linkEquiv.symm
       _ = 2 := htwo
 
 end GreendlingerDehn
