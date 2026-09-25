@@ -303,6 +303,124 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkCornerAdjacencyAtVertex_a
   rw [← hsource, ← htarget] at houtAdj
   exact houtAdj
 
+/-- The simple adjacency relation at a quotient vertex is exactly the
+endpoint relation of an actual relator-corner incidence. This supplies the
+reverse direction missing from the component identification: no adjacency
+edge is introduced by the simple-graph encoding without a corresponding
+corner occurrence. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkCornerAdjacencyAtVertex_adj_iff_corner
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (d e : seed.PairFoldVertexLinkDart hne v) :
+    (seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v).Adj d e ↔
+      ∃ corner : seed.PairFoldFaceCornerAtVertex hne v,
+        (seed.pairFoldCellLinkSourceDart hne corner = d ∧
+          seed.pairFoldCellLinkTargetDart hne corner = e) ∨
+        (seed.pairFoldCellLinkSourceDart hne corner = e ∧
+          seed.pairFoldCellLinkTargetDart hne corner = d) := by
+  classical
+  have ofRel : ∀ {a b : seed.PairFoldVertexLinkDart hne v},
+      (∃ germ : seed.PairFoldFaceGermsAtVertex hne v,
+        a = seed.pairFoldFaceGermOutDart hne germ ∧
+          b = seed.pairFoldFaceGermOutDart hne
+            (seed.pairFoldFaceCornerMateAtVertex hne germ)) →
+      ∃ corner : seed.PairFoldFaceCornerAtVertex hne v,
+        (seed.pairFoldCellLinkSourceDart hne corner = a ∧
+          seed.pairFoldCellLinkTargetDart hne corner = b) ∨
+        (seed.pairFoldCellLinkSourceDart hne corner = b ∧
+          seed.pairFoldCellLinkTargetDart hne corner = a) := by
+    intro a b hrel
+    rcases hrel with ⟨germ, hleft, hright⟩
+    rcases germ with ⟨⟨side, endpoint⟩, hvertex⟩
+    cases endpoint with
+    | false =>
+        let g : seed.PairFoldFaceGermsAtVertex hne v := ⟨(side, false), hvertex⟩
+        let corner : seed.PairFoldFaceCornerAtVertex hne v := ⟨side, hvertex⟩
+        have hend := seed.pairFoldFaceCornerEndDarts_eq_germ_pair hne corner
+        have hsource : seed.pairFoldCellLinkSourceDart hne corner =
+            seed.pairFoldFaceGermOutDart hne
+              (seed.pairFoldFaceCornerMateAtVertex hne g) := by
+          cases seed.pairFoldCellLinkAt_vertex hne v
+          change (seed.pairFoldCellLinkAt hne v).source corner = _
+          exact congrArg Prod.fst hend
+        have htarget : seed.pairFoldCellLinkTargetDart hne corner =
+            seed.pairFoldFaceGermOutDart hne g := by
+          cases seed.pairFoldCellLinkAt_vertex hne v
+          change (seed.pairFoldCellLinkAt hne v).target corner = _
+          exact congrArg Prod.snd hend
+        refine ⟨corner, Or.inr ⟨?_, ?_⟩⟩
+        · exact hsource.trans hright.symm
+        · exact htarget.trans hleft.symm
+    | true =>
+        let g : seed.PairFoldFaceGermsAtVertex hne v := ⟨(side, true), hvertex⟩
+        let mate := seed.pairFoldFaceCornerMateAtVertex hne g
+        have hmateEndpoint : mate.1.2 = false := by
+          simp [mate, g, MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMateAtVertex,
+            MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMate]
+        have hmateAsPair : mate.1 = (mate.1.1, false) := by
+          apply Prod.ext
+          · rfl
+          · exact hmateEndpoint
+        let corner : seed.PairFoldFaceCornerAtVertex hne v := ⟨mate.1.1, by
+          rw [← hmateAsPair]
+          exact mate.2⟩
+        let cornerGerm : seed.PairFoldFaceGermsAtVertex hne v :=
+          ⟨(corner.1, false), corner.2⟩
+        have hcornerGerm : cornerGerm = mate := by
+          apply Subtype.ext
+          exact hmateAsPair.symm
+        have hend := seed.pairFoldFaceCornerEndDarts_eq_germ_pair hne corner
+        have hsource : seed.pairFoldCellLinkSourceDart hne corner =
+            seed.pairFoldFaceGermOutDart hne g := by
+          cases seed.pairFoldCellLinkAt_vertex hne v
+          change (seed.pairFoldCellLinkAt hne v).source corner = _
+          calc
+            _ = (seed.pairFoldFaceCornerEndDarts hne corner).1 := rfl
+            _ = seed.pairFoldFaceGermOutDart hne
+                (seed.pairFoldFaceCornerMateAtVertex hne cornerGerm) :=
+              congrArg Prod.fst hend
+            _ = seed.pairFoldFaceGermOutDart hne g := by
+              rw [hcornerGerm]
+              exact congrArg (seed.pairFoldFaceGermOutDart hne)
+                (seed.pairFoldFaceCornerMateAtVertex_involutive hne g)
+        have htarget : seed.pairFoldCellLinkTargetDart hne corner =
+            seed.pairFoldFaceGermOutDart hne mate := by
+          cases seed.pairFoldCellLinkAt_vertex hne v
+          change (seed.pairFoldCellLinkAt hne v).target corner = _
+          calc
+            _ = (seed.pairFoldFaceCornerEndDarts hne corner).2 := rfl
+            _ = seed.pairFoldFaceGermOutDart hne cornerGerm :=
+              congrArg Prod.snd hend
+            _ = seed.pairFoldFaceGermOutDart hne mate := by
+              rw [hcornerGerm]
+        refine ⟨corner, Or.inl ⟨?_, ?_⟩⟩
+        · exact hsource.trans hleft.symm
+        · exact htarget.trans hright.symm
+  constructor
+  · intro hadj
+    change (SimpleGraph.fromRel (fun a b =>
+      ∃ germ : seed.PairFoldFaceGermsAtVertex hne v,
+        a = seed.pairFoldFaceGermOutDart hne germ ∧
+          b = seed.pairFoldFaceGermOutDart hne
+            (seed.pairFoldFaceCornerMateAtVertex hne germ))).Adj d e at hadj
+    rw [SimpleGraph.fromRel_adj] at hadj
+    rcases hadj with ⟨_, hde | hed⟩
+    · exact ofRel hde
+    · rcases ofRel hed with ⟨corner, hdir⟩
+      refine ⟨corner, ?_⟩
+      rcases hdir with hdir | hdir
+      · exact Or.inr hdir
+      · exact Or.inl hdir
+  · rintro ⟨corner, hends⟩
+    rcases hends with ⟨hsource, htarget⟩ | ⟨hsource, htarget⟩
+    · rw [← hsource, ← htarget]
+      exact seed.pairFoldCellLinkCornerAdjacencyAtVertex_adj_corner hne corner
+    · rw [← htarget, ← hsource]
+      exact (seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v).adj_symm
+        (seed.pairFoldCellLinkCornerAdjacencyAtVertex_adj_corner hne corner)
+
 /-- Restrict the corner-incidence multigraph to one supported connected
 component of the simple graph on edge ends. -/
 noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAtComponent
