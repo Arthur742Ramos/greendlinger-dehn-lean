@@ -115,6 +115,104 @@ structure OppositeDartsAt {α : Type*} {G : LabelledDartGraph α}
   second_at : walk.darts[p.2]? = some second
   opposite : second = G.toDartGraph.reverse first
 
+/-- The single fold used to realize an adjacent cancellation identifies the
+two source-walk darts at the cancelled positions as opposite orientations. -/
+theorem foldCancellation_sourcePair {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {pre post : Word α} (a : Letter α)
+    (walk : LabelledWalk G u v
+      (pre ++ [a] ++ [inverseLetter a] ++ post)) :
+    ∃ first second,
+      walk.darts[pre.length]? = some first ∧
+      walk.darts[pre.length + 1]? = some second ∧
+      (LabelledWalk.foldCancellation
+        (FreeCancellationStep.cancel pre post a) walk).hom.mapDart second =
+        (LabelledWalk.foldCancellation
+          (FreeCancellationStep.cancel pre post a) walk).graph.toDartGraph.reverse
+          ((LabelledWalk.foldCancellation
+            (FreeCancellationStep.cancel pre post a) walk).hom.mapDart first) := by
+  let step := FreeCancellationStep.cancel pre post a
+  have hword : (pre ++ [a] ++ [inverseLetter a] ++ post) =
+      (pre ++ ([a] ++ ([inverseLetter a] ++ post))) := by
+    simp [List.append_assoc]
+  let walk' := hword ▸ walk
+  let firstSplit := LabelledWalk.split pre
+    ([a] ++ ([inverseLetter a] ++ post)) walk'
+  let beforeVertex := firstSplit.1
+  let before := firstSplit.2.1
+  let afterBefore := firstSplit.2.2
+  let secondSplit := LabelledWalk.split [a] ([inverseLetter a] ++ post) afterBefore
+  let middleVertex := secondSplit.1
+  let firstEdge := secondSplit.2.1
+  let afterFirst := secondSplit.2.2
+  let thirdSplit := LabelledWalk.split [inverseLetter a] post afterFirst
+  let afterVertex := thirdSplit.1
+  let secondEdge := thirdSplit.2.1
+  let after := thirdSplit.2.2
+  let firstData := LabelledWalk.edgeOf firstEdge
+  let secondData := LabelledWalk.edgeOf secondEdge
+  let firstDart := firstData.dart
+  let secondDart := secondData.dart
+  have hfirstLabel := firstData.label_eq
+  have hsecondLabel := secondData.label_eq
+  have hlabels : G.label firstDart = inverseLetter (G.label secondDart) := by
+    calc
+      G.label firstDart = a := hfirstLabel
+      _ = inverseLetter (G.label secondDart) := by
+        rw [hsecondLabel, LabelledDartGraph.inverseLetter_inverse]
+  have hcast : walk.darts = walk'.darts := by
+    exact (LabelledWalk.darts_cast hword walk).symm
+  have hsplit₁ : walk'.darts = before.darts ++ afterBefore.darts := by
+    change walk'.darts =
+      (LabelledWalk.split pre ([a] ++ ([inverseLetter a] ++ post)) walk').2.1.darts ++
+        (LabelledWalk.split pre ([a] ++ ([inverseLetter a] ++ post)) walk').2.2.darts
+    exact LabelledWalk.split_darts pre ([a] ++ ([inverseLetter a] ++ post)) walk'
+  have hsplit₂ : afterBefore.darts = firstEdge.darts ++ afterFirst.darts := by
+    change afterBefore.darts =
+      (LabelledWalk.split [a] ([inverseLetter a] ++ post) afterBefore).2.1.darts ++
+        (LabelledWalk.split [a] ([inverseLetter a] ++ post) afterBefore).2.2.darts
+    exact LabelledWalk.split_darts [a] ([inverseLetter a] ++ post) afterBefore
+  have hsplit₃ : afterFirst.darts = secondEdge.darts ++ after.darts := by
+    change afterFirst.darts =
+      (LabelledWalk.split [inverseLetter a] post afterFirst).2.1.darts ++
+        (LabelledWalk.split [inverseLetter a] post afterFirst).2.2.darts
+    exact LabelledWalk.split_darts [inverseLetter a] post afterFirst
+  have hfirstDarts : firstEdge.darts = [firstDart] := by
+    simpa [firstData, firstDart] using LabelledWalk.darts_edgeOf firstEdge
+  have hsecondDarts : secondEdge.darts = [secondDart] := by
+    simpa [secondData, secondDart] using LabelledWalk.darts_edgeOf secondEdge
+  have hlist : walk.darts = before.darts ++
+      ([firstDart, secondDart] ++ after.darts) := by
+    calc
+      walk.darts = walk'.darts := hcast
+      _ = before.darts ++ afterBefore.darts := hsplit₁
+      _ = before.darts ++ (firstEdge.darts ++ afterFirst.darts) := by
+        rw [hsplit₂]
+      _ = before.darts ++ ([firstDart] ++ ([secondDart] ++ after.darts)) := by
+        rw [hsplit₃, hfirstDarts, hsecondDarts]
+      _ = before.darts ++ ([firstDart, secondDart] ++ after.darts) := by
+        simp [List.append_assoc]
+  have hbeforeLen : before.darts.length = pre.length := by
+    rw [LabelledWalk.length_darts]
+  have hfirstAt : walk.darts[pre.length]? = some firstDart := by
+    rw [hlist]
+    have hindex : pre.length = before.darts.length + 0 := by omega
+    rw [hindex, getElem?_append_shift]
+    rfl
+  have hsecondAt : walk.darts[pre.length + 1]? = some secondDart := by
+    rw [hlist]
+    have hindex : pre.length + 1 = before.darts.length + 1 := by omega
+    rw [hindex, getElem?_append_shift]
+    rfl
+  have hfolded :
+      (LabelledWalk.foldCancellation step walk).hom.mapDart secondDart =
+        (LabelledWalk.foldCancellation step walk).graph.toDartGraph.reverse
+          ((LabelledWalk.foldCancellation step walk).hom.mapDart firstDart) := by
+    simpa only [step, LabelledWalk.foldCancellation, firstData, secondData,
+      firstDart, secondDart] using
+      (LabelledDartPairFoldResult.oneFold_pair_reverse
+        (⟨firstDart, secondDart, hlabels⟩ : LabelledDartPair G))
+  exact ⟨firstDart, secondDart, hfirstAt, hsecondAt, hfolded⟩
+
 end LabelledWalk
 
 theorem wordPathWalk_darts {α : Type*} (word : Word α) :

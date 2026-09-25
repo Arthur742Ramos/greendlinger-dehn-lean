@@ -980,15 +980,22 @@ noncomputable def foldCancellation {α : Type*} {G : LabelledDartGraph α}
     WalkFoldResult G (u₀ := u) (v₀ := v) reduced := by
   cases step with
   | cancel pre post a =>
-      have walk' : LabelledWalk G u v
+      have hword : (pre ++ [a] ++ [inverseLetter a] ++ post) =
           (pre ++ ([a] ++ ([inverseLetter a] ++ post))) := by
-        simpa [List.append_assoc] using walk
+        simp [List.append_assoc]
+      let walk' := hword ▸ walk
       let firstSplit := split pre ([a] ++ ([inverseLetter a] ++ post)) walk'
-      rcases firstSplit with ⟨beforeVertex, before, rest⟩
+      let beforeVertex := firstSplit.1
+      let before := firstSplit.2.1
+      let rest := firstSplit.2.2
       let secondSplit := split [a] ([inverseLetter a] ++ post) rest
-      rcases secondSplit with ⟨middleVertex, firstEdge, rest⟩
+      let middleVertex := secondSplit.1
+      let firstEdge := secondSplit.2.1
+      let rest := secondSplit.2.2
       let thirdSplit := split [inverseLetter a] post rest
-      rcases thirdSplit with ⟨afterVertex, secondEdge, after⟩
+      let afterVertex := thirdSplit.1
+      let secondEdge := thirdSplit.2.1
+      let after := thirdSplit.2.2
       let firstData := edgeOf firstEdge
       let secondData := edgeOf secondEdge
       let firstDart := firstData.dart
