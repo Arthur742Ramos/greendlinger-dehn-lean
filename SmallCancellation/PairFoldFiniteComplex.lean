@@ -422,4 +422,50 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorPathHomAt_side
           (seed.pairFoldFiniteIncidenceDart hne (Sum.inl side)) := by
       rfl
 
+/-- The source vertex of a positive relator side is the target of its
+oppositely oriented face-side incidence dart. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorPathHomAt_side_source
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length)) :
+    (seed.pairFoldFiniteRelatorPathHomAt hne i).mapVertex (j.val : Nat) =
+      seed.pairFoldFiniteGraph.toDartGraph.target
+        (seed.pairFoldFiniteIncidenceDart hne (Sum.inl ⟨i, j⟩)) := by
+  let hom := seed.pairFoldFiniteRelatorPathHomAt hne i
+  let incidence := seed.pairFoldFiniteIncidenceDart hne (Sum.inl ⟨i, j⟩)
+  calc
+    hom.mapVertex (j.val : Nat) =
+        seed.pairFoldFiniteGraph.toDartGraph.source (hom.mapDart (j, false)) :=
+      (hom.map_source (j, false)).symm
+    _ = seed.pairFoldFiniteGraph.toDartGraph.source
+          (seed.pairFoldFiniteGraph.toDartGraph.reverse incidence) := by
+      rw [seed.pairFoldFiniteRelatorPathHomAt_side]
+    _ = seed.pairFoldFiniteGraph.toDartGraph.target incidence :=
+      seed.pairFoldFiniteGraph.toDartGraph.source_reverse incidence
+
+/-- The target vertex of a positive relator side is the source of its
+oppositely oriented face-side incidence dart. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorPathHomAt_side_target
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length)) :
+    (seed.pairFoldFiniteRelatorPathHomAt hne i).mapVertex (j.val + 1) =
+      seed.pairFoldFiniteGraph.toDartGraph.source
+        (seed.pairFoldFiniteIncidenceDart hne (Sum.inl ⟨i, j⟩)) := by
+  let hom := seed.pairFoldFiniteRelatorPathHomAt hne i
+  let incidence := seed.pairFoldFiniteIncidenceDart hne (Sum.inl ⟨i, j⟩)
+  calc
+    hom.mapVertex (j.val + 1) =
+        seed.pairFoldFiniteGraph.toDartGraph.target (hom.mapDart (j, false)) :=
+      (hom.map_target (j, false)).symm
+    _ = seed.pairFoldFiniteGraph.toDartGraph.target
+          (seed.pairFoldFiniteGraph.toDartGraph.reverse incidence) := by
+      rw [seed.pairFoldFiniteRelatorPathHomAt_side]
+    _ = seed.pairFoldFiniteGraph.toDartGraph.source incidence :=
+      seed.pairFoldFiniteGraph.toDartGraph.target_reverse incidence
+
 end GreendlingerDehn
