@@ -27,3 +27,4 @@ import SmallCancellation.PairFoldRelatorLoops
 import SmallCancellation.PairFoldFiniteComplex
 import SmallCancellation.PairFoldVertexLink
 import SmallCancellation.PairFoldCellLink
+import SmallCancellation.PairFoldLinkComponents

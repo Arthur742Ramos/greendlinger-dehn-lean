@@ -74,6 +74,28 @@ theorem FiniteIncidenceMultigraph.edge_card_le_vertex_card_of_degree_le_two
     nlinarith [hupper]
   omega
 
+/-- The total degree deficit is twice the local Euler defect. Each degree is
+at most two, so the left side counts the missing corner incidences at ends. -/
+theorem FiniteIncidenceMultigraph.sum_degree_deficit_eq_twice_euler_defect
+    (G : FiniteIncidenceMultigraph) [Fintype G.Vertex] [Fintype G.Edge]
+    [DecidableEq G.Vertex]
+    [∀ v, Fintype {endpoint : G.Endpoint // G.endpointVertex endpoint = v}]
+    (hdegree : ∀ v, G.degree v ≤ 2) :
+    (∑ v : G.Vertex, (2 - G.degree v)) =
+      2 * (Fintype.card G.Vertex - Fintype.card G.Edge) := by
+  have hconstant : (∑ _v : G.Vertex, 2) =
+      2 * Fintype.card G.Vertex := by
+    simp [Finset.sum_const, Finset.card_univ, nsmul_eq_mul, Nat.mul_comm]
+  calc
+    (∑ v : G.Vertex, (2 - G.degree v)) =
+        (∑ _v : G.Vertex, 2) - (∑ v : G.Vertex, G.degree v) :=
+      Finset.sum_tsub_distrib Finset.univ (fun v _ => hdegree v)
+    _ = 2 * Fintype.card G.Vertex - 2 * Fintype.card G.Edge := by
+      rw [hconstant, G.sum_degree_eq_two_mul_edge_card]
+    _ = 2 * (Fintype.card G.Vertex - Fintype.card G.Edge) := by
+      have hcard := G.edge_card_le_vertex_card_of_degree_le_two hdegree
+      omega
+
 private theorem reducedWord_consecutive_not_inverse
     {α : Type*} {word : Word α} (hred : FreeGroup.IsReduced word)
     (i : Nat) (hi : i + 1 < word.length) :
