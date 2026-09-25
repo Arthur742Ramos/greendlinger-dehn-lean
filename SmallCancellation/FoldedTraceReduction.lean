@@ -190,7 +190,7 @@ theorem foldCancellation_sourcePair {α : Type*} {G : LabelledDartGraph α}
       _ = before.darts ++ ([firstDart] ++ ([secondDart] ++ after.darts)) := by
         rw [hsplit₃, hfirstDarts, hsecondDarts]
       _ = before.darts ++ ([firstDart, secondDart] ++ after.darts) := by
-        simp [List.append_assoc]
+        simp
   have hbeforeLen : before.darts.length = pre.length := by
     rw [LabelledWalk.length_darts]
   have hfirstAt : walk.darts[pre.length]? = some firstDart := by
@@ -212,6 +212,58 @@ theorem foldCancellation_sourcePair {α : Type*} {G : LabelledDartGraph α}
       (LabelledDartPairFoldResult.oneFold_pair_reverse
         (⟨firstDart, secondDart, hlabels⟩ : LabelledDartPair G))
   exact ⟨firstDart, secondDart, hfirstAt, hsecondAt, hfolded⟩
+
+/-- Later cancellation folds preserve the occurrence pair selected by the
+first step of a free-cancellation sequence. -/
+theorem foldSequence_headSourcePair {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {reduced : Word α}
+    (pre post : Word α) (a : Letter α)
+    (rest : FreeCancellationSequence (pre ++ post) reduced)
+    (walk : LabelledWalk G u v
+      (pre ++ [a] ++ [inverseLetter a] ++ post)) :
+    ∃ first second,
+      walk.darts[pre.length]? = some first ∧
+      walk.darts[pre.length + 1]? = some second ∧
+      (LabelledWalk.foldSequence
+        (FreeCancellationSequence.cons
+          (FreeCancellationStep.cancel pre post a) rest) walk).hom.mapDart second =
+        (LabelledWalk.foldSequence
+          (FreeCancellationSequence.cons
+            (FreeCancellationStep.cancel pre post a) rest) walk).graph.toDartGraph.reverse
+          ((LabelledWalk.foldSequence
+            (FreeCancellationSequence.cons
+              (FreeCancellationStep.cancel pre post a) rest) walk).hom.mapDart first) := by
+  obtain ⟨firstDart, secondDart, hfirstAt, hsecondAt, hfolded⟩ :=
+    foldCancellation_sourcePair a walk
+  let first := LabelledWalk.foldCancellation
+    (FreeCancellationStep.cancel pre post a) walk
+  let later := LabelledWalk.foldSequence rest first.walk
+  have hfinal :
+      (LabelledWalk.foldSequence
+        (FreeCancellationSequence.cons
+          (FreeCancellationStep.cancel pre post a) rest) walk).hom.mapDart secondDart =
+        (LabelledWalk.foldSequence
+          (FreeCancellationSequence.cons
+            (FreeCancellationStep.cancel pre post a) rest) walk).graph.toDartGraph.reverse
+          ((LabelledWalk.foldSequence
+            (FreeCancellationSequence.cons
+              (FreeCancellationStep.cancel pre post a) rest) walk).hom.mapDart firstDart) := by
+    simp only [LabelledWalk.foldSequence]
+    change (LabelledGraphHom.comp later.hom first.hom).mapDart secondDart =
+      later.graph.toDartGraph.reverse
+        ((LabelledGraphHom.comp later.hom first.hom).mapDart firstDart)
+    change later.hom.mapDart (first.hom.mapDart secondDart) =
+      later.graph.toDartGraph.reverse
+        (later.hom.mapDart (first.hom.mapDart firstDart))
+    calc
+      later.hom.mapDart (first.hom.mapDart secondDart) =
+          later.hom.mapDart
+            (first.graph.toDartGraph.reverse (first.hom.mapDart firstDart)) :=
+        congrArg later.hom.mapDart hfolded
+      _ = later.graph.toDartGraph.reverse
+            (later.hom.mapDart (first.hom.mapDart firstDart)) :=
+        (later.hom.map_reverse _).symm
+  exact ⟨firstDart, secondDart, hfirstAt, hsecondAt, hfinal⟩
 
 end LabelledWalk
 
