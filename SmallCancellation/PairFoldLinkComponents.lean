@@ -1556,4 +1556,103 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAtComponent_euler_defect_
       simpa only [Nat.card_eq_fintype_card] using htwo
   exact H.euler_defect_eq_zero_or_one_of_degree_profile hdegree hboundaryCard
 
+/-- The simple graph underlying one restricted corner-incidence link is the
+induced graph on the corresponding component support. Parallel corner
+occurrences remain distinct in the incidence multigraph, while this graph
+forgets that multiplicity. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAtComponentSimpleGraph
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent)
+    (base : C.supp) :
+    SimpleGraph (seed.pairFoldCellLinkAtComponent hne C base).Vertex := by
+  classical
+  cases seed.pairFoldCellLinkAt_vertex hne v
+  let G := seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v
+  let D := G.connectedComponentMk (seed.pairFoldFaceGermOutDart hne base.1)
+  change SimpleGraph {d : seed.PairFoldVertexLinkDart hne v // d ∈ D.supp}
+  exact G.induce D.supp
+
+/-- Every restricted corner-incidence link component is connected once its
+incidence edges are viewed as simple adjacencies. This turns the local degree
+and endpoint count into a path-or-cycle structure, allowing parallel corners
+in the cycle case. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAtComponent_connected
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent)
+    (base : C.supp) :
+    (seed.pairFoldCellLinkAtComponentSimpleGraph hne C base).Connected := by
+  classical
+  cases seed.pairFoldCellLinkAt_vertex hne v
+  let G := seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v
+  let D := G.connectedComponentMk (seed.pairFoldFaceGermOutDart hne base.1)
+  change (G.induce D.supp).Connected
+  exact D.connected_toSimpleGraph
+
+/-- Adjacency in the connected simple graph is witnessed by an actual corner
+edge of the restricted incidence multigraph. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAtComponentSimpleGraph_adj_iff_corner
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent)
+    (base : C.supp)
+    (x y : (seed.pairFoldCellLinkAtComponent hne C base).Vertex) :
+    (seed.pairFoldCellLinkAtComponentSimpleGraph hne C base).Adj x y ↔
+      ∃ corner : (seed.pairFoldCellLinkAtComponent hne C base).Edge,
+        ((seed.pairFoldCellLinkAtComponent hne C base).source corner = x ∧
+          (seed.pairFoldCellLinkAtComponent hne C base).target corner = y) ∨
+        ((seed.pairFoldCellLinkAtComponent hne C base).source corner = y ∧
+          (seed.pairFoldCellLinkAtComponent hne C base).target corner = x) := by
+  classical
+  cases seed.pairFoldCellLinkAt_vertex hne v
+  let G := seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v
+  let D := G.connectedComponentMk (seed.pairFoldFaceGermOutDart hne base.1)
+  let H := seed.pairFoldCellLinkAtComponent hne C base
+  change G.Adj x.1 y.1 ↔ _
+  constructor
+  · intro hadj
+    obtain ⟨corner, hends⟩ :=
+      (seed.pairFoldCellLinkCornerAdjacencyAtVertex_adj_iff_corner
+        hne x.1 y.1).mp hadj
+    have hmem :
+        seed.pairFoldCellLinkSourceDart hne corner ∈ D.supp ∧
+          seed.pairFoldCellLinkTargetDart hne corner ∈ D.supp := by
+      rcases hends with hxy | hyx
+      · exact ⟨hxy.1 ▸ x.2, hxy.2 ▸ y.2⟩
+      · exact ⟨hyx.1 ▸ y.2, hyx.2 ▸ x.2⟩
+    let restrictedCorner : H.Edge := ⟨corner, hmem⟩
+    refine ⟨restrictedCorner, ?_⟩
+    rcases hends with hxy | hyx
+    · left
+      constructor <;> apply Subtype.ext
+      · exact hxy.1
+      · exact hxy.2
+    · right
+      constructor <;> apply Subtype.ext
+      · exact hyx.1
+      · exact hyx.2
+  · rintro ⟨corner, hends⟩
+    apply (seed.pairFoldCellLinkCornerAdjacencyAtVertex_adj_iff_corner
+      hne x.1 y.1).2
+    refine ⟨corner.1, ?_⟩
+    rcases hends with hxy | hyx
+    · left
+      constructor
+      · exact congrArg Subtype.val hxy.1
+      · exact congrArg Subtype.val hxy.2
+    · right
+      constructor
+      · exact congrArg Subtype.val hyx.1
+      · exact congrArg Subtype.val hyx.2
+
 end GreendlingerDehn
