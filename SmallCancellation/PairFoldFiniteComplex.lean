@@ -468,4 +468,455 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorPathHomAt_side_targe
     _ = seed.pairFoldFiniteGraph.toDartGraph.source incidence :=
       seed.pairFoldFiniteGraph.toDartGraph.target_reverse incidence
 
+/-- An endpoint germ of an indexed relator side. `false` selects the source
+of the positive polygon side, and `true` its target. These germs are the
+vertices from which the local face-link graph will be assembled. -/
+abbrev MinimalAreaRelatorBoundarySeed.PairFoldFaceGerm
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :=
+  seed.RelatorSideOccurrence × Bool
+
+/-- The image vertex of an endpoint germ in the finite pair-fold graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceGermVertex
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (germ : seed.PairFoldFaceGerm) :
+    seed.pairFoldFiniteGraph.toDartGraph.Vertex :=
+  if germ.2 then
+    (seed.pairFoldFiniteRelatorPathHomAt hne germ.1.1).mapVertex
+      (germ.1.2.val + 1)
+  else
+    (seed.pairFoldFiniteRelatorPathHomAt hne germ.1.1).mapVertex
+      (germ.1.2.val : Nat)
+
+/-- Each relator endpoint germ lies at the matching endpoint of its
+oppositely oriented ledger dart. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermVertex_eq_incidenceEndpoint
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (germ : seed.PairFoldFaceGerm) :
+    seed.pairFoldFaceGermVertex hne germ =
+      if germ.2 then
+        seed.pairFoldFiniteGraph.toDartGraph.source
+          (seed.pairFoldFiniteIncidenceDart hne (Sum.inl germ.1))
+      else
+        seed.pairFoldFiniteGraph.toDartGraph.target
+          (seed.pairFoldFiniteIncidenceDart hne (Sum.inl germ.1)) := by
+  cases germ with
+  | mk side endpoint =>
+      cases endpoint
+      · exact seed.pairFoldFiniteRelatorPathHomAt_side_source
+          hne side.1 side.2
+      · exact seed.pairFoldFiniteRelatorPathHomAt_side_target
+          hne side.1 side.2
+
+/-- The next side index on a nonempty cyclic word path. -/
+def cyclicNextFin {n : Nat} (i : Fin n) : Fin n :=
+  if h : i.val + 1 < n then ⟨i.val + 1, h⟩ else ⟨0, by omega⟩
+
+/-- The preceding side index on a nonempty cyclic word path. -/
+def cyclicPrevFin {n : Nat} (i : Fin n) : Fin n :=
+  if h : 0 < i.val then ⟨i.val - 1, by omega⟩ else ⟨n - 1, by omega⟩
+
+@[simp] theorem cyclicPrevFin_cyclicNextFin {n : Nat} (i : Fin n) :
+    cyclicPrevFin (cyclicNextFin i) = i := by
+  apply Fin.ext
+  by_cases h : i.val + 1 < n
+  · simp [cyclicNextFin, cyclicPrevFin, h]
+  · have hlast : i.val + 1 = n := by omega
+    simp [cyclicNextFin, cyclicPrevFin, hlast]
+    omega
+
+@[simp] theorem cyclicNextFin_cyclicPrevFin {n : Nat} (i : Fin n) :
+    cyclicNextFin (cyclicPrevFin i) = i := by
+  apply Fin.ext
+  by_cases h : 0 < i.val
+  · have hprev : i.val - 1 + 1 < n := by omega
+    simp [cyclicPrevFin, cyclicNextFin, h, hprev]
+    omega
+  · have hzero : i.val = 0 := by omega
+    have hn : 0 < n := by omega
+    have hwrap : ¬ n - 1 + 1 < n := by omega
+    simp [cyclicPrevFin, cyclicNextFin, hzero, hwrap]
+
+/-- The relator-side occurrence immediately after a given side, with cyclic
+wrap at the end of its indexed polygon. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceSideNext
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side : seed.RelatorSideOccurrence) : seed.RelatorSideOccurrence :=
+  ⟨side.1, cyclicNextFin side.2⟩
+
+/-- The relator-side occurrence immediately before a given side, with cyclic
+wrap at the beginning of its indexed polygon. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePrev
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side : seed.RelatorSideOccurrence) : seed.RelatorSideOccurrence :=
+  ⟨side.1, cyclicPrevFin side.2⟩
+
+/-- The other face-endpoint germ at the same polygon corner. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMate
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (germ : seed.PairFoldFaceGerm) : seed.PairFoldFaceGerm :=
+  if germ.2 then (seed.pairFoldFaceSideNext germ.1, false)
+  else (seed.pairFoldFaceSidePrev germ.1, true)
+
+/-- Turning across a polygon corner is an involution on its endpoint germs. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMate_involutive
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (germ : seed.PairFoldFaceGerm) :
+    seed.pairFoldFaceCornerMate (seed.pairFoldFaceCornerMate germ) = germ := by
+  rcases germ with ⟨side, endpoint⟩
+  cases endpoint <;>
+    simp [MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMate,
+      MinimalAreaRelatorBoundarySeed.pairFoldFaceSideNext,
+      MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePrev]
+
+/-- The corner turn changes the endpoint side of each germ, so it has no
+fixed endpoint germ. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMate_ne
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (germ : seed.PairFoldFaceGerm) :
+    seed.pairFoldFaceCornerMate germ ≠ germ := by
+  rcases germ with ⟨side, endpoint⟩
+  cases endpoint <;>
+    simp [MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMate,
+      MinimalAreaRelatorBoundarySeed.pairFoldFaceSideNext,
+      MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePrev]
+
+/-- The two endpoint germs adjacent at a relator corner map to the same
+vertex in the finite pair-fold graph. This includes the cyclic basepoint join. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermVertex_source
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (side : seed.RelatorSideOccurrence) :
+    seed.pairFoldFaceGermVertex hne (side, false) =
+      (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+        (side.2.val : Nat) := by
+  rfl
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermVertex_target
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (side : seed.RelatorSideOccurrence) :
+    seed.pairFoldFaceGermVertex hne (side, true) =
+      (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+        ((side.2.val + 1 : Nat)) := by
+  rfl
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMate_vertex
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (germ : seed.PairFoldFaceGerm) :
+    seed.pairFoldFaceGermVertex hne (seed.pairFoldFaceCornerMate germ) =
+      seed.pairFoldFaceGermVertex hne germ := by
+  rcases germ with ⟨side, endpoint⟩
+  have hclose := seed.pairFoldFiniteRelatorPathHomAt_endpoints_eq hne side.1
+  cases endpoint
+  · -- A source endpoint meets the previous side's target endpoint.
+    change seed.pairFoldFaceGermVertex hne
+        (seed.pairFoldFaceSidePrev side, true) =
+      seed.pairFoldFaceGermVertex hne (side, false)
+    rw [MinimalAreaRelatorBoundarySeed.pairFoldFaceGermVertex_target,
+      MinimalAreaRelatorBoundarySeed.pairFoldFaceGermVertex_source]
+    simp only [MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePrev]
+    by_cases hprev : 0 < side.2.val
+    · have hval : (cyclicPrevFin side.2).val + 1 = side.2.val := by
+        simp [cyclicPrevFin, hprev]
+        omega
+      exact congrArg
+        (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex hval
+    · have hzero : side.2.val = 0 := by omega
+      have hlength_pos : 0 <
+          (seed.boundary.reducedBalloons.get side.1).label.relator.toWord.length := by
+        have h := side.2.isLt
+        omega
+      have hlast : (cyclicPrevFin side.2).val + 1 =
+          (seed.boundary.reducedBalloons.get side.1).label.relator.toWord.length := by
+        simp only [cyclicPrevFin, dite_eq_right hprev]
+        exact Nat.sub_add_cancel (Nat.succ_le_iff.mpr hlength_pos)
+      calc
+        (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+            ((cyclicPrevFin side.2).val + 1 : Nat) =
+            (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+              (seed.boundary.reducedBalloons.get side.1).label.relator.toWord.length :=
+          congrArg (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex hlast
+        _ = (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex (0 : Nat) :=
+          hclose.symm
+        _ = (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+              (side.2.val : Nat) := by rw [hzero]
+  · -- A target endpoint meets the next side's source endpoint.
+    change seed.pairFoldFaceGermVertex hne
+        (seed.pairFoldFaceSideNext side, false) =
+      seed.pairFoldFaceGermVertex hne (side, true)
+    rw [MinimalAreaRelatorBoundarySeed.pairFoldFaceGermVertex_source,
+      MinimalAreaRelatorBoundarySeed.pairFoldFaceGermVertex_target]
+    simp only [MinimalAreaRelatorBoundarySeed.pairFoldFaceSideNext]
+    by_cases hnext : side.2.val + 1 <
+        (seed.boundary.reducedBalloons.get side.1).label.relator.toWord.length
+    · have hval : (cyclicNextFin side.2).val = side.2.val + 1 := by
+        unfold cyclicNextFin
+        split
+        · rfl
+        · omega
+      exact congrArg
+        (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex hval
+    · have hlast : side.2.val + 1 =
+          (seed.boundary.reducedBalloons.get side.1).label.relator.toWord.length := by
+        omega
+      have hzero : (cyclicNextFin side.2).val = 0 := by
+        unfold cyclicNextFin
+        split
+        · omega
+        · rfl
+      calc
+        (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+            ((cyclicNextFin side.2).val : Nat) =
+            (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+              (0 : Nat) := by rw [hzero]
+        _ = (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+              (seed.boundary.reducedBalloons.get side.1).label.relator.toWord.length :=
+          hclose
+        _ = (seed.pairFoldFiniteRelatorPathHomAt hne side.1).mapVertex
+              (side.2.val + 1 : Nat) := by
+          rw [hlast]
+
+/-- At an edge shared by two distinct relator sides, the source endpoint of
+one side is the target endpoint of the other in the folded graph. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGerm_source_eq_other_target
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (sideA sideB : seed.RelatorSideOccurrence)
+    (hEdge : seed.pairFoldIncidenceEdgeClass (Sum.inl sideA) =
+      seed.pairFoldIncidenceEdgeClass (Sum.inl sideB))
+    (hDistinct : sideA ≠ sideB) :
+    seed.pairFoldFaceGermVertex hne (sideA, false) =
+      seed.pairFoldFaceGermVertex hne (sideB, true) := by
+  let edge := seed.pairFoldIncidenceEdgeClass (Sum.inl sideA)
+  let a : seed.PairFoldIncidenceFiber edge := ⟨Sum.inl sideA, rfl⟩
+  let b : seed.PairFoldIncidenceFiber edge := ⟨Sum.inl sideB, hEdge.symm⟩
+  have hab : a ≠ b := by
+    intro h
+    apply hDistinct
+    exact Sum.inl.inj (congrArg Subtype.val h)
+  have hop := seed.pairFoldFiniteIncidenceDart_opposite_of_ne
+    hne edge a b hab
+  let G := seed.pairFoldFiniteGraph.toDartGraph
+  let incidenceA := seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)
+  let incidenceB := seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideB)
+  have hop' : incidenceB = G.reverse incidenceA := by
+    simpa [incidenceA, incidenceB, a, b] using hop
+  have hA : seed.pairFoldFaceGermVertex hne (sideA, false) =
+      G.target incidenceA := by
+    simpa [incidenceA, G] using
+      seed.pairFoldFaceGermVertex_eq_incidenceEndpoint hne (sideA, false)
+  have hB : seed.pairFoldFaceGermVertex hne (sideB, true) =
+      G.source incidenceB := by
+    simpa [incidenceB, G] using
+      seed.pairFoldFaceGermVertex_eq_incidenceEndpoint hne (sideB, true)
+  have hends : G.source incidenceB = G.target incidenceA := by
+    calc
+      G.source incidenceB = G.source (G.reverse incidenceA) := by rw [hop']
+      _ = G.target incidenceA := G.source_reverse incidenceA
+  calc
+    seed.pairFoldFaceGermVertex hne (sideA, false) = G.target incidenceA := hA
+    _ = G.source incidenceB := hends.symm
+    _ = seed.pairFoldFaceGermVertex hne (sideB, true) := hB.symm
+
+/-- At an edge shared by two distinct relator sides, the target endpoint of
+one side is the source endpoint of the other in the folded graph. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGerm_target_eq_other_source
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (sideA sideB : seed.RelatorSideOccurrence)
+    (hEdge : seed.pairFoldIncidenceEdgeClass (Sum.inl sideA) =
+      seed.pairFoldIncidenceEdgeClass (Sum.inl sideB))
+    (hDistinct : sideA ≠ sideB) :
+    seed.pairFoldFaceGermVertex hne (sideA, true) =
+      seed.pairFoldFaceGermVertex hne (sideB, false) := by
+  let edge := seed.pairFoldIncidenceEdgeClass (Sum.inl sideA)
+  let a : seed.PairFoldIncidenceFiber edge := ⟨Sum.inl sideA, rfl⟩
+  let b : seed.PairFoldIncidenceFiber edge := ⟨Sum.inl sideB, hEdge.symm⟩
+  have hab : a ≠ b := by
+    intro h
+    apply hDistinct
+    exact Sum.inl.inj (congrArg Subtype.val h)
+  have hop := seed.pairFoldFiniteIncidenceDart_opposite_of_ne
+    hne edge a b hab
+  let G := seed.pairFoldFiniteGraph.toDartGraph
+  let incidenceA := seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)
+  let incidenceB := seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideB)
+  have hop' : incidenceB = G.reverse incidenceA := by
+    simpa [incidenceA, incidenceB, a, b] using hop
+  have hA : seed.pairFoldFaceGermVertex hne (sideA, true) =
+      G.source incidenceA := by
+    simpa [incidenceA, G] using
+      seed.pairFoldFaceGermVertex_eq_incidenceEndpoint hne (sideA, true)
+  have hB : seed.pairFoldFaceGermVertex hne (sideB, false) =
+      G.target incidenceB := by
+    simpa [incidenceB, G] using
+      seed.pairFoldFaceGermVertex_eq_incidenceEndpoint hne (sideB, false)
+  have hends : G.target incidenceB = G.source incidenceA := by
+    calc
+      G.target incidenceB = G.target (G.reverse incidenceA) := by rw [hop']
+      _ = G.source incidenceA := G.target_reverse incidenceA
+  calc
+    seed.pairFoldFaceGermVertex hne (sideA, true) = G.source incidenceA := hA
+    _ = G.target incidenceB := hends.symm
+    _ = seed.pairFoldFaceGermVertex hne (sideB, false) := hB.symm
+
+/-- A side of a folded edge has at most one distinct relator-side partner.
+The exact two-incidence ledger rules out three different face-side flags. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceSide_partner_unique
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (sideA sideB sideC : seed.RelatorSideOccurrence)
+    (hEdgeAB : seed.pairFoldIncidenceEdgeClass (Sum.inl sideA) =
+      seed.pairFoldIncidenceEdgeClass (Sum.inl sideB))
+    (hEdgeAC : seed.pairFoldIncidenceEdgeClass (Sum.inl sideA) =
+      seed.pairFoldIncidenceEdgeClass (Sum.inl sideC))
+    (hAB : sideA ≠ sideB) (hAC : sideA ≠ sideC) :
+    sideB = sideC := by
+  classical
+  by_contra hBC
+  let edge := seed.pairFoldIncidenceEdgeClass (Sum.inl sideA)
+  let used : seed.PairFoldUsedEdge :=
+    ⟨edge, ⟨Sum.inl sideA, rfl⟩⟩
+  let fiber := seed.PairFoldIncidenceFiber edge
+  letI := seed.pairFoldIncidenceFiberFintype edge
+  let a : fiber := ⟨Sum.inl sideA, rfl⟩
+  let b : fiber := ⟨Sum.inl sideB, hEdgeAB.symm⟩
+  let c : fiber := ⟨Sum.inl sideC, hEdgeAC.symm⟩
+  have hab : a ≠ b := by
+    intro h
+    apply hAB
+    exact Sum.inl.inj (congrArg Subtype.val h)
+  have hac : a ≠ c := by
+    intro h
+    apply hAC
+    exact Sum.inl.inj (congrArg Subtype.val h)
+  have hbc : b ≠ c := by
+    intro h
+    apply hBC
+    exact Sum.inl.inj (congrArg Subtype.val h)
+  let f : Fin 3 → fiber := fun i =>
+    if i.val = 0 then a else if i.val = 1 then b else c
+  have hf : Function.Injective f := by
+    intro i j hij
+    fin_cases i <;> fin_cases j <;> simp_all [f]
+  have hcard : Fintype.card fiber = 2 := by
+    rw [← Nat.card_eq_fintype_card]
+    exact seed.pairFoldIncidenceFiber_card_eq_two used
+  have hle : 3 ≤ Fintype.card fiber := by
+    simpa [f] using Fintype.card_le_of_injective f hf
+  omega
+
+/-- The partial matching of distinct relator sides that represent the same
+folded edge. -/
+def MinimalAreaRelatorBoundarySeed.PairFoldFaceSidesShareEdge
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (sideA sideB : seed.RelatorSideOccurrence) : Prop :=
+  sideA ≠ sideB ∧
+    seed.pairFoldIncidenceEdgeClass (Sum.inl sideA) =
+      seed.pairFoldIncidenceEdgeClass (Sum.inl sideB)
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceSidesShareEdge_symm
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    {sideA sideB : seed.RelatorSideOccurrence}
+    (h : seed.PairFoldFaceSidesShareEdge sideA sideB) :
+    seed.PairFoldFaceSidesShareEdge sideB sideA :=
+  ⟨h.1.symm, h.2.symm⟩
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceSidesShareEdge_unique
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (sideA sideB sideC : seed.RelatorSideOccurrence)
+    (hAB : seed.PairFoldFaceSidesShareEdge sideA sideB)
+    (hAC : seed.PairFoldFaceSidesShareEdge sideA sideC) :
+    sideB = sideC :=
+  seed.pairFoldFaceSide_partner_unique sideA sideB sideC
+    hAB.2 hAC.2 hAB.1 hAC.1
+
+/-- An edge-link step crosses a folded edge between its two distinct face
+side incidences, matching source to target. -/
+def MinimalAreaRelatorBoundarySeed.PairFoldFaceEdgeStep
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (germA germB : seed.PairFoldFaceGerm) : Prop :=
+  seed.PairFoldFaceSidesShareEdge germA.1 germB.1 ∧ germA.2 ≠ germB.2
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeStep_symm
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    {germA germB : seed.PairFoldFaceGerm}
+    (h : seed.PairFoldFaceEdgeStep germA germB) :
+    seed.PairFoldFaceEdgeStep germB germA :=
+  ⟨seed.pairFoldFaceSidesShareEdge_symm h.1, h.2.symm⟩
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeStep_vertex_eq
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {germA germB : seed.PairFoldFaceGerm}
+    (h : seed.PairFoldFaceEdgeStep germA germB) :
+    seed.pairFoldFaceGermVertex hne germA =
+      seed.pairFoldFaceGermVertex hne germB := by
+  rcases germA with ⟨sideA, endpointA⟩
+  rcases germB with ⟨sideB, endpointB⟩
+  rcases h with ⟨⟨hDistinct, hEdge⟩, hEndpoint⟩
+  cases endpointA <;> cases endpointB
+  · simp at hEndpoint
+  · exact seed.pairFoldFaceGerm_source_eq_other_target
+      hne sideA sideB hEdge hDistinct
+  · exact seed.pairFoldFaceGerm_target_eq_other_source
+      hne sideA sideB hEdge hDistinct
+  · simp at hEndpoint
+
+/-- Every face-side endpoint germ has at most one across-edge partner in its
+folded vertex link. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeStep_unique
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    {germ germB germC : seed.PairFoldFaceGerm}
+    (hB : seed.PairFoldFaceEdgeStep germ germB)
+    (hC : seed.PairFoldFaceEdgeStep germ germC) :
+    germB = germC := by
+  rcases germ with ⟨sideA, endpointA⟩
+  rcases germB with ⟨sideB, endpointB⟩
+  rcases germC with ⟨sideC, endpointC⟩
+  have hside := seed.pairFoldFaceSidesShareEdge_unique
+    sideA sideB sideC hB.1 hC.1
+  cases hside
+  have hEndpoint : endpointB = endpointC := by
+    cases endpointA <;> cases endpointB <;> cases endpointC <;>
+      simp_all [PairFoldFaceEdgeStep]
+  cases hEndpoint
+  rfl
+
 end GreendlingerDehn
