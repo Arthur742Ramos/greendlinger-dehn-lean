@@ -1954,6 +1954,48 @@ def composeIndexedBoundaryTrace
     simpa [inputWord] using composedSurvivorAndCancellationEndpointCount earlier later
   sourcePositions_partition := composedSourcePositions_partition earlier later
 
+/-- View the indexed occurrences recorded by a free-reduction tree as the
+corresponding finite boundary trace. -/
+def toIndexedBoundaryTrace {α : Type*}
+    {raw reduced : Word α} (shape : FreeReductionShape raw reduced) :
+    IndexedBoundaryTrace raw reduced where
+  cancellationPairs := shape.cancellationPairs
+  survivorOccurrences := shape.survivorOccurrences
+  pairs_noncrossing := shape.cancellationPairs_noncrossing
+  pairs_are_inverseLetters := shape.cancellationPairs_are_inverseLetterOccurrences
+  pairs_inBounds := shape.cancellationPairs_inBounds
+  endpoints_nodup := shape.cancellationEndpoints_nodup
+  endpoints_inBounds := shape.cancellationEndpoints_inBounds
+  survivors_labels := shape.survivorOccurrences_labels
+  survivors_length := shape.survivorOccurrences_length
+  survivorPositions_nodup := shape.survivorOccurrencePositions_nodup
+  survivorPositions_strict := shape.survivorOccurrencePositions_strict
+  survivors_are_sourceLetters := shape.survivorOccurrences_are_sourceLetters
+  survivors_inBounds := shape.survivorOccurrences_inBounds
+  endpoints_disjoint_survivors := by
+    intro i hi j hj
+    rcases List.mem_flatMap.mp hi with ⟨p, hp, hip⟩
+    rcases List.mem_map.mp hj with ⟨o, ho, hoj⟩
+    have hdis := shape.survivorOccurrences_disjointFromCancellationPairs o ho p hp
+    simp at hip
+    rcases hip with hip | hip
+    · intro hij
+      apply hdis.1
+      calc
+        o.1 = j := hoj
+        _ = i := hij.symm
+        _ = p.1 := hip
+    · intro hij
+      apply hdis.2
+      calc
+        o.1 = j := hoj
+        _ = i := hij.symm
+        _ = p.2 := hip
+  no_survivor_inside_pair := shape.cancellationPairs_contain_no_survivor
+  endpoint_survivor_count := by
+    simpa [inputWord] using shape.survivorAndCancellationEndpointCount
+  sourcePositions_partition := shape.sourcePositions_partition
+
 end FreeReductionShape
 
 end GreendlingerDehn

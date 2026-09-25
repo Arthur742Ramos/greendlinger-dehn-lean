@@ -17,6 +17,7 @@ import SmallCancellation.DiskMap
 import SmallCancellation.PlanarCancellation
 import SmallCancellation.PlanarBoundarySeed
 import SmallCancellation.WordPath
+import SmallCancellation.FoldedTraceReduction
 import SmallCancellation.LollipopFolds
 import SmallCancellation.FoldedBoundarySeed
 import SmallCancellation.PairingComponents

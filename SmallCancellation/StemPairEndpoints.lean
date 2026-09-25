@@ -1,6 +1,7 @@
 import SmallCancellation.LollipopFolds
 import SmallCancellation.PairingComponents
 import SmallCancellation.PlanarBoundarySeed
+import SmallCancellation.FoldedTraceReduction
 
 /-!
 # Distinct occurrences in the balloon stem pairing
@@ -1269,9 +1270,129 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold_forward
     unfold IndexedBoundaryTrace.cancellationOccurrenceDartPairs at hsource
     rcases List.mem_map.mp hsource with ⟨entry, hentry, rfl⟩
     constructor <;>
-      simpa [LabelledDartPair.map,
+      simp [LabelledDartPair.map,
         MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
         wordPathBoundaryHomWithJoins]
+
+/-- In the direct pair-fold quotient, each global free-cancellation pair is
+already represented by opposite dart occurrences of the original boundary
+walk. This lets us shorten the walk without making any further graph folds. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold_cancellationOppositeDarts
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    {p : Nat × Nat}
+    (hp : p ∈ seed.boundary.reducedLiteralBoundaryShape.cancellationPairs) :
+    seed.boundaryOccurrenceDartPairFold.walk.OppositeDartsAt p := by
+  classical
+  let trace := seed.reducedLollipopBoundaryTrace
+  have hbounds := trace.pairs_inBounds p (by
+    simpa [trace, MinimalAreaRelatorBoundarySeed.reducedLollipopBoundaryTrace,
+      FreeReductionShape.toIndexedBoundaryTrace] using hp)
+  let first : Fin seed.boundary.reducedLiteralBoundary.length :=
+    ⟨p.1, by omega⟩
+  let second : Fin seed.boundary.reducedLiteralBoundary.length :=
+    ⟨p.2, hbounds.2⟩
+  have htrace : (first, second) ∈ trace.cancellationOccurrencePairs := by
+    simpa [first, second, trace] using
+      trace.mem_cancellationOccurrencePairs (p := p) (by
+        simpa [trace, MinimalAreaRelatorBoundarySeed.reducedLollipopBoundaryTrace,
+          FreeReductionShape.toIndexedBoundaryTrace] using hp)
+  have hposition : (first, second) ∈
+      seed.boundaryCancellationDartPairs.map
+        (fun pair => (pair.first.1, pair.second.1)) := by
+    exact seed.boundaryCancellationDartPairs_positions.symm ▸ htrace
+  let pair : LabelledDartPair seed.balloonBoundaryGraph :=
+    Classical.choose (List.mem_map.mp hposition)
+  have hpairFacts := Classical.choose_spec (List.mem_map.mp hposition)
+  have hpair : pair ∈ seed.boundaryCancellationDartPairs := hpairFacts.1
+  have hindices : (pair.first.1, pair.second.1) = (first, second) :=
+    hpairFacts.2
+  have hforward := seed.boundaryOccurrenceDartPairFold_forward pair
+    (List.mem_append_right _ hpair)
+  have hfirstIndex : pair.first.1 = first :=
+    congrArg (fun x : Fin seed.boundary.reducedLiteralBoundary.length ×
+      Fin seed.boundary.reducedLiteralBoundary.length => x.1) hindices
+  have hsecondIndex : pair.second.1 = second :=
+    congrArg (fun x : Fin seed.boundary.reducedLiteralBoundary.length ×
+      Fin seed.boundary.reducedLiteralBoundary.length => x.2) hindices
+  have hfirstPair : pair.first = (first, false) := by
+    apply Prod.ext
+    · exact hfirstIndex
+    · exact hforward.1
+  have hsecondPair : pair.second = (second, false) := by
+    apply Prod.ext
+    · exact hsecondIndex
+    · exact hforward.2
+  have hsourceFirst : seed.balloonBoundaryLoop.darts[p.1]? = some (first, false) := by
+    change (wordBoundaryLoopWithJoins seed.boundary.reducedLiteralBoundary
+      seed.balloonEndpointPairs).darts[p.1]? = some (first, false)
+    exact wordBoundaryLoopWithJoins_darts_get
+      seed.boundary.reducedLiteralBoundary seed.balloonEndpointPairs first
+  have hsourceSecond : seed.balloonBoundaryLoop.darts[p.2]? = some (second, false) := by
+    change (wordBoundaryLoopWithJoins seed.boundary.reducedLiteralBoundary
+      seed.balloonEndpointPairs).darts[p.2]? = some (second, false)
+    exact wordBoundaryLoopWithJoins_darts_get
+      seed.boundary.reducedLiteralBoundary seed.balloonEndpointPairs second
+  let folded := seed.boundaryOccurrenceDartPairFold
+  have hmap := LabelledWalk.darts_map folded.hom seed.balloonBoundaryLoop
+  have hfirstAt : folded.walk.darts[p.1]? =
+      some (folded.hom.mapDart pair.first) := by
+    change (seed.balloonBoundaryLoop.map folded.hom).darts[p.1]? = _
+    have hindexed :
+        (seed.balloonBoundaryLoop.map folded.hom).darts[p.1]? =
+          (seed.balloonBoundaryLoop.darts[p.1]?).map folded.hom.mapDart := by
+      have hlist := congrArg (fun ds : List _ => ds[p.1]?) hmap
+      rw [List.getElem?_map] at hlist
+      exact hlist
+    calc
+      (seed.balloonBoundaryLoop.map folded.hom).darts[p.1]? =
+          (seed.balloonBoundaryLoop.darts[p.1]?).map folded.hom.mapDart := hindexed
+      _ = some (folded.hom.mapDart pair.first) := by
+        rw [hsourceFirst]
+        rw [hfirstPair]
+        rfl
+  have hsecondAt : folded.walk.darts[p.2]? =
+      some (folded.hom.mapDart pair.second) := by
+    change (seed.balloonBoundaryLoop.map folded.hom).darts[p.2]? = _
+    have hindexed :
+        (seed.balloonBoundaryLoop.map folded.hom).darts[p.2]? =
+          (seed.balloonBoundaryLoop.darts[p.2]?).map folded.hom.mapDart := by
+      have hlist := congrArg (fun ds : List _ => ds[p.2]?) hmap
+      rw [List.getElem?_map] at hlist
+      exact hlist
+    calc
+      (seed.balloonBoundaryLoop.map folded.hom).darts[p.2]? =
+          (seed.balloonBoundaryLoop.darts[p.2]?).map folded.hom.mapDart := hindexed
+      _ = some (folded.hom.mapDart pair.second) := by
+        rw [hsourceSecond]
+        rw [hsecondPair]
+        rfl
+  change folded.walk.OppositeDartsAt p
+  exact ⟨folded.hom.mapDart pair.first, folded.hom.mapDart pair.second,
+    hfirstAt, hsecondAt,
+    seed.boundaryOccurrenceDartPairFold_cancellation_reverse pair hpair⟩
+
+/-- The direct pair-fold graph carries the boundary shortened by the recorded
+global free-reduction trace, with no new edge identifications. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairReducedWalk
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    WalkFoldResult
+      (u₀ := Quotient.mk
+        (BoundaryVertexJoinSetoid seed.boundary.reducedLiteralBoundary.length
+          seed.balloonEndpointPairs) 0)
+      (v₀ := Quotient.mk
+        (BoundaryVertexJoinSetoid seed.boundary.reducedLiteralBoundary.length
+          seed.balloonEndpointPairs) 0)
+      seed.balloonBoundaryGraph w.toWord := by
+  let folded := seed.boundaryOccurrenceDartPairFold
+  refine ⟨folded.graph, folded.hom, ?_, folded.hom_surjective⟩
+  exact seed.boundary.reducedLiteralBoundaryShape.reduceWalkByFoldedPairs
+    folded.walk (fun p hp =>
+      seed.boundaryOccurrenceDartPairFold_cancellationOppositeDarts
+        (p := p) hp)
 
 /-- Any edge of the alternating occurrence graph is sent to a single
 unoriented dart class by the explicit pair-fold quotient. -/

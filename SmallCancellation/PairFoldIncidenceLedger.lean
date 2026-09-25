@@ -3,6 +3,16 @@ import Mathlib.Data.Fintype.BigOperators
 
 namespace GreendlingerDehn
 
+/-- The directly shortened boundary walk is carried by exactly the same graph
+used by the global pair-fold incidence ledger. -/
+theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairReducedWalk_graph
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    seed.boundaryOccurrenceDartPairReducedWalk.graph =
+      seed.boundaryOccurrenceDartPairFold.graph := by
+  rfl
+
 /-- A surviving occurrence in the reduced target boundary. -/
 abbrev MinimalAreaRelatorBoundarySeed.PairFoldBoundaryOccurrence
     {α : Type*} [Fintype α] [DecidableEq α]

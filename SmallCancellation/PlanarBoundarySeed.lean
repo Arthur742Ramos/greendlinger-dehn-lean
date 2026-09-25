@@ -97,9 +97,7 @@ noncomputable def MinimalAreaRelatorBoundarySeed.reducedLollipopBoundaryTrace
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
     IndexedBoundaryTrace seed.boundary.reducedLiteralBoundary w.toWord :=
-  FreeReductionShape.composeIndexedBoundaryTrace
-    (FreeReductionShape.identity seed.boundary.reducedLiteralBoundary)
-    seed.boundary.reducedLiteralBoundaryShape
+  seed.boundary.reducedLiteralBoundaryShape.toIndexedBoundaryTrace
 
 theorem MinimalAreaRelatorBoundarySeed.reducedBalloonCount_eq_area
     {α : Type*} [Fintype α] [DecidableEq α]

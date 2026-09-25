@@ -918,6 +918,20 @@ noncomputable def IndexedBoundaryTrace.cancellationOccurrencePairs
     let hp := trace.pairs_inBounds p entry.2
     (⟨p.1, by omega⟩, ⟨p.2, hp.2⟩)
 
+theorem IndexedBoundaryTrace.mem_cancellationOccurrencePairs
+    {α : Type*} {raw reduced : Word α}
+    (trace : IndexedBoundaryTrace raw reduced)
+    {p : Nat × Nat} (hp : p ∈ trace.cancellationPairs) :
+    (⟨p.1, by
+        have hb := trace.pairs_inBounds p hp
+        omega⟩,
+      ⟨p.2, (trace.pairs_inBounds p hp).2⟩) ∈
+        trace.cancellationOccurrencePairs := by
+  dsimp [IndexedBoundaryTrace.cancellationOccurrencePairs]
+  apply List.mem_map.mpr
+  refine ⟨⟨p, hp⟩, List.mem_attach _ ⟨p, hp⟩, ?_⟩
+  apply Prod.ext <;> apply Fin.ext <;> rfl
+
 theorem IndexedBoundaryTrace.cancellationOccurrencePairs_endpoints_val
     {α : Type*} {raw reduced : Word α}
     (trace : IndexedBoundaryTrace raw reduced) :

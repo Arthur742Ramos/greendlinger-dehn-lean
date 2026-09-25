@@ -202,8 +202,7 @@ noncomputable def wordPathWalk {α : Type*} :
       have htarget :
           (wordPathGraph (a :: tail)).toDartGraph.target
               firstDart = (1 : Nat) := rfl
-      simpa [wordPathGraph, firstDart, wordPathShiftHom, shifted] using
-        (LabelledWalk.cons firstDart hsource htarget shifted)
+      exact LabelledWalk.cons firstDart hsource htarget shifted
 
 /-- The generating identification that closes the ends of the occurrence
 path into a polygonal boundary circuit. -/
