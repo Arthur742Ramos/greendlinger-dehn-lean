@@ -223,6 +223,159 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?_ne_cornerMa
     (seed.pairFoldFaceCornerMateAtVertex hne germ) hstep
   exact seed.pairFoldFaceGermOutDart_ne_cornerMate hne germ hout
 
+/-- The simple graph obtained by forgetting parallel occurrences from the
+actual corner-incidence link. Its edges join the oriented edge ends at one
+relator corner. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldCellLinkCornerAdjacencyAtVertex
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (v : seed.pairFoldFiniteGraph.toDartGraph.Vertex) :
+    SimpleGraph (seed.PairFoldVertexLinkDart hne v) :=
+  SimpleGraph.fromRel fun a b =>
+    ∃ germ : seed.PairFoldFaceGermsAtVertex hne v,
+      a = seed.pairFoldFaceGermOutDart hne germ ∧
+        b = seed.pairFoldFaceGermOutDart hne
+          (seed.pairFoldFaceCornerMateAtVertex hne germ)
+
+/-- Each transition in a face-germ component maps either to equality of actual
+edge ends (across a shared edge) or to an edge of the corner-adjacency graph
+(around a polygon corner). -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkComponent_output_darts_reachable
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent)
+    (a b : C.supp) :
+    (seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v).Reachable
+      (seed.pairFoldFaceGermOutDart hne a.1)
+      (seed.pairFoldFaceGermOutDart hne b.1) := by
+  classical
+  let G := seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v
+  have hreach : (seed.pairFoldFaceLinkGraph hne v).Reachable a.1 b.1 := by
+    rw [seed.pairFoldFaceLinkGraph_eq_pairingGraph hne]
+    exact SimpleGraph.ConnectedComponent.reachable_of_mem_supp C a.2 b.2
+  have hstep : ∀ {x y : seed.PairFoldFaceGermsAtVertex hne v},
+      (seed.pairFoldFaceLinkGraph hne v).Adj x y →
+        Relation.ReflTransGen G.Adj
+          (seed.pairFoldFaceGermOutDart hne x)
+          (seed.pairFoldFaceGermOutDart hne y) := by
+    intro x y hadj
+    rcases (seed.pairFoldFaceLinkGraph_adj_iff hne v x y).mp hadj with
+      hcorner | hedge
+    · subst y
+      have hcornerAdj : G.Adj
+          (seed.pairFoldFaceGermOutDart hne x)
+          (seed.pairFoldFaceGermOutDart hne
+            (seed.pairFoldFaceCornerMateAtVertex hne x)) := by
+        apply (SimpleGraph.fromRel_adj _ _ _).2
+        exact ⟨seed.pairFoldFaceGermOutDart_ne_cornerMate hne x,
+          Or.inl ⟨x, rfl, rfl⟩⟩
+      exact Relation.ReflTransGen.single hcornerAdj
+    · have hsame := seed.pairFoldFaceGermOutDart_eq_of_edgeStep hne x y hedge
+      rw [hsame]
+  have hmap : ∀ {x y : seed.PairFoldFaceGermsAtVertex hne v},
+      Relation.ReflTransGen (seed.pairFoldFaceLinkGraph hne v).Adj x y →
+        Relation.ReflTransGen G.Adj
+          (seed.pairFoldFaceGermOutDart hne x)
+          (seed.pairFoldFaceGermOutDart hne y) := by
+    intro x y hxy
+    induction hxy with
+    | refl => exact Relation.ReflTransGen.refl
+    | @tail y z hxy hyz ih => exact ih.trans (hstep hyz)
+  have hsequence :=
+    (seed.pairFoldFaceLinkGraph hne v).reachable_iff_reflTransGen _ _ |>.mp hreach
+  have hmapped := hmap hsequence
+  exact (G.reachable_iff_reflTransGen _ _).2 hmapped
+
+/-- The edge-end image of one face-germ transition component is exactly the
+support of its connected component in the simple corner-adjacency graph. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkComponent_output_image_eq_component_support
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent)
+    (base : C.supp) :
+    {d | ∃ germ : C.supp,
+      seed.pairFoldFaceGermOutDart hne germ.1 = d} =
+      ((seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v).connectedComponentMk
+        (seed.pairFoldFaceGermOutDart hne base.1)).supp := by
+  classical
+  let G := seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v
+  have hsame_output_mem (germ₁ germ₂ : seed.PairFoldFaceGermsAtVertex hne v)
+      (hmem : germ₁ ∈ C.supp)
+      (houtputs : seed.pairFoldFaceGermOutDart hne germ₁ =
+        seed.pairFoldFaceGermOutDart hne germ₂) : germ₂ ∈ C.supp := by
+    rcases (seed.pairFoldFaceGermOutDart_eq_iff hne germ₁ germ₂).mp houtputs with
+      heq | hedge
+    · simpa [heq] using hmem
+    · have hadj := seed.pairFoldFaceLinkGraph_edge_adj hne hedge
+      rw [seed.pairFoldFaceLinkGraph_eq_pairingGraph hne] at hadj
+      exact SimpleGraph.ConnectedComponent.mem_supp_of_adj_mem_supp C hmem hadj
+  have hcorner_mem (germ : seed.PairFoldFaceGermsAtVertex hne v)
+      (hmem : germ ∈ C.supp) :
+      seed.pairFoldFaceCornerMateAtVertex hne germ ∈ C.supp := by
+    have hadj := seed.pairFoldFaceLinkGraph_corner_adj hne germ
+    rw [seed.pairFoldFaceLinkGraph_eq_pairingGraph hne] at hadj
+    exact SimpleGraph.ConnectedComponent.mem_supp_of_adj_mem_supp C hmem hadj
+  have hclosed : ∀ {d e : seed.PairFoldVertexLinkDart hne v},
+      G.Adj d e →
+        (∃ germ : C.supp, seed.pairFoldFaceGermOutDart hne germ.1 = d) →
+        ∃ germ : C.supp, seed.pairFoldFaceGermOutDart hne germ.1 = e := by
+    intro d e hadj hd
+    change d ≠ e ∧
+      ((∃ germ : seed.PairFoldFaceGermsAtVertex hne v,
+          d = seed.pairFoldFaceGermOutDart hne germ ∧
+            e = seed.pairFoldFaceGermOutDart hne
+              (seed.pairFoldFaceCornerMateAtVertex hne germ)) ∨
+        (∃ germ : seed.PairFoldFaceGermsAtVertex hne v,
+          e = seed.pairFoldFaceGermOutDart hne germ ∧
+            d = seed.pairFoldFaceGermOutDart hne
+              (seed.pairFoldFaceCornerMateAtVertex hne germ))) at hadj
+    rcases hd with ⟨current, hcurrent⟩
+    rcases hadj.2 with ⟨germ, hsource, htarget⟩ | ⟨germ, htarget, hsource⟩
+    · have hmem := hsame_output_mem current.1 germ current.2 (hcurrent.trans hsource)
+      exact ⟨⟨seed.pairFoldFaceCornerMateAtVertex hne germ,
+        hcorner_mem germ hmem⟩, htarget.symm⟩
+    · have hmateMem := hsame_output_mem current.1
+        (seed.pairFoldFaceCornerMateAtVertex hne germ) current.2
+        (hcurrent.trans hsource)
+      have hdouble := seed.pairFoldFaceCornerMateAtVertex_involutive hne germ
+      have hgermMem := hcorner_mem
+        (seed.pairFoldFaceCornerMateAtVertex hne germ) hmateMem
+      rw [hdouble] at hgermMem
+      exact ⟨⟨germ, hgermMem⟩, htarget.symm⟩
+  have hclosed_reachable : ∀ {d e : seed.PairFoldVertexLinkDart hne v},
+      Relation.ReflTransGen G.Adj d e →
+        (∃ germ : C.supp, seed.pairFoldFaceGermOutDart hne germ.1 = d) →
+        ∃ germ : C.supp, seed.pairFoldFaceGermOutDart hne germ.1 = e := by
+    intro d e hreach hd
+    induction hreach with
+    | refl => exact hd
+    | @tail e f hprev hlast ih => exact hclosed hlast ih
+  ext d
+  constructor
+  · rintro ⟨germ, rfl⟩
+    rw [SimpleGraph.ConnectedComponent.mem_supp_iff]
+    change G.connectedComponentMk
+      (seed.pairFoldFaceGermOutDart hne germ.1) =
+        G.connectedComponentMk (seed.pairFoldFaceGermOutDart hne base.1)
+    exact SimpleGraph.ConnectedComponent.sound
+      (seed.pairFoldCellLinkComponent_output_darts_reachable hne C base germ).symm
+  · intro hd
+    have hbase : seed.pairFoldFaceGermOutDart hne base.1 ∈
+        (G.connectedComponentMk
+          (seed.pairFoldFaceGermOutDart hne base.1)).supp :=
+      SimpleGraph.ConnectedComponent.connectedComponentMk_mem
+    have hreach := SimpleGraph.ConnectedComponent.reachable_of_mem_supp
+      (G.connectedComponentMk (seed.pairFoldFaceGermOutDart hne base.1)) hbase hd
+    have hsequence := (G.reachable_iff_reflTransGen _ _).mp hreach
+    exact hclosed_reachable hsequence ⟨base, rfl⟩
+
 /-- At each face germ the actual link degree is one at an exposed edge end
 and two when a second face is folded across that edge. -/
 theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkGraph_degree_eq_one_or_two
@@ -539,6 +692,69 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAt_degree_eq_one_or_two
           MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAt] using hpos'
       omega
 
+/-- The second corner incidence is present exactly when a distinct face germ
+is paired across the represented edge. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkAt_degree_eq_two_iff_edgeMate_some
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+      (seed.pairFoldFaceCornerAtVertexFintype hne v)
+      (seed.pairFoldFaceGermOutDart hne germ)
+      (seed.pairFoldCellLinkEndpointFiberFintype hne
+        (seed.pairFoldFaceGermOutDart hne germ)) = 2 ↔
+      ∃ other, seed.pairFoldFaceEdgeMateAtVertex? hne germ = some other := by
+  constructor
+  · intro hdegree
+    cases hmate : seed.pairFoldFaceEdgeMateAtVertex? hne germ with
+    | none =>
+        have hone := (seed.pairFoldCellLinkAt_degree_eq_one_iff_edgeMate_none
+          hne germ).2 hmate
+        omega
+    | some other => exact ⟨other, rfl⟩
+  · rintro ⟨other, hmate⟩
+    rcases seed.pairFoldCellLinkAt_degree_eq_one_or_two hne germ with hone | htwo
+    · have hnone := (seed.pairFoldCellLinkAt_degree_eq_one_iff_edgeMate_none
+        hne germ).1 hone
+      rw [hmate] at hnone
+      cases hnone
+    · exact htwo
+
+/-- Every edge end in the supported actual corner-link component has exactly
+one or two corner incidences; the component's simple-graph support contains
+no stem-only isolated edge ends. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkActualComponent_degree_eq_one_or_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent)
+    (base : C.supp) {d : seed.PairFoldVertexLinkDart hne v}
+    (hd : d ∈ ((seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v).connectedComponentMk
+      (seed.pairFoldFaceGermOutDart hne base.1)).supp) :
+    @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+      (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+      (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 1 ∨
+    @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+      (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+      (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 2 := by
+  have hsupport := seed.pairFoldCellLinkComponent_output_image_eq_component_support
+    hne C base
+  have himage : ∃ germ : C.supp,
+      seed.pairFoldFaceGermOutDart hne germ.1 = d := by
+    have hd' : d ∈ {d | ∃ germ : C.supp,
+        seed.pairFoldFaceGermOutDart hne germ.1 = d} := by
+      rw [hsupport]
+      exact hd
+    exact hd'
+  rcases himage with ⟨germ, houtput⟩
+  have hdegree := seed.pairFoldCellLinkAt_degree_eq_one_or_two hne germ.1
+  rw [houtput] at hdegree
+  exact hdegree
+
 /-- In each connected component of the face-germ link, the across-edge
 pairing has either zero or two unmatched germs. The corner pairing is total,
 so these are exactly the closed-cycle and exposed-path cases. -/
@@ -738,5 +954,84 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkComponent_degree_one_dart
       Nat.card linkDegreeOne = Nat.card germDegreeOne :=
         Nat.card_congr linkEquiv.symm
       _ = 2 := htwo
+
+/-- Every connected component of the actual corner-adjacency graph that
+contains a face end has zero or two degree-one vertices in the incidence
+multigraph. This is the endpoint profile of a cycle or a path, with parallel
+corner occurrences retained in the degree count. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldCellLinkActualComponent_degree_one_count_zero_or_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent)
+    (base : C.supp) :
+    Nat.card {d : seed.PairFoldVertexLinkDart hne v //
+      d ∈ ((seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v).connectedComponentMk
+        (seed.pairFoldFaceGermOutDart hne base.1)).supp ∧
+      @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+        (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+        (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 1} = 0 ∨
+    Nat.card {d : seed.PairFoldVertexLinkDart hne v //
+      d ∈ ((seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v).connectedComponentMk
+        (seed.pairFoldFaceGermOutDart hne base.1)).supp ∧
+      @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+        (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+        (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 1} = 2 := by
+  classical
+  let G := seed.pairFoldCellLinkCornerAdjacencyAtVertex hne v
+  let D := G.connectedComponentMk (seed.pairFoldFaceGermOutDart hne base.1)
+  let actualDegreeOne := {d : seed.PairFoldVertexLinkDart hne v //
+    d ∈ D.supp ∧
+      @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+        (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+        (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 1}
+  let representedDegreeOne := {d : seed.PairFoldVertexLinkDart hne v //
+    (∃ germ : C.supp, seed.pairFoldFaceGermOutDart hne germ.1 = d) ∧
+      @FiniteIncidenceMultigraph.degree (seed.pairFoldCellLinkAt hne v)
+        (seed.pairFoldFaceCornerAtVertexFintype hne v) d
+        (seed.pairFoldCellLinkEndpointFiberFintype hne d) = 1}
+  have hsupport := seed.pairFoldCellLinkComponent_output_image_eq_component_support
+    hne C base
+  have hmem (d : seed.PairFoldVertexLinkDart hne v) :
+      d ∈ D.supp ↔ ∃ germ : C.supp,
+        seed.pairFoldFaceGermOutDart hne germ.1 = d := by
+    constructor
+    · intro hd
+      have hi : d ∈ {d | ∃ germ : C.supp,
+          seed.pairFoldFaceGermOutDart hne germ.1 = d} := by
+        rw [hsupport]
+        exact hd
+      exact hi
+    · intro hd
+      have hi : d ∈ {d | ∃ germ : C.supp,
+          seed.pairFoldFaceGermOutDart hne germ.1 = d} := hd
+      rw [hsupport] at hi
+      exact hi
+  let componentEquiv : actualDegreeOne ≃ representedDegreeOne := {
+    toFun := fun d => ⟨d.1, ⟨(hmem d.1).mp d.2.1, d.2.2⟩⟩
+    invFun := fun d => ⟨d.1, ⟨(hmem d.1).mpr d.2.1, d.2.2⟩⟩
+    left_inv := by
+      intro d
+      apply Subtype.ext
+      rfl
+    right_inv := by
+      intro d
+      apply Subtype.ext
+      rfl }
+  have hrepresented :=
+    seed.pairFoldCellLinkComponent_degree_one_dart_count_zero_or_two hne C
+  rcases hrepresented with hzero | htwo
+  · left
+    calc
+      Nat.card actualDegreeOne = Nat.card representedDegreeOne :=
+        Nat.card_congr componentEquiv
+      _ = 0 := by simpa [representedDegreeOne] using hzero
+  · right
+    calc
+      Nat.card actualDegreeOne = Nat.card representedDegreeOne :=
+        Nat.card_congr componentEquiv
+      _ = 2 := by simpa [representedDegreeOne] using htwo
 
 end GreendlingerDehn
