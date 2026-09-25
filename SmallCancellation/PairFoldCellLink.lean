@@ -96,6 +96,43 @@ theorem FiniteIncidenceMultigraph.sum_degree_deficit_eq_twice_euler_defect
       have hcard := G.edge_card_le_vertex_card_of_degree_le_two hdegree
       omega
 
+/-- A finite incidence graph with degrees one or two has Euler
+defect zero when it has no degree-one vertices and one when it has exactly
+two. The degree sum counts parallel corner occurrences separately. -/
+theorem FiniteIncidenceMultigraph.euler_defect_eq_zero_or_one_of_degree_profile
+    (G : FiniteIncidenceMultigraph) [Fintype G.Vertex] [Fintype G.Edge]
+    [DecidableEq G.Vertex]
+    [∀ v, Fintype {endpoint : G.Endpoint // G.endpointVertex endpoint = v}]
+    (hdegree : ∀ v, G.degree v = 1 ∨ G.degree v = 2)
+    (hboundary : Fintype.card {v : G.Vertex // G.degree v = 1} = 0 ∨
+      Fintype.card {v : G.Vertex // G.degree v = 1} = 2) :
+    Fintype.card G.Vertex - Fintype.card G.Edge = 0 ∨
+      Fintype.card G.Vertex - Fintype.card G.Edge = 1 := by
+  classical
+  have hdegree_le_two : ∀ v, G.degree v ≤ 2 := by
+    intro v
+    rcases hdegree v with hone | htwo <;> omega
+  have hdeficit : (∑ v : G.Vertex, (2 - G.degree v)) =
+      Fintype.card {v : G.Vertex // G.degree v = 1} := by
+    calc
+      (∑ v : G.Vertex, (2 - G.degree v)) =
+          ∑ v : G.Vertex, if G.degree v = 1 then 1 else 0 := by
+        apply Finset.sum_congr rfl
+        intro v hv
+        rcases hdegree v with hone | htwo
+        · simp [hone]
+        · simp [htwo]
+      _ = Fintype.card {v : G.Vertex // G.degree v = 1} := by
+        rw [Finset.sum_boole]
+        simp [Fintype.card_subtype]
+  have hEuler := G.sum_degree_deficit_eq_twice_euler_defect hdegree_le_two
+  rw [hdeficit] at hEuler
+  rcases hboundary with hzero | htwo
+  · left
+    omega
+  · right
+    omega
+
 private theorem reducedWord_consecutive_not_inverse
     {α : Type*} {word : Word α} (hred : FreeGroup.IsReduced word)
     (i : Nat) (hi : i + 1 < word.length) :
