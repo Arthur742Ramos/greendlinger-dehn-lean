@@ -919,4 +919,262 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeStep_unique
   cases hEndpoint
   rfl
 
+/-- Choose the unique other relator side in the same folded-edge class, when
+the second incidence is another face side. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePartner?
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side : seed.RelatorSideOccurrence) :
+    Option seed.RelatorSideOccurrence := by
+  classical
+  exact if h : ∃ other, seed.PairFoldFaceSidesShareEdge side other then
+    some (Classical.choose h)
+  else none
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePartner?_spec
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side other : seed.RelatorSideOccurrence)
+    (h : seed.pairFoldFaceSidePartner? side = some other) :
+    seed.PairFoldFaceSidesShareEdge side other := by
+  classical
+  by_cases hex : ∃ x, seed.PairFoldFaceSidesShareEdge side x
+  · have heq : Classical.choose hex = other := by
+      simpa [MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePartner?, hex] using h
+    cases heq
+    exact Classical.choose_spec hex
+  · simp [MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePartner?, hex] at h
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePartner?_of_shareEdge
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side other : seed.RelatorSideOccurrence)
+    (h : seed.PairFoldFaceSidesShareEdge side other) :
+    seed.pairFoldFaceSidePartner? side = some other := by
+  classical
+  let hex : ∃ x, seed.PairFoldFaceSidesShareEdge side x := ⟨other, h⟩
+  have heq : Classical.choose hex = other :=
+    seed.pairFoldFaceSidesShareEdge_unique side (Classical.choose hex) other
+      (Classical.choose_spec hex) h
+  simp [MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePartner?, hex, heq]
+
+/-- The selected across-edge transition on endpoint germs, when the opposite
+incidence is another relator side. Boundary incidences have no such transition. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMate?
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (germ : seed.PairFoldFaceGerm) : Option seed.PairFoldFaceGerm :=
+  (seed.pairFoldFaceSidePartner? germ.1).map
+    (fun side => (side, !germ.2))
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMate?_spec
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (germ other : seed.PairFoldFaceGerm)
+    (h : seed.pairFoldFaceEdgeMate? germ = some other) :
+    seed.PairFoldFaceEdgeStep germ other := by
+  classical
+  rcases germ with ⟨side, endpoint⟩
+  cases hpartner : seed.pairFoldFaceSidePartner? side with
+  | none => simp [MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMate?, hpartner] at h
+  | some otherSide =>
+      have hside : seed.PairFoldFaceSidesShareEdge side otherSide :=
+        seed.pairFoldFaceSidePartner?_spec side otherSide hpartner
+      have hEndpoint : endpoint ≠ !endpoint := by
+        cases endpoint <;> decide
+      have heq : other = (otherSide, !endpoint) := by
+        simpa [MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMate?, hpartner] using h.symm
+      cases heq
+      exact ⟨hside, hEndpoint⟩
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMate?_of_edgeStep
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (germ other : seed.PairFoldFaceGerm)
+    (h : seed.PairFoldFaceEdgeStep germ other) :
+    seed.pairFoldFaceEdgeMate? germ = some other := by
+  classical
+  have hside := seed.pairFoldFaceSidePartner?_of_shareEdge germ.1 other.1 h.1
+  have hbool : other.2 = !germ.2 := by
+    rcases h with ⟨_, hboolNe⟩
+    cases hG : germ.2 <;> cases hO : other.2
+    · simp [hG, hO] at hboolNe
+    · rfl
+    · rfl
+    · simp [hG, hO] at hboolNe
+  simp [MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMate?, hside]
+  apply Prod.ext
+  · rfl
+  · exact hbool.symm
+
+/-- The optional edge transition is a symmetric partial involution on face
+endpoint germs. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMate?_involutive
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (germ other : seed.PairFoldFaceGerm)
+    (h : seed.pairFoldFaceEdgeMate? germ = some other) :
+    seed.pairFoldFaceEdgeMate? other = some germ := by
+  apply seed.pairFoldFaceEdgeMate?_of_edgeStep
+  exact seed.pairFoldFaceEdgeStep_symm
+    (seed.pairFoldFaceEdgeMate?_spec germ other h)
+
+/-- The finite set of face-endpoint germs lying over one quotient vertex. -/
+abbrev MinimalAreaRelatorBoundarySeed.PairFoldFaceGermsAtVertex
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (hne : w ≠ 1) (v : seed.pairFoldFiniteGraph.toDartGraph.Vertex) :=
+  {germ : seed.PairFoldFaceGerm // seed.pairFoldFaceGermVertex hne germ = v}
+
+noncomputable instance MinimalAreaRelatorBoundarySeed.pairFoldFaceGermsAtVertexFintype
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (v : seed.pairFoldFiniteGraph.toDartGraph.Vertex) :
+    Fintype (seed.PairFoldFaceGermsAtVertex hne v) := by
+  classical
+  letI : Fintype seed.PairFoldFaceGerm := by
+    unfold MinimalAreaRelatorBoundarySeed.PairFoldFaceGerm
+    infer_instance
+  letI : Finite (seed.PairFoldFaceGermsAtVertex hne v) :=
+    Finite.of_injective Subtype.val Subtype.val_injective
+  exact Fintype.ofFinite _
+
+/-- The cyclic corner transition restricts to an involution on the germs at
+each quotient vertex. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMateAtVertex
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    seed.PairFoldFaceGermsAtVertex hne v :=
+  ⟨seed.pairFoldFaceCornerMate germ.1,
+    (seed.pairFoldFaceCornerMate_vertex hne germ.1).trans germ.2⟩
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMateAtVertex_involutive
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    seed.pairFoldFaceCornerMateAtVertex hne
+      (seed.pairFoldFaceCornerMateAtVertex hne germ) = germ := by
+  apply Subtype.ext
+  exact seed.pairFoldFaceCornerMate_involutive germ.1
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMateAtVertex_ne
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (hne : w ≠ 1) {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    seed.pairFoldFaceCornerMateAtVertex hne germ ≠ germ := by
+  intro h
+  apply seed.pairFoldFaceCornerMate_ne germ.1
+  exact congrArg Subtype.val h
+
+/-- The across-edge transition restricted to endpoint germs at one quotient
+vertex. -/
+def MinimalAreaRelatorBoundarySeed.PairFoldFaceEdgeStepAtVertex
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germA germB : seed.PairFoldFaceGermsAtVertex hne v) : Prop :=
+  seed.PairFoldFaceEdgeStep germA.1 germB.1
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeStepAtVertex_symm
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    {germA germB : seed.PairFoldFaceGermsAtVertex hne v}
+    (h : seed.PairFoldFaceEdgeStepAtVertex hne germA germB) :
+    seed.PairFoldFaceEdgeStepAtVertex hne germB germA :=
+  seed.pairFoldFaceEdgeStep_symm h
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeStepAtVertex_unique
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    {germ germB germC : seed.PairFoldFaceGermsAtVertex hne v}
+    (hB : seed.PairFoldFaceEdgeStepAtVertex hne germ germB)
+    (hC : seed.PairFoldFaceEdgeStepAtVertex hne germ germC) :
+    germB = germC := by
+  apply Subtype.ext
+  exact seed.pairFoldFaceEdgeStep_unique hB hC
+
+/-- The optional across-edge partner remains inside the indexed local link. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    Option (seed.PairFoldFaceGermsAtVertex hne v) := by
+  classical
+  exact if h : ∃ other,
+      seed.PairFoldFaceEdgeStepAtVertex hne germ other then
+    some (Classical.choose h)
+  else none
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?_spec
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ other : seed.PairFoldFaceGermsAtVertex hne v)
+    (h : seed.pairFoldFaceEdgeMateAtVertex? hne germ = some other) :
+    seed.PairFoldFaceEdgeStepAtVertex hne germ other := by
+  classical
+  by_cases hex : ∃ x,
+      seed.PairFoldFaceEdgeStepAtVertex hne germ x
+  · have heq : Classical.choose hex = other := by
+      simpa [MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?, hex]
+        using h
+    cases heq
+    exact Classical.choose_spec hex
+  · simp [MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?, hex] at h
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?_of_edgeStep
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ other : seed.PairFoldFaceGermsAtVertex hne v)
+    (h : seed.PairFoldFaceEdgeStepAtVertex hne germ other) :
+    seed.pairFoldFaceEdgeMateAtVertex? hne germ = some other := by
+  classical
+  let hex : ∃ x,
+      seed.PairFoldFaceEdgeStepAtVertex hne germ x := ⟨other, h⟩
+  let chosen : seed.PairFoldFaceGermsAtVertex hne v := Classical.choose hex
+  have hchosen : seed.PairFoldFaceEdgeStepAtVertex hne germ chosen :=
+    Classical.choose_spec hex
+  have heq : chosen = other :=
+    seed.pairFoldFaceEdgeStepAtVertex_unique hne hchosen h
+  simp [MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?, hex,
+    chosen, heq]
+
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?_involutive
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ other : seed.PairFoldFaceGermsAtVertex hne v)
+    (h : seed.pairFoldFaceEdgeMateAtVertex? hne germ = some other) :
+    seed.pairFoldFaceEdgeMateAtVertex? hne other = some germ := by
+  apply seed.pairFoldFaceEdgeMateAtVertex?_of_edgeStep hne
+  exact seed.pairFoldFaceEdgeStepAtVertex_symm hne
+    (seed.pairFoldFaceEdgeMateAtVertex?_spec hne germ other h)
+
 end GreendlingerDehn
