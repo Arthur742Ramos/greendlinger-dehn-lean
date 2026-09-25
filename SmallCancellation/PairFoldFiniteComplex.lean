@@ -183,4 +183,243 @@ noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorLoopAt
     hom.mapVertex vertex, ?_⟩
   simpa [balloon, hom] using loop.map hom
 
+/-- The indexed relator polygon's attaching map into the finite direct
+pair-fold graph. It retains the actual occurrence map through the balloon,
+boundary, and fold quotients. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorPathHomAt
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length) :
+    LabelledGraphHom
+      (wordPathGraph ((seed.boundary.reducedBalloons.get i).label.relator.toWord))
+      seed.pairFoldFiniteGraph := by
+  let balloon := seed.boundary.reducedBalloons.get i
+  exact LabelledGraphHom.comp (seed.pairFoldFiniteHom hne)
+    (LabelledGraphHom.comp seed.boundaryOccurrenceDartPairFold.hom
+      (LabelledGraphHom.comp seed.balloonBoundaryHom
+        (LabelledGraphHom.comp (seed.balloonOccurrenceEmbedding i)
+          balloon.relatorPathHom)))
+
+/-- Reading the indexed relator polygon in the direct quotient gives its
+canonical relator loop, from the polygon's indexed occurrence map. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorPathAt
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length) :=
+  (wordPathWalk (seed.boundary.reducedBalloons.get i).label.relator.toWord).map
+    (seed.pairFoldFiniteRelatorPathHomAt hne i)
+
+/-- Each indexed relator polygon closes at its base vertex in the direct
+pair-fold quotient. Empty stems close by their endpoint join; nonempty stems
+close by the occurrence-specific innermost stem fold. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorPathHomAt_endpoints_eq
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length) :
+    (seed.pairFoldFiniteRelatorPathHomAt hne i).mapVertex (0 : Nat) =
+      (seed.pairFoldFiniteRelatorPathHomAt hne i).mapVertex
+        ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length) := by
+  let balloon := seed.boundary.reducedBalloons.get i
+  let embedding := seed.balloonOccurrenceEmbedding i
+  by_cases hstem : balloon.label.conjugator.toWord.length = 0
+  · let positions := (embedding.mapVertex (0 : Nat),
+      embedding.mapVertex balloon.label.rawWord.length)
+    have hpositions : positions ∈ seed.balloonEndpointPairs := by
+      simpa [positions, balloon, embedding] using
+        seed.balloonOccurrenceEmbedding_endpoints_mem i
+    have hjoin := wordBoundary_join_eq seed.boundary.reducedLiteralBoundary
+      seed.balloonEndpointPairs positions hpositions
+    have hrawlen : balloon.label.rawWord.length =
+        balloon.label.relator.toWord.length := by
+      rw [balloon.label.rawWord_length_eq, hstem]
+      simp
+    have hboundary : seed.balloonBoundaryHom.mapVertex
+          (embedding.mapVertex (0 : Nat)) =
+        seed.balloonBoundaryHom.mapVertex
+          (embedding.mapVertex balloon.label.relator.toWord.length) := by
+      change (Quotient.mk (BoundaryVertexJoinSetoid
+          seed.boundary.reducedLiteralBoundary.length seed.balloonEndpointPairs)
+            (embedding.mapVertex (0 : Nat)) :
+          WordBoundaryVertexWithJoins seed.boundary.reducedLiteralBoundary
+            seed.balloonEndpointPairs) =
+        Quotient.mk (BoundaryVertexJoinSetoid
+          seed.boundary.reducedLiteralBoundary.length seed.balloonEndpointPairs)
+            (embedding.mapVertex balloon.label.relator.toWord.length)
+      simpa [positions, hrawlen] using hjoin
+    have hclose := congrArg (seed.pairFoldFiniteHom hne).mapVertex
+      (congrArg seed.boundaryOccurrenceDartPairFold.hom.mapVertex hboundary)
+    change (seed.pairFoldFiniteHom hne).mapVertex
+        (seed.boundaryOccurrenceDartPairFold.hom.mapVertex
+          (seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex
+              (balloon.label.conjugator.toWord.length + (0 : Nat))))) =
+      (seed.pairFoldFiniteHom hne).mapVertex
+        (seed.boundaryOccurrenceDartPairFold.hom.mapVertex
+          (seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex
+              (balloon.label.conjugator.toWord.length +
+                balloon.label.relator.toWord.length))))
+    simpa [hstem] using hclose
+  · let localPair := balloon.innermostStemPair hstem
+    have hlocalPair : LabelledDartPair.map embedding localPair ∈
+        seed.balloonStemPairs := by
+      change LabelledDartPair.map
+        (reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons i)
+        localPair ∈ reducedBalloonStemPairs seed.boundary.reducedBalloons
+      exact reducedBalloonOccurrencePathEmbedding_stemPair_mem
+        seed.boundary.reducedBalloons i localPair
+        (balloon.innermostStemPair_mem hstem)
+    let pair := LabelledDartPair.map seed.balloonBoundaryHom
+      (LabelledDartPair.map embedding localPair)
+    have hpairMem : pair ∈ seed.boundaryBalloonStemPairs := by
+      unfold MinimalAreaRelatorBoundarySeed.boundaryBalloonStemPairs
+      exact List.mem_map.mpr
+        ⟨LabelledDartPair.map embedding localPair, hlocalPair, rfl⟩
+    have hpairFolded :=
+      seed.boundaryOccurrenceDartPairFold_stem_reverse pair hpairMem
+    have hendpoints := LabelledGraphHom.mapVertex_source_second_eq_target_first
+      seed.boundaryOccurrenceDartPairFold.hom pair hpairFolded
+    have hsource : seed.balloonBoundaryGraph.toDartGraph.source pair.second =
+        seed.balloonBoundaryHom.mapVertex
+          (embedding.mapVertex
+            (balloon.label.conjugator.toWord.length +
+              balloon.label.relator.toWord.length)) := by
+      calc
+        _ = seed.balloonBoundaryHom.mapVertex
+              ((wordPathGraph seed.boundary.reducedLiteralBoundary).toDartGraph.source
+                (embedding.mapDart localPair.second)) := by
+          simpa [pair, LabelledDartPair.map,
+            MinimalAreaRelatorBoundarySeed.balloonBoundaryGraph] using
+              seed.balloonBoundaryHom.map_source (embedding.mapDart localPair.second)
+        _ = seed.balloonBoundaryHom.mapVertex
+              (embedding.mapVertex
+                ((wordPathGraph balloon.label.rawWord).toDartGraph.source
+                  localPair.second)) :=
+          congrArg seed.balloonBoundaryHom.mapVertex
+            (embedding.map_source localPair.second)
+        _ = _ := by rw [balloon.innermostStemPair_source_second hstem]
+    have htarget : seed.balloonBoundaryGraph.toDartGraph.target pair.first =
+        seed.balloonBoundaryHom.mapVertex
+          (embedding.mapVertex balloon.label.conjugator.toWord.length) := by
+      calc
+        _ = seed.balloonBoundaryHom.mapVertex
+              ((wordPathGraph seed.boundary.reducedLiteralBoundary).toDartGraph.target
+                (embedding.mapDart localPair.first)) := by
+          simpa [pair, LabelledDartPair.map,
+            MinimalAreaRelatorBoundarySeed.balloonBoundaryGraph] using
+              seed.balloonBoundaryHom.map_target (embedding.mapDart localPair.first)
+        _ = seed.balloonBoundaryHom.mapVertex
+              (embedding.mapVertex
+                ((wordPathGraph balloon.label.rawWord).toDartGraph.target
+                  localPair.first)) :=
+          congrArg seed.balloonBoundaryHom.mapVertex
+            (embedding.map_target localPair.first)
+        _ = _ := by rw [balloon.innermostStemPair_target_first hstem]
+    have hcloseBase : seed.boundaryOccurrenceDartPairFold.hom.mapVertex
+          (seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex balloon.label.conjugator.toWord.length)) =
+        seed.boundaryOccurrenceDartPairFold.hom.mapVertex
+          (seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex
+              (balloon.label.conjugator.toWord.length +
+                balloon.label.relator.toWord.length))) := by
+      calc
+        _ = seed.boundaryOccurrenceDartPairFold.hom.mapVertex
+              (seed.balloonBoundaryGraph.toDartGraph.target pair.first) :=
+          congrArg seed.boundaryOccurrenceDartPairFold.hom.mapVertex htarget.symm
+        _ = seed.boundaryOccurrenceDartPairFold.hom.mapVertex
+              (seed.balloonBoundaryGraph.toDartGraph.source pair.second) :=
+          hendpoints.symm
+        _ = _ := congrArg seed.boundaryOccurrenceDartPairFold.hom.mapVertex hsource
+    have hclose := congrArg (seed.pairFoldFiniteHom hne).mapVertex hcloseBase
+    change (seed.pairFoldFiniteHom hne).mapVertex
+        (seed.boundaryOccurrenceDartPairFold.hom.mapVertex
+          (seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex
+              (balloon.label.conjugator.toWord.length + (0 : Nat))))) =
+      (seed.pairFoldFiniteHom hne).mapVertex
+        (seed.boundaryOccurrenceDartPairFold.hom.mapVertex
+          (seed.balloonBoundaryHom.mapVertex
+            (embedding.mapVertex
+              (balloon.label.conjugator.toWord.length +
+                balloon.label.relator.toWord.length))))
+    simpa [Nat.add_zero] using hclose
+
+/-- The occurrence-indexed relator attaching path is a closed walk in the
+finite direct pair-fold graph, with its basepoint fixed by the occurrence map. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorCellAt
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length) :
+    RelatorBoundaryLoop P seed.pairFoldFiniteGraph := by
+  let balloon := seed.boundary.reducedBalloons.get i
+  let hom := seed.pairFoldFiniteRelatorPathHomAt hne i
+  have hclose := seed.pairFoldFiniteRelatorPathHomAt_endpoints_eq hne i
+  refine ⟨balloon.label.relator, balloon.label.relator_mem,
+    P.relator_isCyclicallyReduced balloon.label.relator_mem,
+    hom.mapVertex (0 : Nat), ?_⟩
+  exact Eq.mp (congrArg
+    (fun endpoint => LabelledWalk seed.pairFoldFiniteGraph
+      (hom.mapVertex (0 : Nat)) endpoint balloon.label.relator.toWord)
+    hclose.symm) (seed.pairFoldFiniteRelatorPathAt hne i)
+
+/-- Every relator-loop side is the oppositely oriented face-side incidence
+with the same indexed balloon and cyclic position. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorPathHomAt_side
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j : Fin ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length)) :
+    (seed.pairFoldFiniteRelatorPathHomAt hne i).mapDart (j, false) =
+      seed.pairFoldFiniteGraph.toDartGraph.reverse
+        (seed.pairFoldFiniteIncidenceDart hne (Sum.inl ⟨i, j⟩)) := by
+  let side : seed.RelatorSideOccurrence := ⟨i, j⟩
+  let finiteHom := seed.pairFoldFiniteHom hne
+  let pairHom := seed.boundaryOccurrenceDartPairFold.hom
+  have hposition := seed.relatorSideOccurrencePosition_dart side
+  have hforward :
+      (seed.pairFoldFiniteRelatorPathHomAt hne i).mapDart (j, false) =
+        finiteHom.mapDart
+          (pairHom.mapDart (seed.relatorSideOccurrencePosition side, false)) := by
+    change finiteHom.mapDart
+      (pairHom.mapDart
+        (seed.balloonBoundaryHom.mapDart
+          ((seed.balloonOccurrenceEmbedding i).mapDart
+            ((seed.boundary.reducedBalloons.get i).relatorPathHom.mapDart
+              (j, false))))) = _
+    rw [ReducedRelatorBalloonData.relatorPathHom_mapDart_forward]
+    change finiteHom.mapDart
+      (pairHom.mapDart
+        ((seed.balloonBoundaryHom.comp
+          (reducedBalloonOccurrencePathEmbedding
+            seed.boundary.reducedBalloons i)).mapDart
+          ((seed.boundary.reducedBalloons.get i).relatorSideDart j))) = _
+    rw [hposition]
+  have hreverse :
+      seed.pairFoldFiniteGraph.toDartGraph.reverse
+          (finiteHom.mapDart
+            (seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse
+              (pairHom.mapDart (seed.relatorSideOccurrencePosition side, false)))) =
+        finiteHom.mapDart
+          (pairHom.mapDart (seed.relatorSideOccurrencePosition side, false)) := by
+    rw [finiteHom.map_reverse,
+      seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse_involutive]
+  calc
+    (seed.pairFoldFiniteRelatorPathHomAt hne i).mapDart (j, false) =
+        finiteHom.mapDart
+          (pairHom.mapDart (seed.relatorSideOccurrencePosition side, false)) := hforward
+    _ = seed.pairFoldFiniteGraph.toDartGraph.reverse
+          (finiteHom.mapDart
+            (seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse
+              (pairHom.mapDart (seed.relatorSideOccurrencePosition side, false)))) :=
+      hreverse.symm
+    _ = seed.pairFoldFiniteGraph.toDartGraph.reverse
+          (seed.pairFoldFiniteIncidenceDart hne (Sum.inl side)) := by
+      rfl
+
 end GreendlingerDehn

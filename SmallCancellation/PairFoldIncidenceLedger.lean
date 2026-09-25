@@ -215,6 +215,110 @@ after all stem and cancellation folds have been assembled. -/
         (balloon.label.relator.toWord[side.2]) := by
       rw [hposition, hlabel]
 
+/-- The flattened boundary dart for a relator-side occurrence is the image of
+that exact occurrence under its indexed balloon embedding. -/
+theorem MinimalAreaRelatorBoundarySeed.relatorSideOccurrencePosition_dart
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side : seed.RelatorSideOccurrence) :
+    (seed.relatorSideOccurrencePosition side, false) =
+      (LabelledGraphHom.comp seed.balloonBoundaryHom
+        (reducedBalloonOccurrencePathEmbedding
+          seed.boundary.reducedBalloons side.1)).mapDart
+        ((seed.boundary.reducedBalloons.get side.1).relatorSideDart side.2) := by
+  let embedding := LabelledGraphHom.comp seed.balloonBoundaryHom
+    (reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons side.1)
+  let balloon := seed.boundary.reducedBalloons.get side.1
+  apply Prod.ext
+  · rfl
+  · have hdirection := reducedBalloonOccurrencePathEmbedding_direction
+      seed.boundary.reducedBalloons side.1 (balloon.relatorSideDart side.2)
+    change false = (((fun d => d) ∘
+      (reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons side.1).mapDart)
+      (balloon.relatorSideDart side.2)).2
+    rw [Function.comp_apply]
+    exact hdirection.symm
+
+/-- The image position of a dart on a relator polygon inside its stored
+conjugate-relator boundary. -/
+def ReducedRelatorBalloonData.relatorPathDart
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (d : Fin b.label.relator.toWord.length × Bool) :
+    (wordPathGraph b.label.rawWord).toDartGraph.Dart := by
+  exact (⟨⟨b.label.conjugator.toWord.length + d.1.val, by
+    rw [b.label.rawWord_length_eq]
+    omega⟩, d.2⟩)
+
+@[simp] theorem ReducedRelatorBalloonData.relatorPathDart_forward
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (j : Fin b.label.relator.toWord.length) :
+    b.relatorPathDart (j, false) = b.relatorSideDart j := by
+  apply Prod.ext
+  · apply Fin.ext
+    simp [ReducedRelatorBalloonData.relatorPathDart,
+      ReducedRelatorBalloonData.relatorSideDart_index]
+  · rfl
+
+/-- The relator polygon embeds, with its exact side positions and labels, into
+the raw boundary of its indexed balloon. -/
+noncomputable def ReducedRelatorBalloonData.relatorPathHom
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P) :
+    LabelledGraphHom (wordPathGraph b.label.relator.toWord)
+      (wordPathGraph b.label.rawWord) where
+  mapVertex := fun v => by
+    change Nat at v
+    exact b.label.conjugator.toWord.length + v
+  mapDart := b.relatorPathDart
+  map_reverse := by
+    intro d
+    change Fin b.label.relator.toWord.length × Bool at d
+    rcases d with ⟨j, direction⟩
+    cases direction <;>
+      simp [ReducedRelatorBalloonData.relatorPathDart, wordPathGraph]
+  map_source := by
+    intro d
+    change Fin b.label.relator.toWord.length × Bool at d
+    rcases d with ⟨j, direction⟩
+    cases direction <;>
+      simp [wordPathGraph, ReducedRelatorBalloonData.relatorPathDart] <;> omega
+  map_target := by
+    intro d
+    change Fin b.label.relator.toWord.length × Bool at d
+    rcases d with ⟨j, direction⟩
+    cases direction <;>
+      simp [wordPathGraph, ReducedRelatorBalloonData.relatorPathDart] <;> omega
+  map_label := by
+    intro d
+    change Fin b.label.relator.toWord.length × Bool at d
+    rcases d with ⟨j, direction⟩
+    have hforward : (wordPathGraph b.label.rawWord).label
+        (b.relatorPathDart (j, false)) = b.label.relator.toWord[j] := by
+      rw [b.relatorPathDart_forward]
+      exact b.relatorSideDart_label j
+    cases direction
+    · simpa [wordPathGraph] using hforward
+    · change (wordPathGraph b.label.rawWord).label
+        (b.relatorPathDart (j, true)) =
+          inverseLetter (b.label.relator.toWord[j])
+      have hreverse : b.relatorPathDart (j, true) =
+          (wordPathGraph b.label.rawWord).toDartGraph.reverse
+            (b.relatorPathDart (j, false)) := by
+        simp [ReducedRelatorBalloonData.relatorPathDart, wordPathGraph]
+      rw [hreverse, (wordPathGraph b.label.rawWord).label_reverse, hforward]
+
+@[simp] theorem ReducedRelatorBalloonData.relatorPathHom_mapDart_forward
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (j : Fin b.label.relator.toWord.length) :
+    b.relatorPathHom.mapDart (j, false) = b.relatorSideDart j := by
+  change b.relatorPathDart (j, false) = b.relatorSideDart j
+  exact b.relatorPathDart_forward j
+
 /-- The incidence occurrences lying over one folded edge. -/
 abbrev MinimalAreaRelatorBoundarySeed.PairFoldIncidenceFiber
     {α : Type*} [Fintype α] [DecidableEq α]
@@ -505,6 +609,65 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceSideLetters_inverse
     at hlabels
   have h := congrArg inverseLetter hlabels
   simpa [inverseLetter] using h
+
+/-- A shared face-side edge is a one-letter piece once the corresponding
+inverse relator rotations are distinct. The final premise is the precise
+local dipole exclusion required from a reduced diagram. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceSide_singletonPiece_of_noDipole
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (sideA sideB : seed.RelatorSideOccurrence)
+    (hEdge : seed.pairFoldIncidenceEdgeClass (Sum.inl sideA) =
+      seed.pairFoldIncidenceEdgeClass (Sum.inl sideB))
+    (hne : sideA ≠ sideB)
+    (preA tailA preB tailB : Word α)
+    (hcutA :
+      (seed.boundary.reducedBalloons.get sideA.1).label.relator.toWord =
+        preA ++
+          ((seed.boundary.reducedBalloons.get sideA.1).label.relator.toWord[sideA.2] ::
+            tailA))
+    (hcutB :
+      (seed.boundary.reducedBalloons.get sideB.1).label.relator⁻¹.toWord =
+        preB ++
+          (inverseLetter
+              ((seed.boundary.reducedBalloons.get sideB.1).label.relator.toWord[sideB.2]) ::
+            tailB))
+    (hnoDipole : ∀ r s, r ∈ P.relators → s ∈ P.relators →
+      r.toWord =
+        (seed.boundary.reducedBalloons.get sideA.1).label.relator.toWord[sideA.2] ::
+          (tailA ++ preA) →
+      s.toWord =
+        (seed.boundary.reducedBalloons.get sideA.1).label.relator.toWord[sideA.2] ::
+          (tailB ++ preB) → r ≠ s) :
+    IsPiece P.relators
+      [(seed.boundary.reducedBalloons.get sideA.1).label.relator.toWord[sideA.2]] := by
+  let relatorA := (seed.boundary.reducedBalloons.get sideA.1).label.relator
+  let relatorB := (seed.boundary.reducedBalloons.get sideB.1).label.relator
+  let letter := relatorA.toWord[sideA.2]
+  have hletter : relatorB.toWord[sideB.2] = inverseLetter letter :=
+    seed.pairFoldFaceSideLetters_inverse sideA sideB hEdge hne
+  obtain ⟨rotatedA, hrotatedA, hwordA⟩ :=
+    P.rotateRelator
+      (seed.boundary.reducedBalloons.get sideA.1).label.relator_mem hcutA
+  have hinverseB : relatorB⁻¹ ∈ P.relators :=
+    P.inverseClosed relatorB
+      (seed.boundary.reducedBalloons.get sideB.1).label.relator_mem
+  obtain ⟨rotatedB, hrotatedB, hwordB⟩ :=
+    P.rotateRelator hinverseB hcutB
+  have hheadA : rotatedA.toWord = letter :: (tailA ++ preA) := by
+    simpa [letter, relatorA, List.append_assoc] using hwordA
+  have hletter' : inverseLetter (relatorB.toWord[sideB.2]) = letter := by
+    rw [hletter]
+    simp [letter, relatorA, inverseLetter]
+  have hheadB : rotatedB.toWord = letter :: (tailB ++ preB) := by
+    calc
+      rotatedB.toWord =
+          (inverseLetter (relatorB.toWord[sideB.2]) :: tailB) ++ preB := hwordB
+      _ = letter :: (tailB ++ preB) := by rw [hletter']; rfl
+  have hdistinct := hnoDipole rotatedA rotatedB hrotatedA hrotatedB hheadA hheadB
+  exact IsPiece.singleton_of_distinctRelators_commonHead
+    hrotatedA hrotatedB hdistinct hheadA hheadB
 
 /-- The complete face-side/boundary incidence ledger contains exactly two
 flags for every quotient edge that it reaches. -/
