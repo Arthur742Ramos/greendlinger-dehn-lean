@@ -102,6 +102,65 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteVertex_reachable
       (if dSource.2 then dSource.1.val + 1 else dSource.1.val), ?_⟩
   exact ⟨htarget ▸ mappedWalk⟩
 
+/-- The reduced target word is a based loop in the finite pair-fold graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFiniteBoundaryLoop
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :
+    LabelledWalk seed.pairFoldFiniteGraph
+      (seed.pairFoldFiniteBasepoint hne)
+      (seed.pairFoldFiniteBasepoint hne) w.toWord := by
+  exact seed.pairFoldFiniteBoundaryWalk hne
+
+/-- Face-side and surviving-boundary flags keep their selected dart in the
+finite support graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFiniteIncidenceDart
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (x : seed.PairFoldIncidence) :
+    seed.pairFoldFiniteGraph.toDartGraph.Dart :=
+  (seed.pairFoldFiniteHom hne).mapDart (seed.pairFoldIncidenceDart x)
+
+/-- The finite-support map preserves the label of every incidence dart. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteIncidenceDart_label
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (x : seed.PairFoldIncidence) :
+    seed.pairFoldFiniteGraph.label (seed.pairFoldFiniteIncidenceDart hne x) =
+      seed.boundaryOccurrenceDartPairFold.graph.label
+        (seed.pairFoldIncidenceDart x) := by
+  exact (seed.pairFoldFiniteHom hne).map_label _
+
+/-- Distinct flags over a used edge have opposite orientations after the
+finite-support restriction as well. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteIncidenceDart_opposite_of_ne
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    (e : seed.PairFoldEdgeClass)
+    (a b : seed.PairFoldIncidenceFiber e) (hab : a ≠ b) :
+    seed.pairFoldFiniteIncidenceDart hne b.1 =
+    seed.pairFoldFiniteGraph.toDartGraph.reverse
+        (seed.pairFoldFiniteIncidenceDart hne a.1) := by
+  have h := seed.pairFoldIncidenceDart_opposite_of_ne e a b hab
+  change seed.pairFoldIncidenceDart b.1 =
+    seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse
+      (seed.pairFoldIncidenceDart a.1) at h
+  have hmap := congrArg (seed.pairFoldFiniteHom hne).mapDart h
+  calc
+    seed.pairFoldFiniteIncidenceDart hne b.1 =
+        (seed.pairFoldFiniteHom hne).mapDart
+          (seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse
+            (seed.pairFoldIncidenceDart a.1)) := by
+      simpa [MinimalAreaRelatorBoundarySeed.pairFoldFiniteIncidenceDart] using hmap
+    _ = seed.pairFoldFiniteGraph.toDartGraph.reverse
+          (seed.pairFoldFiniteIncidenceDart hne a.1) := by
+      simpa [MinimalAreaRelatorBoundarySeed.pairFoldFiniteIncidenceDart] using
+        ((seed.pairFoldFiniteHom hne).map_reverse
+          (seed.pairFoldIncidenceDart a.1)).symm
+
 /-- Each indexed relator balloon supplies a relator boundary loop in the same
 finite graph as the target boundary. -/
 noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFiniteRelatorLoopAt
