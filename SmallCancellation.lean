@@ -23,3 +23,5 @@ import SmallCancellation.FoldedBoundarySeed
 import SmallCancellation.PairingComponents
 import SmallCancellation.StemPairEndpoints
 import SmallCancellation.PairFoldIncidenceLedger
+import SmallCancellation.PairFoldRelatorLoops
+import SmallCancellation.PairFoldFiniteComplex

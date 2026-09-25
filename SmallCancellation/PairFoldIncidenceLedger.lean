@@ -126,6 +126,41 @@ noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldIncidenceEdgeClass
       seed.pairFoldEdgeClassAt (seed.relatorSideOccurrencePosition side)
   | Sum.inr boundary => seed.pairFoldEdgeClassAt boundary.1
 
+/-- Give each incidence its orientation in the assembled diagram. Face sides
+are reversed because their induced boundary orientation opposes the exterior
+boundary; surviving exterior occurrences retain their boundary orientation. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (x : seed.PairFoldIncidence) :
+    seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.Dart :=
+  match x with
+  | Sum.inl side =>
+      seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (seed.relatorSideOccurrencePosition side, false))
+  | Sum.inr boundary =>
+      seed.boundaryOccurrenceDartPairFold.hom.mapDart (boundary.1, false)
+
+@[simp] theorem MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart_side
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side : seed.RelatorSideOccurrence) :
+    seed.pairFoldIncidenceDart (Sum.inl side) =
+      seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse
+        (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+          (seed.relatorSideOccurrencePosition side, false)) := rfl
+
+@[simp] theorem MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart_boundary
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (boundary : seed.PairFoldBoundaryOccurrence) :
+    seed.pairFoldIncidenceDart (Sum.inr boundary) =
+      seed.boundaryOccurrenceDartPairFold.hom.mapDart (boundary.1, false) := rfl
+
 /-- The incidence occurrences lying over one folded edge. -/
 abbrev MinimalAreaRelatorBoundarySeed.PairFoldIncidenceFiber
     {α : Type*} [Fintype α] [DecidableEq α]
@@ -272,6 +307,117 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldIncidenceFiber_card_eq_two
           seed.pairFoldBoundaryFiber e.1) :=
       Nat.card_congr (seed.pairFoldIncidenceFiberEquiv e.1)
     _ = _ := by rw [Nat.card_sum]; exact hsum
+
+/-- The two incidence records over one folded edge carry opposite dart
+orientations. The side orientation is chosen to be opposite to its raw
+relator traversal, including the case where a side survives on the exterior
+boundary at the same source position. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart_opposite_of_ne
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (e : seed.PairFoldEdgeClass)
+    (a b : seed.PairFoldIncidenceFiber e) (hne : a ≠ b) :
+    let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+    seed.pairFoldIncidenceDart b.1 = G.reverse (seed.pairFoldIncidenceDart a.1) := by
+  classical
+  let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+  rcases a with ⟨a, ha⟩
+  rcases b with ⟨b, hb⟩
+  have hab : a ≠ b := by
+    intro hab
+    apply hne
+    apply Subtype.ext
+    exact hab
+  have hclass : seed.pairFoldIncidenceEdgeClass a =
+      seed.pairFoldIncidenceEdgeClass b := ha.trans hb.symm
+  cases a with
+  | inl sideA =>
+      cases b with
+      | inl sideB =>
+          change seed.pairFoldEdgeClassAt
+              (seed.relatorSideOccurrencePosition sideA) =
+            seed.pairFoldEdgeClassAt
+              (seed.relatorSideOccurrencePosition sideB) at hclass
+          have hposNe : seed.relatorSideOccurrencePosition sideA ≠
+              seed.relatorSideOccurrencePosition sideB := by
+            intro hpos
+            have hside : sideA = sideB :=
+              seed.relatorSideOccurrencePosition_injective hpos
+            exact hab (congrArg Sum.inl hside)
+          have hstemA : seed.balloonStemOccurrencePairing.partner
+              (seed.relatorSideOccurrencePosition sideA) = none := by
+            apply (seed.balloonStemOccurrencePairing_unpaired_iff_not_endpoint _).2
+            exact seed.relatorSidePosition_unmatched_by_stem sideA.1 sideA.2
+          have hstemB : seed.balloonStemOccurrencePairing.partner
+              (seed.relatorSideOccurrencePosition sideB) = none := by
+            apply (seed.balloonStemOccurrencePairing_unpaired_iff_not_endpoint _).2
+            exact seed.relatorSidePosition_unmatched_by_stem sideB.1 sideB.2
+          have hdir := seed.mapDart_reverse_of_edgeClass_eq_stemUnpaired
+            (seed.relatorSideOccurrencePosition sideA)
+            (seed.relatorSideOccurrencePosition sideB)
+            hclass hposNe hstemA hstemB
+          simp [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart, hdir]
+      | inr boundaryB =>
+          change seed.pairFoldEdgeClassAt
+              (seed.relatorSideOccurrencePosition sideA) =
+            seed.pairFoldEdgeClassAt boundaryB.1 at hclass
+          by_cases hpos : seed.relatorSideOccurrencePosition sideA = boundaryB.1
+          · have hinv :=
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse_involutive
+            simpa [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart, hpos] using
+              (hinv (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+                (boundaryB.1, false))).symm
+          · have hstemA : seed.balloonStemOccurrencePairing.partner
+                (seed.relatorSideOccurrencePosition sideA) = none := by
+              apply (seed.balloonStemOccurrencePairing_unpaired_iff_not_endpoint _).2
+              exact seed.relatorSidePosition_unmatched_by_stem sideA.1 sideA.2
+            have hcancelB : seed.boundaryCancellationPairing.partner boundaryB.1 = none :=
+              (seed.boundaryCancellationPairing_unpaired_iff_survivor boundaryB.1).2
+                boundaryB.2
+            have hdir := seed.mapDart_eq_of_edgeClass_eq_stemToBoundary
+              (seed.relatorSideOccurrencePosition sideA) boundaryB.1
+              hclass hpos hstemA hcancelB
+            have hinv :=
+              seed.boundaryOccurrenceDartPairFold.graph.toDartGraph.reverse_involutive
+            simpa [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart] using
+              hdir.trans (hinv _).symm
+  | inr boundaryA =>
+      cases b with
+      | inl sideB =>
+          change seed.pairFoldEdgeClassAt boundaryA.1 =
+            seed.pairFoldEdgeClassAt
+              (seed.relatorSideOccurrencePosition sideB) at hclass
+          by_cases hpos : boundaryA.1 = seed.relatorSideOccurrencePosition sideB
+          · simp [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart, hpos]
+          · have hcancelA : seed.boundaryCancellationPairing.partner boundaryA.1 = none :=
+              (seed.boundaryCancellationPairing_unpaired_iff_survivor boundaryA.1).2
+                boundaryA.2
+            have hstemB : seed.balloonStemOccurrencePairing.partner
+                (seed.relatorSideOccurrencePosition sideB) = none := by
+              apply (seed.balloonStemOccurrencePairing_unpaired_iff_not_endpoint _).2
+              exact seed.relatorSidePosition_unmatched_by_stem sideB.1 sideB.2
+            have hdir := seed.mapDart_eq_of_edgeClass_eq_boundaryToStem
+              boundaryA.1 (seed.relatorSideOccurrencePosition sideB)
+              hclass hpos hcancelA hstemB
+            simpa [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart] using
+              congrArg G.reverse hdir
+      | inr boundaryB =>
+          change seed.pairFoldEdgeClassAt boundaryA.1 =
+            seed.pairFoldEdgeClassAt boundaryB.1 at hclass
+          have hposNe : boundaryA.1 ≠ boundaryB.1 := by
+            intro hpos
+            have hboundary : boundaryA = boundaryB := Subtype.ext hpos
+            exact hab (congrArg Sum.inr hboundary)
+          have hcancelA : seed.boundaryCancellationPairing.partner boundaryA.1 = none :=
+            (seed.boundaryCancellationPairing_unpaired_iff_survivor boundaryA.1).2
+              boundaryA.2
+          have hcancelB : seed.boundaryCancellationPairing.partner boundaryB.1 = none :=
+            (seed.boundaryCancellationPairing_unpaired_iff_survivor boundaryB.1).2
+              boundaryB.2
+          have hdir := seed.mapDart_reverse_of_edgeClass_eq_boundaryUnpaired
+            boundaryA.1 boundaryB.1 hclass hposNe hcancelA hcancelB
+          simpa [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart] using hdir
 
 /-- The complete face-side/boundary incidence ledger contains exactly two
 flags for every quotient edge that it reaches. -/
