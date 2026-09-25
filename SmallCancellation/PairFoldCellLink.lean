@@ -240,7 +240,7 @@ private theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermOutDart_label_tar
   exact seed.pairFoldFiniteIncidenceDart_label hne (Sum.inl side) |>.trans
     (seed.pairFoldIncidenceDart_label_side side)
 
-private noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldCellLinkDartEdgeClass
+noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldCellLinkDartEdgeClass
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w)
@@ -249,7 +249,7 @@ private noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldCellLinkDartEdg
   Quotient.mk (UnorientedDartSetoid
     seed.boundaryOccurrenceDartPairFold.graph.toDartGraph) d.1
 
-private theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermOutDart_edgeClass
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermOutDart_edgeClass
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
@@ -293,7 +293,7 @@ private theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermOutDart_edgeClass
     rw [hout]
     exact unorientedDartClass_eq_of_reverse (G := G) rfl
 
-private theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteGraph_reverse_ne
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFiniteGraph_reverse_ne
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} {w : FreeGroup α}
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
@@ -804,6 +804,65 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerEndDarts_ne
       simpa only [inverseLetter_inverseLetter] using h.symm
     apply hred
     simpa [Fin.getElem_fin, hidx] using hreverse
+
+/-- The two side-end germs of a corner map to distinct oriented edge ends.
+This is the endpoint form of the looplessness theorem for the local
+corner-incidence multigraph. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermOutDart_ne_cornerMate
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    seed.pairFoldFaceGermOutDart hne germ ≠
+      seed.pairFoldFaceGermOutDart hne
+        (seed.pairFoldFaceCornerMateAtVertex hne germ) := by
+  classical
+  let endpoint := seed.pairFoldCellLinkGermToEndpoint hne germ
+  let otherEndpoint : seed.PairFoldCellLinkEndpoint hne v :=
+    ⟨endpoint.1, !endpoint.2⟩
+  have hotherGerm :
+      seed.pairFoldCellLinkEndpointGerm hne otherEndpoint =
+        seed.pairFoldFaceCornerMateAtVertex hne germ := by
+    rcases germ with ⟨⟨side, which⟩, hv⟩
+    cases which <;>
+      simp [endpoint, otherEndpoint, Bool.not,
+        pairFoldCellLinkGermToEndpoint,
+        pairFoldCellLinkEndpointGerm,
+        MinimalAreaRelatorBoundarySeed.pairFoldFaceSideNext,
+        MinimalAreaRelatorBoundarySeed.pairFoldFaceSidePrev,
+        MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerMate] <;>
+      (apply Subtype.ext; rfl)
+  have hendpointNe :
+      seed.pairFoldCellLinkEndpointDart hne endpoint ≠
+        seed.pairFoldCellLinkEndpointDart hne otherEndpoint := by
+    have hcorner := seed.pairFoldFaceCornerEndDarts_ne hne endpoint.1
+    cases hwhich : endpoint.2
+    · simpa [pairFoldCellLinkEndpointDart,
+        pairFoldCellLinkAt, hwhich, otherEndpoint] using hcorner
+    · simpa [pairFoldCellLinkEndpointDart,
+        pairFoldCellLinkAt, hwhich, otherEndpoint] using hcorner.symm
+  have hcurrent :
+      seed.pairFoldCellLinkEndpointDart hne endpoint =
+        seed.pairFoldFaceGermOutDart hne germ := by
+    calc
+      _ = seed.pairFoldFaceGermOutDart hne
+          (seed.pairFoldCellLinkEndpointGerm hne endpoint) :=
+        seed.pairFoldCellLinkEndpointDart_eq_germ hne endpoint
+      _ = _ := congrArg (seed.pairFoldFaceGermOutDart hne)
+        ((seed.pairFoldCellLinkEndpointGermEquiv hne).apply_symm_apply germ)
+  have hother :
+      seed.pairFoldCellLinkEndpointDart hne otherEndpoint =
+        seed.pairFoldFaceGermOutDart hne
+          (seed.pairFoldFaceCornerMateAtVertex hne germ) := by
+    calc
+      _ = seed.pairFoldFaceGermOutDart hne
+          (seed.pairFoldCellLinkEndpointGerm hne otherEndpoint) :=
+        seed.pairFoldCellLinkEndpointDart_eq_germ hne otherEndpoint
+      _ = _ := congrArg (seed.pairFoldFaceGermOutDart hne) hotherGerm
+  intro heq
+  apply hendpointNe
+  exact hcurrent.trans (heq.trans hother.symm)
 
 /-- The local finite cell link has no loop edges: a polygon corner always
 joins the two distinct edge ends of its adjacent relator sides. -/

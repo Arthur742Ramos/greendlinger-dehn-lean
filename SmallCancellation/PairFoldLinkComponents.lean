@@ -67,6 +67,324 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkGraph_eq_pairingGraph
     · exact Or.inr
         (seed.pairFoldFaceEdgeMateAtVertex?_spec hne a b hedge)
 
+/-- Two face germs at one quotient vertex name the same oriented edge end
+exactly when they are equal or they are paired across that folded edge. This
+identifies the transition pairing's vertex quotient with the actual edge-end
+vertices of the corner-incidence multigraph. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceGermOutDart_eq_iff
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (a b : seed.PairFoldFaceGermsAtVertex hne v) :
+    seed.pairFoldFaceGermOutDart hne a =
+        seed.pairFoldFaceGermOutDart hne b ↔
+      a = b ∨ seed.PairFoldFaceEdgeStepAtVertex hne a b := by
+  classical
+  constructor
+  · intro heq
+    rcases a with ⟨⟨sideA, endpointA⟩, hvA⟩
+    rcases b with ⟨⟨sideB, endpointB⟩, hvB⟩
+    have hclassOut := congrArg
+      (fun d => seed.pairFoldCellLinkDartEdgeClass d) heq
+    have hclass : seed.pairFoldIncidenceEdgeClass (Sum.inl sideA) =
+        seed.pairFoldIncidenceEdgeClass (Sum.inl sideB) := by
+      calc
+        _ = seed.pairFoldCellLinkDartEdgeClass
+            (seed.pairFoldFaceGermOutDart hne ⟨(sideA, endpointA), hvA⟩) :=
+          (seed.pairFoldFaceGermOutDart_edgeClass hne
+            ⟨(sideA, endpointA), hvA⟩).symm
+        _ = seed.pairFoldCellLinkDartEdgeClass
+            (seed.pairFoldFaceGermOutDart hne ⟨(sideB, endpointB), hvB⟩) := hclassOut
+        _ = _ := seed.pairFoldFaceGermOutDart_edgeClass hne
+          ⟨(sideB, endpointB), hvB⟩
+    have hDart := congrArg Subtype.val heq
+    by_cases hside : sideA = sideB
+    · subst sideB
+      cases endpointA <;> cases endpointB
+      · left
+        apply Subtype.ext
+        rfl
+      · have hfixed :
+            seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFaceGermOutDart hne ⟨(sideA, false), hvA⟩).1 =
+              (seed.pairFoldFaceGermOutDart hne ⟨(sideA, false), hvA⟩).1 := by
+          change seed.pairFoldFiniteGraph.toDartGraph.reverse
+              (seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA))) = _
+          calc
+            _ = seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA) :=
+              seed.pairFoldFiniteGraph.toDartGraph.reverse_involutive _
+            _ = seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)) := hDart.symm
+        exact False.elim ((seed.pairFoldFiniteGraph_reverse_ne hne
+          (seed.pairFoldFaceGermOutDart hne ⟨(sideA, false), hvA⟩)) hfixed)
+      · have hfixed :
+            seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFaceGermOutDart hne ⟨(sideA, true), hvA⟩).1 =
+              (seed.pairFoldFaceGermOutDart hne ⟨(sideA, true), hvA⟩).1 := by
+          change seed.pairFoldFiniteGraph.toDartGraph.reverse
+              (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)) = _
+          exact hDart.symm
+        exact False.elim ((seed.pairFoldFiniteGraph_reverse_ne hne
+          (seed.pairFoldFaceGermOutDart hne ⟨(sideA, true), hvA⟩)) hfixed)
+      · left
+        apply Subtype.ext
+        rfl
+    · have hshare : seed.PairFoldFaceSidesShareEdge sideA sideB :=
+        ⟨hside, hclass⟩
+      let edge := seed.pairFoldIncidenceEdgeClass (Sum.inl sideA)
+      let incA : seed.PairFoldIncidenceFiber edge := ⟨Sum.inl sideA, rfl⟩
+      let incB : seed.PairFoldIncidenceFiber edge := ⟨Sum.inl sideB, hclass.symm⟩
+      have hab : incA ≠ incB := by
+        intro heq
+        apply hside
+        exact Sum.inl.inj (congrArg Subtype.val heq)
+      have hop := seed.pairFoldFiniteIncidenceDart_opposite_of_ne
+        hne edge incA incB hab
+      have hop' :
+          seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideB) =
+            seed.pairFoldFiniteGraph.toDartGraph.reverse
+              (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)) := by
+        simpa [incA, incB, edge] using hop
+      cases endpointA <;> cases endpointB
+      · have hself :
+            seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)) =
+              seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA) := by
+          have hDart' :
+              seed.pairFoldFiniteGraph.toDartGraph.reverse
+                  (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)) =
+                seed.pairFoldFiniteGraph.toDartGraph.reverse
+                  (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideB)) := by
+            simpa [MinimalAreaRelatorBoundarySeed.pairFoldFaceGermOutDart] using hDart
+          rw [hop'] at hDart'
+          rw [seed.pairFoldFiniteGraph.toDartGraph.reverse_involutive] at hDart'
+          exact hDart'
+        have hfixed :
+            seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFaceGermOutDart hne ⟨(sideA, false), hvA⟩).1 =
+              (seed.pairFoldFaceGermOutDart hne ⟨(sideA, false), hvA⟩).1 := by
+          change seed.pairFoldFiniteGraph.toDartGraph.reverse
+              (seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA))) = _
+          rw [seed.pairFoldFiniteGraph.toDartGraph.reverse_involutive]
+          exact hself.symm
+        exact False.elim ((seed.pairFoldFiniteGraph_reverse_ne hne
+          (seed.pairFoldFaceGermOutDart hne ⟨(sideA, false), hvA⟩)) hfixed)
+      · have hstep : seed.PairFoldFaceEdgeStepAtVertex hne
+            ⟨(sideA, false), hvA⟩ ⟨(sideB, true), hvB⟩ := by
+          change seed.PairFoldFaceSidesShareEdge sideA sideB ∧ false ≠ true
+          exact ⟨hshare, by decide⟩
+        exact Or.inr hstep
+      · have hstep : seed.PairFoldFaceEdgeStepAtVertex hne
+            ⟨(sideA, true), hvA⟩ ⟨(sideB, false), hvB⟩ := by
+          change seed.PairFoldFaceSidesShareEdge sideA sideB ∧ true ≠ false
+          exact ⟨hshare, by decide⟩
+        exact Or.inr hstep
+      · have hself :
+            seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)) =
+              seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA) := by
+          have hDart' :
+              seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA) =
+                seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideB) := by
+            simpa [MinimalAreaRelatorBoundarySeed.pairFoldFaceGermOutDart] using hDart
+          rw [hop'] at hDart'
+          exact hDart'.symm
+        have hfixed :
+            seed.pairFoldFiniteGraph.toDartGraph.reverse
+                (seed.pairFoldFaceGermOutDart hne ⟨(sideA, true), hvA⟩).1 =
+              (seed.pairFoldFaceGermOutDart hne ⟨(sideA, true), hvA⟩).1 := by
+          change seed.pairFoldFiniteGraph.toDartGraph.reverse
+              (seed.pairFoldFiniteIncidenceDart hne (Sum.inl sideA)) = _
+          exact hself
+        exact False.elim ((seed.pairFoldFiniteGraph_reverse_ne hne
+          (seed.pairFoldFaceGermOutDart hne ⟨(sideA, true), hvA⟩)) hfixed)
+  · rintro (hab | hedge)
+    · cases hab
+      rfl
+    · exact seed.pairFoldFaceGermOutDart_eq_of_edgeStep hne a b hedge
+
+/-- A corner transition and a folded-edge transition cannot leave a germ
+through the same oriented edge end. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceEdgeMateAtVertex?_ne_cornerMate
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (germ : seed.PairFoldFaceGermsAtVertex hne v) :
+    seed.pairFoldFaceEdgeMateAtVertex? hne germ ≠
+      some (seed.pairFoldFaceCornerMateAtVertex hne germ) := by
+  intro h
+  have hstep := seed.pairFoldFaceEdgeMateAtVertex?_spec hne germ
+    (seed.pairFoldFaceCornerMateAtVertex hne germ) h
+  have hout := seed.pairFoldFaceGermOutDart_eq_of_edgeStep hne germ
+    (seed.pairFoldFaceCornerMateAtVertex hne germ) hstep
+  exact seed.pairFoldFaceGermOutDart_ne_cornerMate hne germ hout
+
+/-- At each face germ the actual link degree is one at an exposed edge end
+and two when a second face is folded across that edge. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkGraph_degree_eq_one_or_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (a : seed.PairFoldFaceGermsAtVertex hne v) :
+    ((seed.pairFoldFaceLinkGraph hne v).neighborFinset a).card = 1 ∨
+      ((seed.pairFoldFaceLinkGraph hne v).neighborFinset a).card = 2 := by
+  classical
+  let G := seed.pairFoldFaceLinkGraph hne v
+  let corner := seed.pairFoldFaceCornerMateAtVertex hne a
+  have hcorner_mem : corner ∈ G.neighborFinset a := by
+    exact (G.mem_neighborFinset (v := a) corner).2
+      (seed.pairFoldFaceLinkGraph_corner_adj hne a)
+  cases hmate : seed.pairFoldFaceEdgeMateAtVertex? hne a with
+  | none =>
+    have hneighbors : G.neighborFinset a = {corner} := by
+      ext b
+      constructor
+      · intro hb
+        have hadj := (G.mem_neighborFinset (v := a) b).1 hb
+        rcases (seed.pairFoldFaceLinkGraph_adj_iff hne v a b).1 hadj with
+          hcorner' | hedge
+        · exact Finset.mem_singleton.mpr hcorner'.symm
+        · have hmate' := seed.pairFoldFaceEdgeMateAtVertex?_of_edgeStep
+            hne a b hedge
+          rw [hmate] at hmate'
+          simp at hmate'
+      · intro hb
+        have hb' : b = corner := Finset.mem_singleton.mp hb
+        subst b
+        exact hcorner_mem
+    left
+    rw [hneighbors]
+    simp
+  | some b =>
+    have hb_ne_corner : b ≠ corner := by
+      intro hbc
+      subst b
+      exact (seed.pairFoldFaceEdgeMateAtVertex?_ne_cornerMate hne a) hmate
+    have hacross : G.Adj a b := by
+      apply (seed.pairFoldFaceLinkGraph_adj_iff hne v a b).2
+      exact Or.inr (seed.pairFoldFaceEdgeMateAtVertex?_spec hne a b hmate)
+    have hneighbors : G.neighborFinset a = insert corner {b} := by
+      ext c
+      constructor
+      · intro hc
+        have hadj := (G.mem_neighborFinset (v := a) c).1 hc
+        rcases (seed.pairFoldFaceLinkGraph_adj_iff hne v a c).1 hadj with
+          hcorner' | hedge
+        · exact Finset.mem_insert.mpr (Or.inl hcorner'.symm)
+        · have hmate' := seed.pairFoldFaceEdgeMateAtVertex?_of_edgeStep
+            hne a c hedge
+          have hbc : b = c := Option.some.inj (hmate.symm.trans hmate')
+          exact Finset.mem_insert.mpr (Or.inr
+            (Finset.mem_singleton.mpr hbc.symm))
+      · intro hc
+        rcases Finset.mem_insert.mp hc with hcorner' | hb'
+        · have hcorner'' : c = corner := hcorner'
+          subst c
+          exact hcorner_mem
+        · have hbc : c = b := Finset.mem_singleton.mp hb'
+          subst c
+          exact (G.mem_neighborFinset (v := a) b).2 hacross
+    right
+    rw [hneighbors]
+    simp [Ne.symm hb_ne_corner]
+
+/-- Degree one is equivalent to being exposed to the boundary in the folded
+complex. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkGraph_degree_eq_one_iff_edgeMate_none
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (a : seed.PairFoldFaceGermsAtVertex hne v) :
+    ((seed.pairFoldFaceLinkGraph hne v).neighborFinset a).card = 1 ↔
+      seed.pairFoldFaceEdgeMateAtVertex? hne a = none := by
+  classical
+  let G := seed.pairFoldFaceLinkGraph hne v
+  let corner := seed.pairFoldFaceCornerMateAtVertex hne a
+  have hcorner_mem : corner ∈ G.neighborFinset a := by
+    exact (G.mem_neighborFinset (v := a) corner).2
+      (seed.pairFoldFaceLinkGraph_corner_adj hne a)
+  constructor
+  · intro hdegree
+    cases hmate : seed.pairFoldFaceEdgeMateAtVertex? hne a with
+    | none => rfl
+    | some b =>
+      have hb_ne_corner : b ≠ corner := by
+        intro hbc
+        subst b
+        exact (seed.pairFoldFaceEdgeMateAtVertex?_ne_cornerMate hne a) hmate
+      have hacross : G.Adj a b := by
+        apply (seed.pairFoldFaceLinkGraph_adj_iff hne v a b).2
+        exact Or.inr (seed.pairFoldFaceEdgeMateAtVertex?_spec hne a b hmate)
+      change (G.neighborFinset a).card = 1 at hdegree
+      obtain ⟨c, hc⟩ := Finset.card_eq_one.mp hdegree
+      change G.neighborFinset a = {c} at hc
+      have hcorner_eq : corner = c := by
+        rw [hc] at hcorner_mem
+        exact Finset.mem_singleton.mp hcorner_mem
+      have hb_eq : b = c := by
+        have hmem : b ∈ G.neighborFinset a :=
+          (G.mem_neighborFinset (v := a) b).2 hacross
+        rw [hc] at hmem
+        exact Finset.mem_singleton.mp hmem
+      exact False.elim (hb_ne_corner (hb_eq.trans hcorner_eq.symm))
+  · intro hnone
+    cases hmate : seed.pairFoldFaceEdgeMateAtVertex? hne a with
+    | none =>
+      have hneighbors : G.neighborFinset a = {corner} := by
+        ext b
+        constructor
+        · intro hb
+          have hadj := (G.mem_neighborFinset (v := a) b).1 hb
+          rcases (seed.pairFoldFaceLinkGraph_adj_iff hne v a b).1 hadj with
+            hcorner' | hedge
+          · exact Finset.mem_singleton.mpr hcorner'.symm
+          · have hmate' := seed.pairFoldFaceEdgeMateAtVertex?_of_edgeStep
+              hne a b hedge
+            rw [hmate] at hmate'
+            simp at hmate'
+        · intro hb
+          have hb' : b = corner := Finset.mem_singleton.mp hb
+          subst b
+          exact hcorner_mem
+      rw [hneighbors]
+      simp
+    | some b =>
+      rw [hmate] at hnone
+      cases hnone
+
+/-- Degree two is equivalent to having the unique across-edge partner. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkGraph_degree_eq_two_iff_edgeMate_isSome
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (a : seed.PairFoldFaceGermsAtVertex hne v) :
+    ((seed.pairFoldFaceLinkGraph hne v).neighborFinset a).card = 2 ↔
+      ∃ b, seed.pairFoldFaceEdgeMateAtVertex? hne a = some b := by
+  constructor
+  · intro hdegree
+    by_contra hnot
+    have hnone : seed.pairFoldFaceEdgeMateAtVertex? hne a = none := by
+      cases hmate : seed.pairFoldFaceEdgeMateAtVertex? hne a with
+      | none => exact rfl
+      | some b => exact False.elim (hnot ⟨b, hmate⟩)
+    have hone := (seed.pairFoldFaceLinkGraph_degree_eq_one_iff_edgeMate_none
+      hne a).2 hnone
+    omega
+  · rintro ⟨b, hmate⟩
+    rcases seed.pairFoldFaceLinkGraph_degree_eq_one_or_two hne a with hone | htwo
+    · have hnone := (seed.pairFoldFaceLinkGraph_degree_eq_one_iff_edgeMate_none
+        hne a).1 hone
+      rw [hmate] at hnone
+      cases hnone
+    · exact htwo
+
 /-- In each connected component of the face-germ link, the across-edge
 pairing has either zero or two unmatched germs. The corner pairing is total,
 so these are exactly the closed-cycle and exposed-path cases. -/
@@ -120,6 +438,57 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkComponent_boundary_count_
     calc
       Nat.card edgeUnmatched = Nat.card (cornerUnmatched ⊕ edgeUnmatched) :=
         hcard.symm
+      _ = 2 := htwo
+
+/-- In the actual local face link, each connected component has either no
+degree-one vertices (a closed cycle) or exactly two (an exposed path). -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceLinkComponent_degree_one_count_zero_or_two
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (C : (twoPairingGraph (seed.pairFoldCornerPairingAtVertex hne (v := v))
+      (seed.pairFoldEdgePairingAtVertex hne (v := v))).ConnectedComponent) :
+    Nat.card {germ : C.supp //
+        ((seed.pairFoldFaceLinkGraph hne v).neighborFinset germ.1).card = 1} = 0 ∨
+      Nat.card {germ : C.supp //
+        ((seed.pairFoldFaceLinkGraph hne v).neighborFinset germ.1).card = 1} = 2 := by
+  classical
+  let cornerPairing := seed.pairFoldCornerPairingAtVertex hne (v := v)
+  let edgePairing := seed.pairFoldEdgePairingAtVertex hne (v := v)
+  let degreeOne := {germ : C.supp //
+    ((seed.pairFoldFaceLinkGraph hne v).neighborFinset germ.1).card = 1}
+  let exposed := {germ : C.supp //
+    (componentRightPairing cornerPairing edgePairing C).partner germ = none}
+  have hpred (germ : C.supp) :
+      ((seed.pairFoldFaceLinkGraph hne v).neighborFinset germ.1).card = 1 ↔
+        (componentRightPairing cornerPairing edgePairing C).partner germ = none := by
+    calc
+      _ ↔ seed.pairFoldFaceEdgeMateAtVertex? hne germ.1 = none :=
+        seed.pairFoldFaceLinkGraph_degree_eq_one_iff_edgeMate_none hne germ.1
+      _ ↔ (componentRightPairing cornerPairing edgePairing C).partner germ = none :=
+        (componentRightPairing_partner_none_iff cornerPairing edgePairing C germ).symm
+  let degreeOneEquivExposed : degreeOne ≃ exposed := {
+    toFun := fun germ => ⟨germ.1, (hpred germ.1).mp germ.2⟩
+    invFun := fun germ => ⟨germ.1, (hpred germ.1).mpr germ.2⟩
+    left_inv := by
+      intro germ
+      apply Subtype.ext
+      rfl
+    right_inv := by
+      intro germ
+      apply Subtype.ext
+      rfl }
+  have hboundary := seed.pairFoldFaceLinkComponent_boundary_count_zero_or_two
+    hne C
+  rcases hboundary with hzero | htwo
+  · left
+    calc
+      Nat.card degreeOne = Nat.card exposed := Nat.card_congr degreeOneEquivExposed
+      _ = 0 := hzero
+  · right
+    calc
+      Nat.card degreeOne = Nat.card exposed := Nat.card_congr degreeOneEquivExposed
       _ = 2 := htwo
 
 end GreendlingerDehn
