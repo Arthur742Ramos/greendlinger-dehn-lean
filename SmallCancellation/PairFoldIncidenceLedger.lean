@@ -44,6 +44,66 @@ noncomputable instance MinimalAreaRelatorBoundarySeed.pairFoldIncidenceFintype
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
     Fintype seed.PairFoldIncidence := inferInstance
 
+/-- The face-side occurrence type counts every relator side of every indexed
+balloon exactly once. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldRelatorSideOccurrence_card
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    Nat.card seed.RelatorSideOccurrence =
+      ∑ i : Fin seed.boundary.reducedBalloons.length,
+        ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length) := by
+  classical
+  rw [Nat.card_eq_fintype_card]
+  change Fintype.card
+      (Σ i : Fin seed.boundary.reducedBalloons.length,
+        Fin ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length)) = _
+  rw [Fintype.card_sigma]
+  simp
+
+/-- Surviving boundary occurrences are in bijection with the letters of the
+reduced target word. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldBoundaryOccurrence_card
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    Nat.card seed.PairFoldBoundaryOccurrence = w.toWord.length := by
+  classical
+  let trace := seed.reducedLollipopBoundaryTrace
+  let positions := trace.survivorOccurrences.map Prod.fst
+  let positionFinset := positions.toFinset
+  letI := seed.pairFoldBoundaryOccurrenceFintype
+  letI : Fintype positionFinset := Fintype.ofFinite _
+  let positionEquiv : positionFinset ≃
+      seed.PairFoldBoundaryOccurrence :=
+    { toFun := fun p => by
+        refine ⟨⟨p.1, ?_⟩, ?_⟩
+        · have hfinset : p.1 ∈ positions.toFinset := p.2
+          have hmem : p.1 ∈ positions := List.mem_toFinset.mp hfinset
+          rcases List.mem_map.mp hmem with ⟨o, ho, hposition⟩
+          have hbound := trace.survivors_inBounds o ho
+          omega
+        · change p.1 ∈ positions
+          exact List.mem_toFinset.mp p.2
+      invFun := fun i =>
+        ⟨i.1.1, List.mem_toFinset.mpr i.2⟩
+      left_inv := by intro p; apply Subtype.ext; rfl
+      right_inv := by
+        intro i
+        apply Subtype.ext
+        apply Fin.ext
+        rfl }
+  calc
+    Nat.card seed.PairFoldBoundaryOccurrence =
+        Fintype.card seed.PairFoldBoundaryOccurrence := Nat.card_eq_fintype_card
+    _ = Fintype.card positionFinset :=
+      Fintype.card_congr positionEquiv.symm
+    _ = positionFinset.card := Fintype.card_coe positionFinset
+    _ = positions.length :=
+      List.toFinset_card_of_nodup trace.survivorPositions_nodup
+    _ = trace.survivorOccurrences.length := by simp [positions]
+    _ = w.toWord.length := trace.survivors_length
+
 /-- Send a face-side or surviving-boundary occurrence to its folded
 unoriented edge. -/
 noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldIncidenceEdgeClass
@@ -243,5 +303,29 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldIncidence_count_eq_two_mul_usedEd
       rw [Finset.sum_const, Finset.card_univ, nsmul_eq_mul]
       rw [← Nat.card_eq_fintype_card]
       exact Nat.mul_comm _ _
+
+/-- The total relator perimeter and reduced boundary length are the two sides
+of the global folded edge-incidence count. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFold_totalPerimeter_add_boundaryLength_eq_two_mul_usedEdges
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    (∑ i : Fin seed.boundary.reducedBalloons.length,
+      (seed.boundary.reducedBalloons.get i).label.relator.toWord.length) +
+        w.toWord.length =
+      2 * Nat.card seed.PairFoldUsedEdge := by
+  calc
+    _ = Nat.card seed.RelatorSideOccurrence +
+        Nat.card seed.PairFoldBoundaryOccurrence := by
+      rw [← seed.pairFoldRelatorSideOccurrence_card,
+        ← seed.pairFoldBoundaryOccurrence_card]
+    _ = Nat.card seed.PairFoldIncidence := by
+      change Nat.card seed.RelatorSideOccurrence +
+        Nat.card seed.PairFoldBoundaryOccurrence =
+          Nat.card (seed.RelatorSideOccurrence ⊕
+            seed.PairFoldBoundaryOccurrence)
+      rw [Nat.card_sum]
+    _ = 2 * Nat.card seed.PairFoldUsedEdge :=
+      seed.pairFoldIncidence_count_eq_two_mul_usedEdges
 
 end GreendlingerDehn
