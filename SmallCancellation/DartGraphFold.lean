@@ -324,6 +324,91 @@ def fold {α : Type*} (G : LabelledDartGraph α)
   map_target := by intro d; rfl
   map_label := by intro d; rfl
 
+/-- A graph homomorphism that already folds an occurrence pair descends
+through the corresponding labeled quotient. This is the universal property
+needed to compare a direct fold with a sequence of folds. -/
+def descendFold {α : Type*} {G H : LabelledDartGraph α}
+    (a b : G.toDartGraph.Dart)
+    (hlabels : G.label a = inverseLetter (G.label b))
+    (f : LabelledGraphHom G H)
+    (hfold : f.mapDart b = H.toDartGraph.reverse (f.mapDart a)) :
+    LabelledGraphHom (G.folded α a b hlabels) H where
+  mapVertex := Quotient.lift f.mapVertex (by
+    intro x y hxy
+    change Relation.EqvGen (VertexFoldGenerator G.toDartGraph a b) x y at hxy
+    induction hxy with
+    | rel x y h =>
+        rcases h with h | h
+        · rcases h with ⟨hxa, hyb⟩
+          subst x
+          subst y
+          calc
+            f.mapVertex (G.toDartGraph.source a) =
+                H.toDartGraph.source (f.mapDart a) := (f.map_source a).symm
+            _ = H.toDartGraph.target (f.mapDart b) := by
+              rw [hfold, H.toDartGraph.target_reverse]
+            _ = f.mapVertex (G.toDartGraph.target b) := f.map_target b
+        · rcases h with ⟨hxa, hyb⟩
+          subst x
+          subst y
+          calc
+            f.mapVertex (G.toDartGraph.target a) =
+                H.toDartGraph.target (f.mapDart a) := (f.map_target a).symm
+            _ = H.toDartGraph.source (f.mapDart b) := by
+              rw [hfold, H.toDartGraph.source_reverse]
+            _ = f.mapVertex (G.toDartGraph.source b) := f.map_source b
+    | refl x => rfl
+    | symm x y _ ih => exact ih.symm
+    | trans x y z _ _ ih₁ ih₂ => exact ih₁.trans ih₂)
+  mapDart := Quotient.lift f.mapDart (by
+    intro x y hxy
+    change Relation.EqvGen
+      (EdgeFoldGenerator G.toDartGraph.reverse a b) x y at hxy
+    induction hxy with
+    | rel x y h =>
+        rcases h with h | h
+        · rcases h with ⟨hxa, hyb⟩
+          subst x
+          subst y
+          calc
+            f.mapDart a = H.toDartGraph.reverse
+                (H.toDartGraph.reverse (f.mapDart a)) :=
+              (H.toDartGraph.reverse_involutive (f.mapDart a)).symm
+            _ = H.toDartGraph.reverse (f.mapDart b) :=
+              congrArg H.toDartGraph.reverse hfold.symm
+            _ = f.mapDart (G.toDartGraph.reverse b) :=
+              f.map_reverse b
+        · rcases h with ⟨hxa, hyb⟩
+          subst x
+          subst y
+          calc
+            f.mapDart (G.toDartGraph.reverse a) =
+                H.toDartGraph.reverse (f.mapDart a) := (f.map_reverse a).symm
+            _ = f.mapDart b := hfold.symm
+    | refl x => rfl
+    | symm x y _ ih => exact ih.symm
+    | trans x y z _ _ ih₁ ih₂ => exact ih₁.trans ih₂)
+  map_reverse := by
+    intro d
+    refine Quotient.inductionOn d ?_
+    intro x
+    exact f.map_reverse x
+  map_source := by
+    intro d
+    refine Quotient.inductionOn d ?_
+    intro x
+    exact f.map_source x
+  map_target := by
+    intro d
+    refine Quotient.inductionOn d ?_
+    intro x
+    exact f.map_target x
+  map_label := by
+    intro d
+    refine Quotient.inductionOn d ?_
+    intro x
+    exact f.map_label x
+
 /-- The dart map for a single fold is a quotient map and is surjective. -/
 theorem fold_mapDart_surjective {α : Type*} (G : LabelledDartGraph α)
     (a b : G.toDartGraph.Dart)
@@ -771,6 +856,35 @@ theorem foldAll_mapDart_eq_iff_pairFoldSetoid {α : Type u}
         exact eqvGen_mapClosure (fun a b hab => hIncludes hab) hPulled
       · intro h
         exact foldAll_mapDart_eq_of_pairFoldSetoid h
+termination_by pairs => pairs.length
+decreasing_by simp
+
+/-- Any graph map that already folds every requested pair factors through the
+successive quotient obtained by folding the whole list. -/
+def descendAll {α : Type u} {G H : LabelledDartGraph.{u, v} α}
+    (f : LabelledGraphHom G H) :
+    (pairs : List (LabelledDartPair G)) →
+      (∀ pair ∈ pairs,
+      f.mapDart pair.second = H.toDartGraph.reverse (f.mapDart pair.first)) →
+    LabelledGraphHom (foldAll G pairs).graph H
+  | [], _ => by
+      rw [foldAll.eq_1]
+      exact f
+  | pair :: rest, hfolded => by
+      let firstGraph := G.folded α pair.first pair.second pair.inverse_labels
+      let firstHom := LabelledGraphHom.fold G pair.first pair.second pair.inverse_labels
+      let transported := rest.map (LabelledDartPair.map firstHom)
+      let ffirst := LabelledGraphHom.descendFold pair.first pair.second
+        pair.inverse_labels f (hfolded pair List.mem_cons_self)
+      have htransported : ∀ p ∈ transported,
+          ffirst.mapDart p.second = H.toDartGraph.reverse (ffirst.mapDart p.first) := by
+        intro p hp
+        rcases List.mem_map.mp hp with ⟨original, horiginal, rfl⟩
+        change f.mapDart original.second =
+          H.toDartGraph.reverse (f.mapDart original.first)
+        exact hfolded original (List.mem_cons_of_mem pair horiginal)
+      rw [foldAll.eq_2]
+      exact descendAll ffirst transported htransported
 termination_by pairs => pairs.length
 decreasing_by simp
 
