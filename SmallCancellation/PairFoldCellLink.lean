@@ -471,6 +471,36 @@ noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerEndDarts
   exact (seed.pairFoldFaceGermOutDart hne prevGerm,
     seed.pairFoldFaceGermOutDart hne nextGerm)
 
+/-- The endpoints of an actual corner-incidence edge are the edge ends named
+by the two face germs adjacent across that polygon corner. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceCornerEndDarts_eq_germ_pair
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1)
+    {v : seed.pairFoldFiniteGraph.toDartGraph.Vertex}
+    (corner : seed.PairFoldFaceCornerAtVertex hne v) :
+    seed.pairFoldFaceCornerEndDarts hne corner =
+      (seed.pairFoldFaceGermOutDart hne
+          (seed.pairFoldFaceCornerMateAtVertex hne
+            (⟨(corner.1, false), corner.2⟩ :
+              seed.PairFoldFaceGermsAtVertex hne v)),
+        seed.pairFoldFaceGermOutDart hne
+          (⟨(corner.1, false), corner.2⟩ :
+            seed.PairFoldFaceGermsAtVertex hne v)) := by
+  classical
+  let nextGerm : seed.PairFoldFaceGermsAtVertex hne v :=
+    ⟨(corner.1, false), corner.2⟩
+  have hprevGerm :
+      (⟨seed.pairFoldFaceCornerMate (corner.1, false),
+          (seed.pairFoldFaceCornerMate_vertex hne (corner.1, false)).trans corner.2⟩ :
+        seed.PairFoldFaceGermsAtVertex hne v) =
+        seed.pairFoldFaceCornerMateAtVertex hne nextGerm := by
+    apply Subtype.ext
+    rfl
+  unfold pairFoldFaceCornerEndDarts
+  simp only [nextGerm]
+  rw [hprevGerm]
+
 /-- The cell-link multigraph has all outgoing edge ends as vertices and one
 distinct edge for each incident relator corner. This is the combinatorial link
 incidence data before its components are classified. -/
