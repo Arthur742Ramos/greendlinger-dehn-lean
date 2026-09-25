@@ -1,3 +1,4 @@
+import Mathlib.Algebra.BigOperators.Group.List.Basic
 import SmallCancellation.Dehn
 
 namespace GreendlingerDehn

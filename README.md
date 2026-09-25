@@ -9,6 +9,10 @@ The intended theorem surface combines:
 
 The implementation uses finite relator lists and Mathlib's reduced free-group words, so the candidate search and Dehn procedure are executable.
 
+## Build
+
+This repository pins Lean 4.35.0-rc2 and Mathlib commit 065356127b1dc0016f66b7283ce0ce2c4055aa55. Run `lake build` to build the project.
+
 ## Current formalization status
 
 - The exhaustive redex search is proved complete for the stated factorization predicate.
