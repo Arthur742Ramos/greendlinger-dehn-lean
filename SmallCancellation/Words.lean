@@ -65,6 +65,35 @@ def IsPiece {α : Type*} [DecidableEq α] (R : List (FreeGroup α)) (u : Word α
         (j, sShift) ∈ cyclicShifts r.toWord ∧
         rShift = u ++ rTail ∧ sShift = u ++ sTail)
 
+/-- A common first letter of two distinct relators is a one-letter piece. -/
+theorem IsPiece.singleton_of_distinctRelators_commonHead
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)}
+    {r s : FreeGroup α} {a : Letter α} {rTail sTail : Word α}
+    (hr : r ∈ R) (hs : s ∈ R) (hrs : r ≠ s)
+    (hrWord : r.toWord = a :: rTail)
+    (hsWord : s.toWord = a :: sTail) :
+    IsPiece R [a] := by
+  refine ⟨by simp, Or.inl ⟨r, hr, s, hs, hrs, rTail, sTail, ?_, ?_⟩⟩
+  · simpa using hrWord
+  · simpa using hsWord
+
+/-- Two distinct cyclic positions of one relator with the same first letter
+also determine a one-letter piece, including for periodic relators. -/
+theorem IsPiece.singleton_of_distinctCyclicShifts_commonHead
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)}
+    {r : FreeGroup α} {a : Letter α} {i j : Nat}
+    {rShift sShift : Word α} {rTail sTail : Word α}
+    (hr : r ∈ R) (hij : i ≠ j)
+    (hi : (i, rShift) ∈ cyclicShifts r.toWord)
+    (hj : (j, sShift) ∈ cyclicShifts r.toWord)
+    (hrWord : rShift = a :: rTail)
+    (hsWord : sShift = a :: sTail) :
+    IsPiece R [a] := by
+  refine ⟨by simp, Or.inr ⟨r, hr, i, j, rShift, sShift, rTail, sTail,
+    hij, hi, hj, ?_, ?_⟩⟩
+  · simpa using hrWord
+  · simpa using hsWord
+
 /-- The metric small cancellation condition (C'(1/6)), for a symmetrized finite
 set of cyclically reduced relators. -/
 def CPrimeSix {α : Type*} [DecidableEq α] (R : List (FreeGroup α)) : Prop :=

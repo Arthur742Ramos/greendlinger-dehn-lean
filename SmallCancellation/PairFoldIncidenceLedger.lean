@@ -161,6 +161,60 @@ noncomputable def MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart
     seed.pairFoldIncidenceDart (Sum.inr boundary) =
       seed.boundaryOccurrenceDartPairFold.hom.mapDart (boundary.1, false) := rfl
 
+/-- The face orientation of an incidence dart reads the inverse of the
+relator's positive boundary letter. This keeps the face-side label explicit
+after all stem and cancellation folds have been assembled. -/
+@[simp] theorem MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart_label_side
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (side : seed.RelatorSideOccurrence) :
+    seed.boundaryOccurrenceDartPairFold.graph.label
+        (seed.pairFoldIncidenceDart (Sum.inl side)) =
+      inverseLetter ((seed.boundary.reducedBalloons.get side.1).label.relator.toWord[side.2]) := by
+  let embedding := LabelledGraphHom.comp seed.balloonBoundaryHom
+    (reducedBalloonOccurrencePathEmbedding seed.boundary.reducedBalloons side.1)
+  let balloon := seed.boundary.reducedBalloons.get side.1
+  have hlabel :
+      (wordBoundaryGraphWithJoins seed.boundary.reducedLiteralBoundary
+        seed.balloonEndpointPairs).label
+        (embedding.mapDart (balloon.relatorSideDart side.2)) =
+          balloon.label.relator.toWord[side.2] := by
+    rw [embedding.map_label]
+    exact balloon.relatorSideDart_label side.2
+  have hposition :
+      (seed.relatorSideOccurrencePosition side, false) =
+        embedding.mapDart (balloon.relatorSideDart side.2) := by
+    apply Prod.ext
+    · rfl
+    · have hdirection := reducedBalloonOccurrencePathEmbedding_direction
+        seed.boundary.reducedBalloons side.1 (balloon.relatorSideDart side.2)
+      change false = (((fun d => d) ∘
+        (reducedBalloonOccurrencePathEmbedding
+          seed.boundary.reducedBalloons side.1).mapDart)
+        (balloon.relatorSideDart side.2)).2
+      rw [Function.comp_apply]
+      exact hdirection.symm
+  calc
+    seed.boundaryOccurrenceDartPairFold.graph.label
+        (seed.pairFoldIncidenceDart (Sum.inl side)) =
+        inverseLetter
+          (seed.boundaryOccurrenceDartPairFold.graph.label
+            (seed.boundaryOccurrenceDartPairFold.hom.mapDart
+              (seed.relatorSideOccurrencePosition side, false))) := by
+      rw [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart_side,
+        seed.boundaryOccurrenceDartPairFold.graph.label_reverse]
+    _ = inverseLetter
+        ((wordBoundaryGraphWithJoins seed.boundary.reducedLiteralBoundary
+          seed.balloonEndpointPairs).label
+          (seed.relatorSideOccurrencePosition side, false)) := by
+      exact congrArg inverseLetter
+        ((seed.boundaryOccurrenceDartPairFold.hom).map_label
+          (seed.relatorSideOccurrencePosition side, false))
+    _ = inverseLetter
+        (balloon.label.relator.toWord[side.2]) := by
+      rw [hposition, hlabel]
+
 /-- The incidence occurrences lying over one folded edge. -/
 abbrev MinimalAreaRelatorBoundarySeed.PairFoldIncidenceFiber
     {α : Type*} [Fintype α] [DecidableEq α]
@@ -418,6 +472,39 @@ theorem MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart_opposite_of_ne
           have hdir := seed.mapDart_reverse_of_edgeClass_eq_boundaryUnpaired
             boundaryA.1 boundaryB.1 hclass hposNe hcancelA hcancelB
           simpa [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart] using hdir
+
+/-- Relator letters on the two face-side incidences of one folded edge are
+inverse. This is the one-letter compatibility required to extend a shared
+edge to a common piece arc. -/
+theorem MinimalAreaRelatorBoundarySeed.pairFoldFaceSideLetters_inverse
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (sideA sideB : seed.RelatorSideOccurrence)
+    (hEdge : seed.pairFoldIncidenceEdgeClass (Sum.inl sideA) =
+      seed.pairFoldIncidenceEdgeClass (Sum.inl sideB))
+    (hne : sideA ≠ sideB) :
+    (seed.boundary.reducedBalloons.get sideB.1).label.relator.toWord[sideB.2] =
+      inverseLetter
+        ((seed.boundary.reducedBalloons.get sideA.1).label.relator.toWord[sideA.2]) := by
+  let edge := seed.pairFoldIncidenceEdgeClass (Sum.inl sideA)
+  let a : seed.PairFoldIncidenceFiber edge := ⟨Sum.inl sideA, rfl⟩
+  let b : seed.PairFoldIncidenceFiber edge := ⟨Sum.inl sideB, hEdge.symm⟩
+  have hab : a ≠ b := by
+    intro h
+    apply hne
+    exact Sum.inl.inj (congrArg Subtype.val h)
+  have hop := seed.pairFoldIncidenceDart_opposite_of_ne edge a b hab
+  let G := seed.boundaryOccurrenceDartPairFold.graph.toDartGraph
+  have hop' : seed.pairFoldIncidenceDart (Sum.inl sideB) =
+      G.reverse (seed.pairFoldIncidenceDart (Sum.inl sideA)) := by
+    simpa [a, b, G] using hop
+  have hlabels := congrArg seed.boundaryOccurrenceDartPairFold.graph.label hop'
+  rw [seed.boundaryOccurrenceDartPairFold.graph.label_reverse] at hlabels
+  simp only [MinimalAreaRelatorBoundarySeed.pairFoldIncidenceDart_label_side]
+    at hlabels
+  have h := congrArg inverseLetter hlabels
+  simpa [inverseLetter] using h
 
 /-- The complete face-side/boundary incidence ledger contains exactly two
 flags for every quotient edge that it reaches. -/
