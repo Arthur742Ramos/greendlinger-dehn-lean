@@ -246,6 +246,61 @@ theorem twoPairingGraph_degree_le_two {V : Type*} [Fintype V] [DecidableEq V]
     _ ≤ ({P.target v, Q.target v} : Finset V).card := Finset.card_le_card hsubset
     _ ≤ 2 := Finset.card_le_two
 
+/-- If both pairings cover an occurrence and give it different partners,
+the corresponding vertex in their union graph has degree exactly two. -/
+theorem twoPairingGraph_degree_eq_two_of_complete_distinct
+    {V : Type*} [Fintype V] [DecidableEq V]
+    (P Q : PartialOccurrencePairing V) (v : V)
+    (hP : P.partner v ≠ none) (hQ : Q.partner v ≠ none)
+    (hdistinct : P.partner v ≠ Q.partner v) :
+    (twoPairingGraph P Q).degree v = 2 := by
+  classical
+  cases hp : P.partner v with
+  | none => exact False.elim (hP hp)
+  | some p =>
+    cases hq : Q.partner v with
+    | none => exact False.elim (hQ hq)
+    | some q =>
+      have hpq : p ≠ q := by
+        intro heq
+        subst q
+        exact hdistinct (hp.trans hq.symm)
+      let G := twoPairingGraph P Q
+      have hpMem : p ∈ G.neighborFinset v := by
+        exact (G.mem_neighborFinset v p).2 (Or.inl hp)
+      have hqMem : q ∈ G.neighborFinset v := by
+        exact (G.mem_neighborFinset v q).2 (Or.inr hq)
+      have hpairSubset : ({p, q} : Finset V) ⊆ G.neighborFinset v := by
+        intro x hx
+        simp only [Finset.mem_insert, Finset.mem_singleton] at hx
+        rcases hx with rfl | rfl
+        · exact hpMem
+        · exact hqMem
+      have hcardLower : 2 ≤ (G.neighborFinset v).card := by
+        have hcard := Finset.card_le_card hpairSubset
+        simpa [hpq] using hcard
+      have hcardUpper : G.degree v ≤ 2 := by
+        simpa [G] using twoPairingGraph_degree_le_two P Q v
+      have hdegreeLower : 2 ≤ G.degree v := by
+        rw [show G.degree v = (G.neighborFinset v).card from rfl]
+        exact hcardLower
+      have hEq : G.degree v = 2 := Nat.le_antisymm hcardUpper hdegreeLower
+      simpa [G] using hEq
+
+/-- A union of two total partial pairings with distinct partners at every
+vertex is a disjoint union of cycles. -/
+theorem twoPairingGraph_isCycles_of_complete_distinct
+    {V : Type*} [Fintype V] [DecidableEq V]
+    (P Q : PartialOccurrencePairing V)
+    (hP : ∀ v, P.partner v ≠ none)
+    (hQ : ∀ v, Q.partner v ≠ none)
+    (hdistinct : ∀ v, P.partner v ≠ Q.partner v) :
+    (twoPairingGraph P Q).IsCycles := by
+  intro v _
+  rw [(twoPairingGraph P Q).ncard_neighborSet]
+  exact twoPairingGraph_degree_eq_two_of_complete_distinct
+    P Q v (hP v) (hQ v) (hdistinct v)
+
 theorem twoPairingGraph_degree_le_one_of_unpaired_left
     {V : Type*} [Fintype V] [DecidableEq V]
     (P Q : PartialOccurrencePairing V) (v : V)

@@ -3145,6 +3145,127 @@ theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_card_ge_four
   have hpartners : some jS = some jC := hstem.symm.trans hstemBackAround
   exact hjNe (Option.some.inj hpartners)
 
+/-- A zero-incidence component is a genuine alternating cycle: at each of
+its occurrences both pairings are defined, and their partners are distinct.
+This records the exact cycle structure needed by the remaining interval
+argument. -/
+theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_isCycles
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (hzero : Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 0) :
+    (twoPairingGraph
+      (componentLeftPairing seed.balloonStemOccurrencePairing
+        seed.boundaryCancellationPairing C)
+      (componentRightPairing seed.balloonStemOccurrencePairing
+        seed.boundaryCancellationPairing C)).IsCycles := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  let left := componentLeftPairing seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing C
+  let right := componentRightPairing seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing C
+  apply twoPairingGraph_isCycles_of_complete_distinct left right
+  · intro v
+    obtain ⟨j, hj, hpartner⟩ :=
+      seed.balloonStemPartner_of_zeroIncidence C hzero v.1 v.2
+    have hlocal : left.partner v = some ⟨j, hj⟩ := by
+      exact (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+        seed.balloonStemOccurrencePairing C.supp v ⟨j, hj⟩).2 hpartner
+    intro hnone
+    rw [hnone] at hlocal
+    cases hlocal
+  · intro v
+    obtain ⟨j, hj, hpartner⟩ :=
+      seed.boundaryCancellationPartner_of_zeroIncidence C hzero v.1 v.2
+    have hlocal : right.partner v = some ⟨j, hj⟩ := by
+      exact (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+        seed.boundaryCancellationPairing C.supp v ⟨j, hj⟩).2 hpartner
+    intro hnone
+    rw [hnone] at hlocal
+    cases hlocal
+  · intro v heq
+    obtain ⟨jS, hjS, hstem⟩ :=
+      seed.balloonStemPartner_of_zeroIncidence C hzero v.1 v.2
+    obtain ⟨jC, hjC, hcancel⟩ :=
+      seed.boundaryCancellationPartner_of_zeroIncidence C hzero v.1 v.2
+    have hstemLocal : left.partner v = some ⟨jS, hjS⟩ := by
+      exact (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+        seed.balloonStemOccurrencePairing C.supp v ⟨jS, hjS⟩).2 hstem
+    have hcancelLocal : right.partner v = some ⟨jC, hjC⟩ := by
+      exact (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+        seed.boundaryCancellationPairing C.supp v ⟨jC, hjC⟩).2 hcancel
+    have htargets : (⟨jS, hjS⟩ : C.supp) = ⟨jC, hjC⟩ :=
+      Option.some.inj (hstemLocal.symm.trans (heq.trans hcancelLocal))
+    have hvalues : jS = jC := congrArg Subtype.val htargets
+    have hglobal :
+        seed.balloonStemOccurrencePairing.partner v.1 =
+          seed.boundaryCancellationPairing.partner v.1 := by
+      rw [hstem, hcancel, hvalues]
+    have hcancelSame :
+        seed.boundaryCancellationPairing.partner v.1 = some jS :=
+      hglobal.symm.trans hstem
+    exact seed.zeroIncidence_stem_and_cancellation_partners_ne
+      C hzero v.1 jS v.2 hstem hcancelSame
+
+/-- Every occurrence in a zero-incidence component lies on a simple cycle of
+the component graph. -/
+theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_cycle_through
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (hzero : Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 0)
+    (i : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hi : i ∈ C.supp) :
+    ∃ cycle : (twoPairingGraph
+      (componentLeftPairing seed.balloonStemOccurrencePairing
+        seed.boundaryCancellationPairing C)
+      (componentRightPairing seed.balloonStemOccurrencePairing
+        seed.boundaryCancellationPairing C)).Walk ⟨i, hi⟩ ⟨i, hi⟩,
+      cycle.IsCycle := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  let left := componentLeftPairing seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing C
+  let right := componentRightPairing seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing C
+  let graph := twoPairingGraph left right
+  have hcycles : graph.IsCycles := by
+    simpa [graph, left, right] using
+      seed.zeroIncidence_component_isCycles C hzero
+  let v : C.supp := ⟨i, hi⟩
+  obtain ⟨j, hj, hpartner⟩ :=
+    seed.balloonStemPartner_of_zeroIncidence C hzero i hi
+  let u : C.supp := ⟨j, hj⟩
+  have hlocal : left.partner v = some u := by
+    exact (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+      seed.balloonStemOccurrencePairing C.supp v u).2 hpartner
+  have hadj : graph.Adj v u := Or.inl hlocal
+  have hneighbors : (graph.neighborSet v).Nonempty :=
+    ⟨u, by simpa only [SimpleGraph.mem_neighborSet] using hadj⟩
+  let component := graph.connectedComponentMk v
+  have hv : v ∈ component.supp := by
+    exact (SimpleGraph.ConnectedComponent.mem_supp_iff component v).mpr rfl
+  obtain ⟨cycle, hcycle, _⟩ :=
+    hcycles.exists_cycle_toSubgraph_verts_eq_connectedComponentSupp hv hneighbors
+  exact ⟨cycle, hcycle⟩
+
 /-- The exact component incidence count implies the corresponding upper
 bound, retained for edge-class corollaries. -/
 theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_component_le_two
