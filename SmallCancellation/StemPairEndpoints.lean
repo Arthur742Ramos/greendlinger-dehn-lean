@@ -1275,6 +1275,23 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFold_forward
         MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
         wordPathBoundaryHomWithJoins]
 
+/-- Each source cancellation pair in the seed encloses a contiguous subword
+whose free-group value is the identity. The decomposition is the word-level
+form of the nested cancellation interval, and is available for later
+comparison with consecutive factor blocks. -/
+theorem MinimalAreaRelatorBoundarySeed.cancellationPair_has_null_interior
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (p : Nat × Nat)
+    (hp : p ∈ seed.boundary.reducedLiteralBoundaryShape.cancellationPairs) :
+    ∃ (pre inner post : Word α) (a : Letter α),
+      seed.boundary.reducedLiteralBoundary =
+        pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+      p = (pre.length, pre.length + inner.length + 1) ∧
+      FreeGroup.mk inner = 1 :=
+  seed.boundary.reducedLiteralBoundaryShape.cancellationPair_interior_mk_eq_one p hp
+
 /-- In the direct pair-fold quotient, each global free-cancellation pair is
 already represented by opposite dart occurrences of the original boundary
 walk. This lets us shorten the walk without making any further graph folds. -/

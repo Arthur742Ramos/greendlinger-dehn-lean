@@ -299,6 +299,97 @@ def cancellationPairs {raw reduced : Word α} (h : FreeReductionShape raw reduce
         (shiftCancellationPairs 1 inner.cancellationPairs ++
         shiftCancellationPairs (inner.inputWord.length + 2) suffix.cancellationPairs)
 
+/-- Every pair in a nested reduction tree is the pair introduced by a
+`bracket` node. The interval between its endpoints is therefore a contiguous
+subword that itself freely reduces to the empty word. The position equation
+keeps this extraction aligned with the absolute source-position trace. -/
+theorem exists_bracket_decomposition_of_cancellationPair
+    {raw reduced : Word α} (h : FreeReductionShape raw reduced)
+    (p : Nat × Nat) (hp : p ∈ h.cancellationPairs) :
+    ∃ (pre inner post : Word α) (a : Letter α),
+      raw = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+      p = (pre.length, pre.length + inner.length + 1) ∧
+      Nonempty (FreeReductionShape inner []) := by
+  induction h generalizing p with
+  | empty => simp [cancellationPairs] at hp
+  | letter a => simp [cancellationPairs] at hp
+  | @append u u' v v' left right ihLeft ihRight =>
+      simp only [cancellationPairs, List.mem_append] at hp
+      rcases hp with hpLeft | hpRight
+      · obtain ⟨pre, inner, post, a, hword, hpos, hinner⟩ :=
+          ihLeft p hpLeft
+        refine ⟨pre, inner, post ++ v, a, ?_, ?_, hinner⟩
+        · rw [hword]
+          simp [List.append_assoc]
+        · rw [hpos]
+      · rcases List.mem_map.mp hpRight with ⟨q, hq, hpEq⟩
+        obtain ⟨pre, inner, post, a, hword, hpos, hinner⟩ := ihRight q hq
+        refine ⟨u ++ pre, inner, post, a, ?_, ?_, hinner⟩
+        · rw [hword]
+          simp [List.append_assoc]
+        · calc
+            p = (left.inputWord.length + q.1, left.inputWord.length + q.2) :=
+              hpEq.symm
+            _ = (u.length + pre.length,
+                u.length + pre.length + inner.length + 1) := by
+              rw [hpos]
+              simp [FreeReductionShape.inputWord]
+              omega
+            _ = ((u ++ pre).length,
+                (u ++ pre).length + inner.length + 1) := by
+              simp [List.length_append]
+  | @bracket a inner suffix result innerShape suffixShape ihInner ihSuffix =>
+      simp only [cancellationPairs, List.mem_cons, List.mem_append] at hp
+      rcases hp with hpRoot | hpRest
+      · subst p
+        refine ⟨[], inner, suffix, a, ?_, ?_, ⟨innerShape⟩⟩
+        · simp [List.append_assoc]
+        · simp [FreeReductionShape.inputWord]
+      · rcases hpRest with hpInner | hpSuffix
+        · rcases List.mem_map.mp hpInner with ⟨q, hq, hpEq⟩
+          obtain ⟨pre, middle, post, b, hword, hpos, hmiddle⟩ :=
+            ihInner q hq
+          refine ⟨[a] ++ pre, middle, post ++ [inverseLetter a] ++ suffix,
+            b, ?_, ?_, hmiddle⟩
+          · simp [hword, List.append_assoc]
+          · calc
+              p = (1 + q.1, 1 + q.2) := hpEq.symm
+              _ = (([a] ++ pre).length,
+                  ([a] ++ pre).length + middle.length + 1) := by
+                rw [hpos]
+                simp
+                omega
+        · rcases List.mem_map.mp hpSuffix with ⟨q, hq, hpEq⟩
+          obtain ⟨pre, middle, post, b, hword, hpos, hmiddle⟩ :=
+            ihSuffix q hq
+          refine ⟨([a] ++ inner) ++ [inverseLetter a] ++ pre, middle, post,
+            b, ?_, ?_, hmiddle⟩
+          · simp [hword, List.append_assoc]
+          · calc
+              p = (innerShape.inputWord.length + 2 + q.1,
+                innerShape.inputWord.length + 2 + q.2) := hpEq.symm
+              _ = ((([a] ++ inner) ++ [inverseLetter a] ++ pre).length,
+                  (([a] ++ inner) ++ [inverseLetter a] ++ pre).length +
+                    middle.length + 1) := by
+                rw [hpos]
+                simp [FreeReductionShape.inputWord, List.length_append]
+                omega
+
+/-- The interior word exposed by a cancellation pair represents the identity
+in the free group. -/
+theorem cancellationPair_interior_mk_eq_one
+    {raw reduced : Word α} (h : FreeReductionShape raw reduced)
+    (p : Nat × Nat) (hp : p ∈ h.cancellationPairs) :
+    ∃ (pre inner post : Word α) (a : Letter α),
+      raw = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+      p = (pre.length, pre.length + inner.length + 1) ∧
+      FreeGroup.mk inner = 1 := by
+  obtain ⟨pre, inner, post, a, hword, hpos, ⟨innerShape⟩⟩ :=
+    h.exists_bracket_decomposition_of_cancellationPair p hp
+  refine ⟨pre, inner, post, a, hword, hpos, ?_⟩
+  rw [FreeGroup.one_eq_mk]
+  exact innerShape.sound
+
 /-- Ordered source occurrences of the letters left after free reduction.
 Cancelled bracket interiors contribute no survivors; the suffix is shifted
 past the opening letter, interior, and closing inverse letter. -/
