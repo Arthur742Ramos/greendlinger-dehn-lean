@@ -1054,6 +1054,8 @@ structure CancellationFoldData {α : Type*} {G : LabelledDartGraph α}
   pair : LabelledDartPair G
   first_at : walk.occurrenceDarts[step.prefixLength]? = some pair.first
   second_at : walk.occurrenceDarts[step.prefixLength + 1]? = some pair.second
+  adjacent : G.toDartGraph.target pair.first =
+    G.toDartGraph.source pair.second
   result : WalkFoldResult G (u₀ := u) (v₀ := v) reduced
 
 /-- Fold one adjacent inverse-letter pair in a labeled walk. This is the
@@ -1086,9 +1088,14 @@ noncomputable def foldCancellationWithPair {α : Type*} {G : LabelledDartGraph �
       let firstDart := firstData.dart
       let secondDart := secondData.dart
       have hfirstSource := firstData.source_eq
+      have hfirstTarget := firstData.target_eq
       have hfirstLabel := firstData.label_eq
+      have hsecondSource := secondData.source_eq
       have hsecondTarget := secondData.target_eq
       have hsecondLabel := secondData.label_eq
+      have hadjacent : G.toDartGraph.target firstDart =
+          G.toDartGraph.source secondDart :=
+        hfirstTarget.trans hsecondSource.symm
       have hlabels : G.label firstDart = inverseLetter (G.label secondDart) := by
         calc
           G.label firstDart = a := hfirstLabel
@@ -1140,6 +1147,7 @@ noncomputable def foldCancellationWithPair {α : Type*} {G : LabelledDartGraph �
         rw [hindex, List.getElem?_append_right (by omega)]
         simp
       refine ⟨⟨firstDart, secondDart, hlabels⟩, hfirstAt, hsecondAt,
+        hadjacent,
         ⟨G.folded α firstDart secondDart hlabels,
           LabelledGraphHom.fold G firstDart secondDart hlabels, ?_, ?_⟩⟩
       · exact before'.spliceAcrossFold firstDart secondDart after' hlabels

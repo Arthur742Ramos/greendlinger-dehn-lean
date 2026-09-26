@@ -186,7 +186,9 @@ structure LinkCurvatureAccounting {F : Type*} [Fintype F]
   vertices : Nat
   edges : Nat
   linkEuler : Nat
-  euler : vertices + Fintype.card F = edges + 1
+  /-- The finite complex has Euler characteristic at least one. Extra
+  spherical components increase this lower bound and do not hurt curvature. -/
+  euler : edges + 1 ≤ vertices + Fintype.card F
   angle_count_lower :
     (2 : ℚ) * vertices ≤ (∑ f : F, (faces f).angleSum) + linkEuler
   side_count :
@@ -201,7 +203,7 @@ def DiskCurvatureAccounting.toLinkCurvatureAccounting
   vertices := a.vertices
   edges := a.edges
   linkEuler := a.boundary
-  euler := a.euler
+  euler := a.euler.symm.le
   angle_count_lower := by linarith [a.angle_count]
   side_count := a.side_count
 
@@ -213,8 +215,9 @@ theorem LinkCurvatureAccounting.total_curvature_ge_two
     (2 : ℚ) ≤ ∑ f : F, (faces f).curvature := by
   classical
   simp only [CurvatureFace.curvature, Finset.sum_sub_distrib]
-  have heuler : (a.vertices : ℚ) + (Fintype.card F : ℚ) =
-      (a.edges : ℚ) + 1 := by exact_mod_cast a.euler
+  have heuler : (a.edges : ℚ) + 1 ≤
+      (a.vertices : ℚ) + (Fintype.card F : ℚ) := by
+    exact_mod_cast a.euler
   have hangle : (2 : ℚ) * a.vertices ≤
       (∑ f : F, (faces f).angleSum) + a.linkEuler := a.angle_count_lower
   have hside : (∑ f : F, ((faces f).sides : ℚ)) + a.linkEuler =

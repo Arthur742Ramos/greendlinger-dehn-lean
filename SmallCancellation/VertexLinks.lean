@@ -144,10 +144,11 @@ theorem FaceCorner.angleSum_map {β : Type*} (f : β → FaceCorner) (xs : List 
 abbrev LinkCorner {V : Type*} (link : V → VertexLinkProfile) :=
   Σ v : V, Fin (link v).corners
 
-/-- Incidence data for a finite planar cell map that permits cut vertices.
+/-- Incidence data for a finite cell map that permits cut vertices.
 Each face's corner list is tied to the corners in its vertex links. The
 `darts_total` field counts the two ends of every edge; Euler characteristic
-and the local link shapes then derive the generalized curvature ledger. -/
+at least one and the local link shapes then derive the generalized curvature
+ledger. The Euler lower bound allows additional closed components. -/
 structure LinkCornerMapData (V E F : Type*) [Fintype V] [Fintype E] [Fintype F]
     [DecidableEq V] [DecidableEq F] where
   link : V → VertexLinkProfile
@@ -156,7 +157,8 @@ structure LinkCornerMapData (V E F : Type*) [Fintype V] [Fintype E] [Fintype F]
   faceCorners : ∀ f, (faces f).corners =
     ((Finset.univ.filter fun c : LinkCorner link => cornerFace c = f).toList).map
       (fun c => (link c.1).cornerDatum c.2)
-  euler : Fintype.card V + Fintype.card F = Fintype.card E + 1
+  /-- The attached finite 2-complex has Euler characteristic at least one. -/
+  euler : Fintype.card E + 1 ≤ Fintype.card V + Fintype.card F
   darts_total : (∑ v : V, (link v).darts) = 2 * Fintype.card E
 
 namespace LinkCornerMapData
