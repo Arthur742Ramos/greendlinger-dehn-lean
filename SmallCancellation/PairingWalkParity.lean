@@ -117,6 +117,40 @@ private theorem pairingEdgeColor_false_iff (P Q : PartialOccurrencePairing V)
   · rintro ⟨hp, hq⟩
     simp [pairingEdgeColor, hp]
 
+private theorem pairingEdgeColor_ne_of_two_step (P Q : PartialOccurrencePairing V)
+    {v x y : V} (h : (twoPairingGraph P Q).Adj v x)
+    (h₂ : (twoPairingGraph P Q).Adj x y) (hvy : v ≠ y) :
+    pairingEdgeColor P Q h ≠ pairingEdgeColor P Q h₂ := by
+  by_cases hc : pairingEdgeColor P Q h = true
+  · have hleft₁ : P.partner v = some x :=
+      (pairingEdgeColor_true_iff P Q h).1 hc
+    have hleft₁' : P.partner x = some v := P.partner_symm hleft₁
+    by_cases hc₂ : pairingEdgeColor P Q h₂ = true
+    · have hleft₂ : P.partner x = some y :=
+        (pairingEdgeColor_true_iff P Q h₂).1 hc₂
+      have hyv : y = v := Option.some.inj (hleft₂.symm.trans hleft₁')
+      intro _
+      exact (hvy hyv.symm).elim
+    · intro heq
+      exact hc₂ (heq ▸ hc)
+  · by_cases hc₂ : pairingEdgeColor P Q h₂ = true
+    · intro heq
+      exact hc (heq.symm ▸ hc₂)
+    · have hright₁ : Q.partner v = some x :=
+        ((pairingEdgeColor_false_iff P Q h).1 (by
+          cases hcolor : pairingEdgeColor P Q h with
+          | false => rfl
+          | true => exact (hc hcolor).elim)).2
+      have hright₁' : Q.partner x = some v := Q.partner_symm hright₁
+      have hright₂ : Q.partner x = some y :=
+        ((pairingEdgeColor_false_iff P Q h₂).1 (by
+          cases hcolor : pairingEdgeColor P Q h₂ with
+          | false => rfl
+          | true => exact (hc₂ hcolor).elim)).2
+      have hyv : y = v := Option.some.inj (hright₂.symm.trans hright₁')
+      intro _
+      exact (hvy hyv.symm).elim
+
 private theorem pairingEdgeColor_symm (P Q : PartialOccurrencePairing V)
     {v w : V} (h : (twoPairingGraph P Q).Adj v w) :
     pairingEdgeColor P Q h = pairingEdgeColor P Q h.symm := by
@@ -176,37 +210,43 @@ theorem pairingWalkColors_alternate_of_isPath
             have hymem : y ∈ (SimpleGraph.Walk.cons h₂ rest).support := by
               cases rest <;> simp [SimpleGraph.Walk.support]
             exact huNot (heq ▸ hymem)
-          have hcolors_ne : pairingEdgeColor P Q h ≠ pairingEdgeColor P Q h₂ := by
-            by_cases hc : pairingEdgeColor P Q h = true
-            · have hleft₁ : P.partner v = some x :=
-                (pairingEdgeColor_true_iff P Q h).1 hc
-              have hleft₁' : P.partner x = some v := P.partner_symm hleft₁
-              by_cases hc₂ : pairingEdgeColor P Q h₂ = true
-              · have hleft₂ : P.partner x = some y :=
-                  (pairingEdgeColor_true_iff P Q h₂).1 hc₂
-                have : y = v := Option.some.inj (hleft₂.symm.trans hleft₁')
-                intro _
-                exact (hvy this.symm).elim
-              · intro heq
-                exact hc₂ (heq ▸ hc)
-            · by_cases hc₂ : pairingEdgeColor P Q h₂ = true
-              · intro heq
-                exact hc (heq.symm ▸ hc₂)
-              · have hright₁ : Q.partner v = some x :=
-                  ((pairingEdgeColor_false_iff P Q h).1 (by
-                    cases hcolor : pairingEdgeColor P Q h with
-                    | false => rfl
-                    | true => exact (hc hcolor).elim)).2
-                have hright₁' : Q.partner x = some v := Q.partner_symm hright₁
-                have hright₂ : Q.partner x = some y :=
-                  ((pairingEdgeColor_false_iff P Q h₂).1 (by
-                    cases hcolor : pairingEdgeColor P Q h₂ with
-                    | false => rfl
-                    | true => exact (hc₂ hcolor).elim)).2
-                have : y = v := Option.some.inj (hright₂.symm.trans hright₁')
-                intro _
-                exact (hvy this.symm).elim
+          have hcolors_ne := pairingEdgeColor_ne_of_two_step P Q h h₂ hvy
           have htail := ih htailPath
+          change pairingEdgeColor P Q h ≠ pairingEdgeColor P Q h₂ ∧
+            PairingColorsAlternate
+              (pairingEdgeColor P Q h₂ :: pairingWalkColors P Q rest)
+          exact ⟨hcolors_ne, htail⟩
+
+/-- The edge colors alternate all the way around a simple cycle. -/
+theorem pairingWalkColors_alternate_of_isCycle
+    (P Q : PartialOccurrencePairing V) {v : V}
+    (p : (twoPairingGraph P Q).Walk v v) (hp : p.IsCycle) :
+    PairingColorsAlternate (pairingWalkColors P Q p) := by
+  cases p with
+  | nil =>
+      have hlen := hp.three_le_length
+      simp at hlen
+  | @cons v x _ h tail =>
+      cases tail with
+      | nil =>
+          have hlen := hp.three_le_length
+          simp at hlen
+      | @cons x y _ h₂ rest =>
+          have htailPath : (SimpleGraph.Walk.cons h₂ rest).IsPath :=
+            hp.isPath_tail
+          have hlen := hp.three_le_length
+          have hvy : v ≠ y := by
+            intro heq
+            have hcycleNe := hp.getVert_sub_one_ne_getVert_add_one
+              (i := 1) (by omega : 1 ≤ (SimpleGraph.Walk.cons h (SimpleGraph.Walk.cons h₂ rest)).length)
+            have hget :
+                (SimpleGraph.Walk.cons h (SimpleGraph.Walk.cons h₂ rest)).getVert 0 =
+                  (SimpleGraph.Walk.cons h (SimpleGraph.Walk.cons h₂ rest)).getVert 2 := by
+              simpa using heq
+            exact hcycleNe hget
+          have hcolors_ne := pairingEdgeColor_ne_of_two_step P Q h h₂ hvy
+          have htail := pairingWalkColors_alternate_of_isPath P Q
+            (SimpleGraph.Walk.cons h₂ rest) htailPath
           change pairingEdgeColor P Q h ≠ pairingEdgeColor P Q h₂ ∧
             PairingColorsAlternate
               (pairingEdgeColor P Q h₂ :: pairingWalkColors P Q rest)

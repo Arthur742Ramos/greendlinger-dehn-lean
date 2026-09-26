@@ -72,6 +72,75 @@ private theorem wordPathSuffixHom_mapDart_index_ge {α : Type*}
     pre.length ≤ ((wordPathSuffixHom pre suf).mapDart d).1.val := by
   simp [wordPathSuffixHom]
 
+/-- Forget dart directions and retain the ordered source positions of a list
+of occurrence pairs. -/
+def wordPathDartPairPosition {α : Type*} (word : Word α)
+    (pair : LabelledDartPair (wordPathGraph word)) : Nat × Nat :=
+  let first : Fin word.length × Bool := pair.first
+  let second : Fin word.length × Bool := pair.second
+  (first.1.val, second.1.val)
+
+def wordPathDartPairPositions {α : Type*} (word : Word α)
+    (pairs : List (LabelledDartPair (wordPathGraph word))) : List (Nat × Nat) :=
+  pairs.map (wordPathDartPairPosition word)
+
+theorem wordPathDartPairPositions_append {α : Type*} (word : Word α)
+    (left right : List (LabelledDartPair (wordPathGraph word))) :
+    wordPathDartPairPositions word (left ++ right) =
+      wordPathDartPairPositions word left ++ wordPathDartPairPositions word right := by
+  simp [wordPathDartPairPositions]
+
+private theorem wordPathDartPairPosition_map_prefix {α : Type*}
+    (pre suf : Word α) (pair : LabelledDartPair (wordPathGraph pre)) :
+    wordPathDartPairPosition (pre ++ suf)
+        (LabelledDartPair.map (wordPathPrefixHom pre suf) pair) =
+      wordPathDartPairPosition pre pair := by
+  cases pair with
+  | mk first second hinv =>
+      simp [wordPathDartPairPosition, LabelledDartPair.map,
+        wordPathPrefixHom, wordPathGraph]
+
+private theorem wordPathDartPairPosition_map_suffix {α : Type*}
+    (pre suf : Word α) (pair : LabelledDartPair (wordPathGraph suf)) :
+    wordPathDartPairPosition (pre ++ suf)
+        (LabelledDartPair.map (wordPathSuffixHom pre suf) pair) =
+      (pre.length + (wordPathDartPairPosition suf pair).1,
+        pre.length + (wordPathDartPairPosition suf pair).2) := by
+  cases pair with
+  | mk first second hinv =>
+      simp [wordPathDartPairPosition, LabelledDartPair.map,
+        wordPathSuffixHom, wordPathGraph]
+
+private theorem wordPathDartPairPositions_map_prefix {α : Type*}
+    (pre suf : Word α) (pairs : List (LabelledDartPair (wordPathGraph pre))) :
+    wordPathDartPairPositions (pre ++ suf)
+        (pairs.map (LabelledDartPair.map (wordPathPrefixHom pre suf))) =
+      wordPathDartPairPositions pre pairs := by
+  simp only [wordPathDartPairPositions, List.map_map]
+  apply List.map_congr_left
+  intro pair hp
+  simpa only [Function.comp_def] using
+    wordPathDartPairPosition_map_prefix pre suf pair
+
+private theorem wordPathDartPairPositions_map_suffix {α : Type*}
+    (pre suf : Word α) (pairs : List (LabelledDartPair (wordPathGraph suf))) :
+    wordPathDartPairPositions (pre ++ suf)
+        (pairs.map (LabelledDartPair.map (wordPathSuffixHom pre suf))) =
+      (wordPathDartPairPositions suf pairs).map
+        (fun p => (pre.length + p.1, pre.length + p.2)) := by
+  simp only [wordPathDartPairPositions, List.map_map]
+  apply List.map_congr_left
+  intro pair hp
+  simpa only [Function.comp_def] using
+    wordPathDartPairPosition_map_suffix pre suf pair
+
+private theorem wordPathDartPairPosition_cast {α : Type*}
+    {u v : Word α} (h : u = v)
+    (pair : LabelledDartPair (wordPathGraph u)) :
+    wordPathDartPairPosition v (LabelledDartPair.castWordPath h pair) =
+      wordPathDartPairPosition u pair := by
+  simp [wordPathDartPairPosition, LabelledDartPair.castWordPath, Fin.cast]
+
 private def lollipopStemEndpointIndices {α : Type*} (stem relator : Word α) :
     List (Fin (lollipopBoundaryWord stem relator).length) :=
   (List.finRange stem.length).flatMap fun i =>
@@ -169,6 +238,56 @@ theorem lollipopStemPairs_endpointList_nodup {α : Type*}
     List.flatMap_map, List.map_flatMap, lollipopStemPair,
     lollipopStemIndexToDart] using
     (lollipopStemEndpointIndices_map_nodup stem relator)
+
+private theorem lollipopStemPair_positions_compatible {α : Type*}
+    (stem relator : Word α) (i j : Fin stem.length) :
+    CancellationIntervalsCompatible
+      ((lollipopStemFirstIndex stem relator i).val,
+        (lollipopStemMateIndex stem relator i).val)
+      ((lollipopStemFirstIndex stem relator j).val,
+        (lollipopStemMateIndex stem relator j).val) := by
+  unfold CancellationIntervalsCompatible
+  by_cases hij : i.val ≤ j.val
+  · by_cases heq : i.val = j.val
+    · have heq' : i = j := Fin.ext heq
+      subst j
+      exact Or.inr (Or.inr (Or.inl ⟨by simp, by simp⟩))
+    · have hlt : i.val < j.val := by omega
+      right
+      right
+      left
+      constructor
+      · simpa [lollipopStemFirstIndex] using hlt.le
+      · simp only [lollipopStemMateIndex]
+        omega
+  · have hlt : j.val < i.val := by omega
+    right
+    right
+    right
+    constructor
+    · simpa [lollipopStemFirstIndex] using hlt.le
+    · simp only [lollipopStemMateIndex]
+      omega
+
+/-- The stem-fold intervals in a lollipop are nested: increasing the outward
+stem position moves the return endpoint inward. -/
+theorem lollipopStemPairs_positions_noncrossing {α : Type*}
+    (stem relator : Word α) :
+    CancellationPairsNoncrossing
+      ((lollipopStemPairs stem relator).map fun pair =>
+        (pair.first.1.val, pair.second.1.val)) := by
+  intro p hp q hq
+  rcases List.mem_map.mp hp with ⟨pairP, hpSource, rfl⟩
+  rcases List.mem_map.mp hq with ⟨pairQ, hqSource, rfl⟩
+  simp only [lollipopStemPairs, List.mem_map] at hpSource hqSource
+  rcases hpSource with ⟨i, hi, hpairP⟩
+  rcases hqSource with ⟨j, hj, hpairQ⟩
+  have hpEq : pairP = lollipopStemPair stem relator i := hpairP.symm
+  have hqEq : pairQ = lollipopStemPair stem relator j := hpairQ.symm
+  subst pairP
+  subst pairQ
+  simpa [lollipopStemPair] using
+    lollipopStemPair_positions_compatible stem relator i j
 
 /-- Splitting a lollipop at a matched stem pair exposes the conjugate relator
 word between the two stem occurrences. -/
@@ -1097,6 +1216,91 @@ theorem reducedBalloonStemPairs_endpointList_nodup {α : Type*}
           b.label.rawWord tailWord d₀
       rw [hde] at hd'
       omega
+
+private theorem ReducedRelatorBalloonData.stemPairs_positions_noncrossing
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P) :
+    CancellationPairsNoncrossing
+      (wordPathDartPairPositions b.label.rawWord b.stemPairs) := by
+  have hpositions : wordPathDartPairPositions b.label.rawWord b.stemPairs =
+      wordPathDartPairPositions
+        (lollipopBoundaryWord b.label.conjugator.toWord b.label.relator.toWord)
+        (lollipopStemPairs b.label.conjugator.toWord b.label.relator.toWord) := by
+    simp only [ReducedRelatorBalloonData.stemPairs,
+      wordPathDartPairPositions, List.map_map]
+    apply List.map_congr_left
+    intro pair hp
+    exact wordPathDartPairPosition_cast b.label.lollipopBoundary_eq_rawWord pair
+  rw [hpositions]
+  exact lollipopStemPairs_positions_noncrossing
+    b.label.conjugator.toWord b.label.relator.toWord
+
+/-- Stem-fold intervals remain noncrossing after the relator balloons are
+flattened. Pairs within one balloon are nested; pairs from distinct balloons
+are separated by their disjoint source-word intervals. -/
+theorem reducedBalloonStemPairs_positions_noncrossing {α : Type*}
+    [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α} :
+    ∀ (balloons : List (ReducedRelatorBalloonData P)),
+      CancellationPairsNoncrossing
+        (wordPathDartPairPositions
+          ((balloons.map fun b => b.label.rawWord).flatten)
+          (reducedBalloonStemPairs balloons)) := by
+  intro balloons
+  induction balloons with
+  | nil => simp [reducedBalloonStemPairs, wordPathDartPairPositions,
+      CancellationPairsNoncrossing]
+  | cons b tail ih =>
+      change CancellationPairsNoncrossing
+        (wordPathDartPairPositions
+          (b.label.rawWord ++ (tail.map fun x => x.label.rawWord).flatten)
+          (reducedBalloonStemPairs (b :: tail)))
+      rw [reducedBalloonStemPairs_cons,
+        wordPathDartPairPositions_append,
+        wordPathDartPairPositions_map_prefix,
+        wordPathDartPairPositions_map_suffix]
+      have hhead : CancellationPairsNoncrossing
+          (wordPathDartPairPositions b.label.rawWord b.stemPairs) :=
+        b.stemPairs_positions_noncrossing
+      have htail : CancellationPairsNoncrossing
+          ((wordPathDartPairPositions
+              ((tail.map fun x => x.label.rawWord).flatten)
+              (reducedBalloonStemPairs tail)).map
+            (fun p => (b.label.rawWord.length + p.1,
+              b.label.rawWord.length + p.2))) := by
+        intro p hp q hq
+        rcases List.mem_map.mp hp with ⟨p₀, hp₀, rfl⟩
+        rcases List.mem_map.mp hq with ⟨q₀, hq₀, rfl⟩
+        exact (ih p₀ hp₀ q₀ hq₀).shift b.label.rawWord.length
+      intro p hp q hq
+      rcases List.mem_append.mp hp with hp | hp
+      · rcases List.mem_append.mp hq with hq | hq
+        · exact hhead p hp q hq
+        · obtain ⟨r, hr, rfl⟩ := List.mem_map.mp hq
+          have hpBound : p.2 < b.label.rawWord.length := by
+            rcases List.mem_map.mp hp with ⟨pair, _, rfl⟩
+            exact pair.second.1.isLt
+          exact Or.inl (by omega)
+      · rcases List.mem_append.mp hq with hq | hq
+        · obtain ⟨p₀, hp₀, rfl⟩ := List.mem_map.mp hp
+          have hqBound : q.2 < b.label.rawWord.length := by
+            rcases List.mem_map.mp hq with ⟨pair, _, rfl⟩
+            exact pair.second.1.isLt
+          exact Or.inr (Or.inl (by omega))
+        · exact htail p hp q hq
+
+/-- The explicit minimum-area seed has the same nested stem intervals on its
+complete literal boundary. -/
+theorem MinimalAreaRelatorBoundarySeed.balloonStemIntervals_noncrossing
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    CancellationPairsNoncrossing
+      (wordPathDartPairPositions seed.boundary.reducedLiteralBoundary
+        seed.balloonStemPairs) := by
+  simpa [MinimalAreaRelatorBoundarySeed.balloonStemPairs,
+    RelatorFactorBoundarySeed.reducedLiteralBoundary] using
+    reducedBalloonStemPairs_positions_noncrossing
+      seed.boundary.reducedBalloons
 
 /-- Every local balloon stem occurrence is taken in the forward orientation
 of the original word path. -/
@@ -3237,10 +3441,14 @@ theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_cycle_through
         seed.boundaryCancellationPairing C)
       (componentRightPairing seed.balloonStemOccurrencePairing
         seed.boundaryCancellationPairing C)).Walk ⟨i, hi⟩ ⟨i, hi⟩,
-      cycle.IsCycle ∧ cycle.toSubgraph.verts = Set.univ := by
+      cycle.IsCycle ∧ cycle.toSubgraph.verts = Set.univ ∧
+        PairingColorsAlternate (pairingWalkColors
+          (componentLeftPairing seed.balloonStemOccurrencePairing
+            seed.boundaryCancellationPairing C)
+          (componentRightPairing seed.balloonStemOccurrencePairing
+            seed.boundaryCancellationPairing C) cycle) := by
   classical
   letI : Fintype C.supp := Fintype.ofFinite _
-  letI : DecidableEq C.supp := Classical.decEq _
   let left := componentLeftPairing seed.balloonStemOccurrencePairing
     seed.boundaryCancellationPairing C
   let right := componentRightPairing seed.balloonStemOccurrencePairing
@@ -3249,6 +3457,30 @@ theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_cycle_through
   have hcycles : graph.IsCycles := by
     simpa [graph, left, right] using
       seed.zeroIncidence_component_isCycles C hzero
+  have hdistinct : ∀ x : C.supp, left.partner x ≠ right.partner x := by
+    intro x heq
+    obtain ⟨jS, hjS, hstem⟩ :=
+      seed.balloonStemPartner_of_zeroIncidence C hzero x.1 x.2
+    obtain ⟨jC, hjC, hcancel⟩ :=
+      seed.boundaryCancellationPartner_of_zeroIncidence C hzero x.1 x.2
+    have hstemLocal : left.partner x = some ⟨jS, hjS⟩ := by
+      exact (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+        seed.balloonStemOccurrencePairing C.supp x ⟨jS, hjS⟩).2 hstem
+    have hcancelLocal : right.partner x = some ⟨jC, hjC⟩ := by
+      exact (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+        seed.boundaryCancellationPairing C.supp x ⟨jC, hjC⟩).2 hcancel
+    have htargets : (⟨jS, hjS⟩ : C.supp) = ⟨jC, hjC⟩ :=
+      Option.some.inj (hstemLocal.symm.trans (heq.trans hcancelLocal))
+    have hvalues : jS = jC := congrArg Subtype.val htargets
+    have hglobal :
+        seed.balloonStemOccurrencePairing.partner x.1 =
+          seed.boundaryCancellationPairing.partner x.1 := by
+      rw [hstem, hcancel, hvalues]
+    have hcancelSame :
+        seed.boundaryCancellationPairing.partner x.1 = some jS :=
+      hglobal.symm.trans hstem
+    exact seed.zeroIncidence_stem_and_cancellation_partners_ne
+      C hzero x.1 jS x.2 hstem hcancelSame
   let v : C.supp := ⟨i, hi⟩
   obtain ⟨j, hj, hpartner⟩ :=
     seed.balloonStemPartner_of_zeroIncidence C hzero i hi
@@ -3278,7 +3510,8 @@ theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_cycle_through
     simp only [Set.mem_univ, iff_true]
     exact (SimpleGraph.ConnectedComponent.mem_supp_iff component x).mpr
       (SimpleGraph.ConnectedComponent.eq.mpr (hconn x v))
-  exact ⟨cycle, hcycle, hverts.trans hcomponent⟩
+  have hcolors := pairingWalkColors_alternate_of_isCycle left right cycle hcycle
+  exact ⟨cycle, hcycle, hverts.trans hcomponent, hcolors⟩
 
 /-- The exact component incidence count implies the corresponding upper
 bound, retained for edge-class corollaries. -/
