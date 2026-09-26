@@ -374,6 +374,57 @@ theorem MinimalAreaRelatorBoundarySeed.no_adjacent_inverse_factors
     exact hshortLength
   exact (Nat.not_le_of_gt hstrict) (seed.area_minimal shortCertAtW)
 
+/-- Minimum area also forbids deleting two relator factors around a retained
+middle block. If `x · middle · y` has the same product as `middle`, those two
+factors can be removed while leaving every intermediate factor unchanged. -/
+theorem MinimalAreaRelatorBoundarySeed.no_two_factors_stabilizing_middle
+    {α : Type*} [DecidableEq α] {R : List (FreeGroup α)} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed R w)
+    (pre middle post : List (FreeGroup α)) (x y : FreeGroup α)
+    (hshape : seed.boundary.factors = pre ++ [x] ++ middle ++ [y] ++ post)
+    (hstabilizes : x * middle.prod * y = middle.prod) :
+    False := by
+  have hshortLabels : ∀ z ∈ pre ++ middle ++ post, IsRelatorConjugate R z := by
+    intro z hz
+    have hzOriginal : z ∈ seed.boundary.factors := by
+      rw [hshape]
+      simp only [List.mem_append, List.mem_cons, List.not_mem_nil,
+        or_false] at hz ⊢
+      tauto
+    exact seed.boundary.factor_labels z hzOriginal
+  obtain ⟨shortCert, hshortArea⟩ :=
+    exists_certificate_of_conjugate_factor_labels (R := R)
+      (pre ++ middle ++ post) hshortLabels
+  have hshortProduct : (pre ++ middle ++ post).prod = w := by
+    calc
+      (pre ++ middle ++ post).prod = pre.prod * middle.prod * post.prod := by
+        simp [List.prod_append, mul_assoc]
+      _ = pre.prod * (x * middle.prod * y) * post.prod := by
+        rw [hstabilizes]
+      _ = seed.boundary.factors.prod := by
+        rw [hshape]
+        simp [List.prod_append, List.prod_cons, mul_assoc]
+      _ = w := seed.boundary.product_eq
+  let shortCertAtW : RelatorCertificate R w := hshortProduct ▸ shortCert
+  have hshortAreaAtW : shortCertAtW.area = (pre ++ middle ++ post).length := by
+    dsimp [shortCertAtW]
+    cases hshortProduct
+    exact hshortArea
+  have holdArea : seed.certificate.area = seed.boundary.factors.length := by
+    calc
+      seed.certificate.area = seed.certificate.factors.length :=
+        (RelatorCertificate.factors_length seed.certificate).symm
+      _ = seed.boundary.factors.length := by rw [seed.boundary_factors]
+  have hshortLength : (pre ++ middle ++ post).length <
+      seed.boundary.factors.length := by
+    rw [hshape]
+    simp only [List.length_append, List.length_cons, List.length_singleton]
+    omega
+  have hstrict : shortCertAtW.area < seed.certificate.area := by
+    rw [hshortAreaAtW, holdArea]
+    exact hshortLength
+  exact (Nat.not_le_of_gt hstrict) (seed.area_minimal shortCertAtW)
+
 /-- Minimum area also rules out inverse factors at the two ends of the list.
 Conjugating every middle factor by the first factor would otherwise preserve
 the product while deleting the inverse end pair. -/
