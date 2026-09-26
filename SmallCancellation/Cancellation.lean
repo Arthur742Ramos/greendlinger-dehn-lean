@@ -160,6 +160,13 @@ inductive FreeCancellationStep : Word α → Word α → Type u where
       FreeCancellationStep
         (pre ++ [a] ++ [inverseLetter a] ++ post) (pre ++ post)
 
+/-- Transport a cancellation step across equalities of its source and target
+words. -/
+def FreeCancellationStep.castWords {w₁ w₁' w₂ w₂' : Word α}
+    (h₁ : w₁ = w₁') (h₂ : w₂ = w₂')
+    (step : FreeCancellationStep w₁ w₂) : FreeCancellationStep w₁' w₂' :=
+  h₂ ▸ h₁ ▸ step
+
 /-- A finite sequence of adjacent inverse-letter cancellations. -/
 inductive FreeCancellationSequence : Word α → Word α → Type u where
   | refl (w : Word α) : FreeCancellationSequence w w
@@ -212,16 +219,28 @@ def FreeCancellationStep.appendRight {w₁ w₂ : Word α}
     FreeCancellationStep (w₁ ++ suffix) (w₂ ++ suffix) := by
   cases h with
   | cancel pre post a =>
-      simpa [List.append_assoc] using
-        FreeCancellationStep.cancel pre (post ++ suffix) a
+      have hsource :
+          pre ++ [a] ++ [inverseLetter a] ++ (post ++ suffix) =
+            (pre ++ [a] ++ [inverseLetter a] ++ post) ++ suffix := by
+        simp [List.append_assoc]
+      have htarget : pre ++ (post ++ suffix) = (pre ++ post) ++ suffix :=
+        (List.append_assoc pre post suffix).symm
+      exact FreeCancellationStep.castWords hsource htarget
+        (FreeCancellationStep.cancel pre (post ++ suffix) a)
 
 def FreeCancellationStep.appendLeft {w₁ w₂ : Word α}
     (h : FreeCancellationStep w₁ w₂) (preContext : Word α) :
     FreeCancellationStep (preContext ++ w₁) (preContext ++ w₂) := by
   cases h with
   | cancel pre post a =>
-      simpa [List.append_assoc] using
-        FreeCancellationStep.cancel (preContext ++ pre) post a
+      have hsource :
+          (preContext ++ pre) ++ [a] ++ [inverseLetter a] ++ post =
+            preContext ++ (pre ++ [a] ++ [inverseLetter a] ++ post) := by
+        simp [List.append_assoc]
+      have htarget : (preContext ++ pre) ++ post = preContext ++ (pre ++ post) :=
+        List.append_assoc preContext pre post
+      exact FreeCancellationStep.castWords hsource htarget
+        (FreeCancellationStep.cancel (preContext ++ pre) post a)
 
 noncomputable def FreeCancellationSequence.appendRight {w₁ w₂ : Word α}
     (h : FreeCancellationSequence w₁ w₂) (suffix : Word α) :

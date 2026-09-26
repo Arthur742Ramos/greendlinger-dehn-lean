@@ -1048,6 +1048,47 @@ def prefixLength {α : Type*} {raw reduced : Word α}
   cases step with
   | cancel pre post a => exact pre.length
 
+/-- A cancellation step removes a pair starting at a valid source position. -/
+theorem prefixLength_add_two_le {α : Type*} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced) :
+    step.prefixLength + 2 ≤ raw.length := by
+  cases step with
+  | cancel pre post a =>
+      simp [prefixLength, List.length_append]
+
+/-- The selected position is stable under the word-index cast helper. -/
+@[simp] theorem prefixLength_castWords {α : Type*}
+    {raw raw' reduced reduced' : Word α}
+    (hraw : raw = raw') (hred : reduced = reduced')
+    (step : FreeCancellationStep raw reduced) :
+    (FreeCancellationStep.castWords hraw hred step).prefixLength =
+      step.prefixLength := by
+  cases hraw
+  cases hred
+  rfl
+
+/-- Extending a cancellation step on the right does not move its selected
+pair in the source word. -/
+@[simp] theorem prefixLength_appendRight {α : Type*} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced) (suffix : Word α) :
+    (step.appendRight suffix).prefixLength = step.prefixLength := by
+  cases step with
+  | cancel pre post a =>
+      simp only [FreeCancellationStep.appendRight,
+        FreeCancellationStep.prefixLength_castWords]
+      simp [prefixLength]
+
+/-- Adding a left context shifts the selected pair by the context length. -/
+@[simp] theorem prefixLength_appendLeft {α : Type*} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced) (preContext : Word α) :
+    (step.appendLeft preContext).prefixLength =
+      preContext.length + step.prefixLength := by
+  cases step with
+  | cancel pre post a =>
+      simp only [FreeCancellationStep.appendLeft,
+        FreeCancellationStep.prefixLength_castWords]
+      simp [prefixLength, List.length_append]
+
 end FreeCancellationStep
 
 namespace LabelledWalk

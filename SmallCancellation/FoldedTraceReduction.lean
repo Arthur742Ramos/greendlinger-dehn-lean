@@ -443,7 +443,49 @@ def sourcePositionTraceAux {α : Type*} (source : Word α) :
     (origins : List (Fin source.length)) →
     origins.length = raw.length → CancellationOccurrencePositions source
   | _, _, .refl _, origins, _ => ⟨[], origins⟩
-  | _, _, .cons step rest, origins, hlen => by
+  | _, _, @FreeCancellationSequence.cons _ raw mid reduced step rest, origins, hlen => by
+      have hrawLen : origins.length = mid.length + 2 := by
+        rw [hlen]
+        exact step.length_difference
+      have hpairBound : step.prefixLength + 2 ≤ origins.length := by
+        rw [hlen]
+        exact step.prefixLength_add_two_le
+      have hfirstBound : step.prefixLength < origins.length := by omega
+      have hsecondBound : step.prefixLength + 1 < origins.length := by omega
+      let first := origins.get ⟨step.prefixLength, hfirstBound⟩
+      let second := origins.get ⟨step.prefixLength + 1, hsecondBound⟩
+      let remaining := origins.take step.prefixLength ++
+        origins.drop (step.prefixLength + 2)
+      have hremaining : remaining.length = mid.length := by
+        dsimp [remaining]
+        have htake : step.prefixLength ≤ origins.length := by omega
+        rw [List.length_append, List.length_take, List.length_drop,
+          Nat.min_eq_left htake]
+        omega
+      let later := sourcePositionTraceAux source rest remaining hremaining
+      exact ⟨(first, second) :: later.pairs, later.survivors⟩
+  termination_by raw reduced _steps origins _hlen => raw.length
+  decreasing_by
+    omega
+
+/-- Initialize the source-position trace with the complete range of input
+occurrences. -/
+def sourcePositionTrace {α : Type*} {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced) :
+    CancellationOccurrencePositions raw :=
+  sourcePositionTraceAux raw steps (List.finRange raw.length) (by simp)
+
+/-- The occurrence trace leaves exactly as many source positions as the
+reduced word has letters. -/
+theorem sourcePositionTraceAux_survivors_length {α : Type*}
+    (source : Word α) {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced)
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length) :
+    (sourcePositionTraceAux source steps origins hlen).survivors.length =
+      reduced.length := by
+  induction steps generalizing origins with
+  | refl word => simpa [sourcePositionTraceAux] using hlen
+  | @cons raw mid reduced step rest ih =>
       cases step with
       | cancel pre post a =>
           have hraw : origins.length =
@@ -452,10 +494,6 @@ def sourcePositionTraceAux {α : Type*} (source : Word α) :
             have hraw' : origins.length = pre.length + (post.length + 2) := by
               simpa [List.length_append] using hraw
             omega
-          have hfirstBound : pre.length < origins.length := by omega
-          have hsecondBound : pre.length + 1 < origins.length := by omega
-          let first := origins.get ⟨pre.length, hfirstBound⟩
-          let second := origins.get ⟨pre.length + 1, hsecondBound⟩
           let remaining := origins.take pre.length ++ origins.drop (pre.length + 2)
           have hremaining : remaining.length = (pre ++ post).length := by
             dsimp [remaining]
@@ -467,17 +505,209 @@ def sourcePositionTraceAux {α : Type*} (source : Word α) :
               Nat.min_eq_left htake]
             rw [hdropLen]
             simp [List.length_append]
-          let later := sourcePositionTraceAux source rest remaining hremaining
-          exact ⟨(first, second) :: later.pairs, later.survivors⟩
-  termination_by raw reduced _steps origins _hlen => raw.length
-  decreasing_by simp only [List.length_append] at *; omega
+          simpa only [sourcePositionTraceAux.eq_2,
+            FreeCancellationStep.prefixLength] using
+            (ih remaining hremaining)
 
-/-- Initialize the source-position trace with the complete range of input
-occurrences. -/
-def sourcePositionTrace {α : Type*} {raw reduced : Word α}
-    (steps : FreeCancellationSequence raw reduced) :
-    CancellationOccurrencePositions raw :=
-  sourcePositionTraceAux raw steps (List.finRange raw.length) (by simp)
+/-- Tracing a composite cancellation sequence is the concatenation of the
+first trace and the trace of the second sequence on the surviving origins. -/
+theorem sourcePositionTraceAux_trans {α : Type*}
+    (source : Word α) {raw mid reduced : Word α}
+    (first : FreeCancellationSequence raw mid)
+    (second : FreeCancellationSequence mid reduced)
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length) :
+    sourcePositionTraceAux source (first.trans second) origins hlen =
+      { pairs :=
+          (sourcePositionTraceAux source first origins hlen).pairs ++
+            (sourcePositionTraceAux source second
+              (sourcePositionTraceAux source first origins hlen).survivors
+              (sourcePositionTraceAux_survivors_length source first origins hlen)).pairs
+        survivors :=
+          (sourcePositionTraceAux source second
+            (sourcePositionTraceAux source first origins hlen).survivors
+            (sourcePositionTraceAux_survivors_length source first origins hlen)).survivors } := by
+  induction first generalizing origins with
+  | refl word =>
+      simp [FreeCancellationSequence.trans, sourcePositionTraceAux]
+  | @cons raw before mid step rest ih =>
+      cases step with
+      | cancel pre post a =>
+          have hraw : origins.length =
+              (pre ++ [a] ++ [inverseLetter a] ++ post).length := hlen
+          have hrawLen : origins.length = pre.length + 2 + post.length := by
+            have hraw' : origins.length = pre.length + (post.length + 2) := by
+              simpa [List.length_append] using hraw
+            omega
+          let remaining := origins.take pre.length ++ origins.drop (pre.length + 2)
+          have hremaining : remaining.length = (pre ++ post).length := by
+            dsimp [remaining]
+            have htake : pre.length ≤ origins.length := by omega
+            have hdrop : pre.length + 2 ≤ origins.length := by omega
+            have hdropLen : origins.length - (pre.length + 2) = post.length := by
+              omega
+            rw [List.length_append, List.length_take, List.length_drop,
+              Nat.min_eq_left htake]
+            rw [hdropLen]
+            simp [List.length_append]
+          have hrecursive := ih second remaining hremaining
+          simp only [FreeCancellationSequence.trans, sourcePositionTraceAux.eq_2,
+            FreeCancellationStep.prefixLength]
+          change
+            (⟨(origins.get ⟨pre.length, by omega⟩,
+                origins.get ⟨pre.length + 1, by omega⟩) ::
+                (sourcePositionTraceAux source (rest.trans second) remaining hremaining).pairs,
+              (sourcePositionTraceAux source (rest.trans second) remaining hremaining).survivors⟩ :
+              CancellationOccurrencePositions source) = _
+          rw [hrecursive]
+          simp [remaining]
+
+/-- Appending a fixed right context leaves its source occurrences untouched
+by the cancellation trace. -/
+theorem sourcePositionTraceAux_appendRight {α : Type*}
+    (source : Word α) {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced) (suffix : Word α)
+    (origins suffixOrigins : List (Fin source.length))
+    (hlen : origins.length = raw.length)
+    (hsuffix : suffixOrigins.length = suffix.length) :
+    sourcePositionTraceAux source (steps.appendRight suffix)
+        (origins ++ suffixOrigins) (by simp [List.length_append, hlen, hsuffix]) =
+      { pairs := (sourcePositionTraceAux source steps origins hlen).pairs,
+        survivors :=
+          (sourcePositionTraceAux source steps origins hlen).survivors ++ suffixOrigins } := by
+  induction steps generalizing origins suffixOrigins with
+  | refl word =>
+      simp [FreeCancellationSequence.appendRight, sourcePositionTraceAux]
+  | @cons raw mid reduced step rest ih =>
+      let p := step.prefixLength
+      have hstepLength := step.length_difference
+      have hpairBound : p + 2 ≤ origins.length := by
+        dsimp [p]
+        rw [hlen]
+        exact step.prefixLength_add_two_le
+      have hfirstBound : p < origins.length := by omega
+      have hsecondBound : p + 1 < origins.length := by omega
+      have hfirstCombined : p < (origins ++ suffixOrigins).length := by
+        simp [List.length_append]
+        omega
+      have hsecondCombined : p + 1 < (origins ++ suffixOrigins).length := by
+        simp [List.length_append]
+        omega
+      let remaining := origins.take p ++ origins.drop (p + 2)
+      have hremaining : remaining.length = mid.length := by
+        dsimp [remaining]
+        have htake : p ≤ origins.length := by omega
+        rw [List.length_append, List.length_take, List.length_drop,
+          Nat.min_eq_left htake, hlen]
+        omega
+      have htakeCombined : (origins ++ suffixOrigins).take p = origins.take p :=
+        List.take_append_of_le_length (by omega)
+      have hdropCombined : (origins ++ suffixOrigins).drop (p + 2) =
+          origins.drop (p + 2) ++ suffixOrigins :=
+        List.drop_append_of_le_length (by omega)
+      have hremainingCombined :
+          (origins ++ suffixOrigins).take p ++
+          (origins ++ suffixOrigins).drop (p + 2) = remaining ++ suffixOrigins := by
+        rw [htakeCombined, hdropCombined]
+        simp [remaining, List.append_assoc]
+      have hfirstEq :
+          (origins ++ suffixOrigins).get ⟨p, hfirstCombined⟩ =
+            origins.get ⟨p, hfirstBound⟩ := by
+        rw [List.get_eq_getElem, List.get_eq_getElem]
+        exact List.getElem_append_left hfirstBound
+      have hsecondEq :
+          (origins ++ suffixOrigins).get ⟨p + 1, hsecondCombined⟩ =
+            origins.get ⟨p + 1, hsecondBound⟩ := by
+        rw [List.get_eq_getElem, List.get_eq_getElem]
+        exact List.getElem_append_left hsecondBound
+      have hrecursive := ih remaining suffixOrigins hremaining hsuffix
+      change sourcePositionTraceAux source
+          (FreeCancellationSequence.cons (step.appendRight suffix)
+            (rest.appendRight suffix)) (origins ++ suffixOrigins) _ = _
+      simp only [sourcePositionTraceAux.eq_2,
+        FreeCancellationStep.prefixLength_appendRight, p, hfirstEq, hsecondEq,
+        hremainingCombined]
+      rw [hrecursive]
+
+/-- Appending a fixed left context preserves its source occurrences and shifts
+every cancellation pair by the context length. -/
+theorem sourcePositionTraceAux_appendLeft {α : Type*}
+    (source : Word α) {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced) (preContext : Word α)
+    (prefixOrigins origins : List (Fin source.length))
+    (hprefix : prefixOrigins.length = preContext.length)
+    (horigins : origins.length = raw.length) :
+    sourcePositionTraceAux source (steps.appendLeft preContext)
+        (prefixOrigins ++ origins)
+        (by simp [List.length_append, hprefix, horigins]) =
+      { pairs := (sourcePositionTraceAux source steps origins horigins).pairs,
+        survivors :=
+          prefixOrigins ++ (sourcePositionTraceAux source steps origins horigins).survivors } := by
+  induction steps generalizing prefixOrigins origins with
+  | refl word =>
+      simp [FreeCancellationSequence.appendLeft, sourcePositionTraceAux]
+  | @cons raw mid reduced step rest ih =>
+      let p := step.prefixLength
+      let offset := prefixOrigins.length + p
+      have hstepLength := step.length_difference
+      have hpairBound : p + 2 ≤ origins.length := by
+        change step.prefixLength + 2 ≤ origins.length
+        rw [horigins]
+        exact step.prefixLength_add_two_le
+      have hfirstBound : p < origins.length := by omega
+      have hsecondBound : p + 1 < origins.length := by omega
+      have hfirstCombined : offset < (prefixOrigins ++ origins).length := by
+        simp [List.length_append]
+        omega
+      have hsecondCombined : offset + 1 < (prefixOrigins ++ origins).length := by
+        simp [List.length_append]
+        omega
+      let remaining := origins.take p ++ origins.drop (p + 2)
+      have hremaining : remaining.length = mid.length := by
+        dsimp [remaining]
+        have htake : p ≤ origins.length := by omega
+        rw [List.length_append, List.length_take, List.length_drop,
+          Nat.min_eq_left htake, horigins]
+        omega
+      have htakeCombined :
+          (prefixOrigins ++ origins).take offset = prefixOrigins ++ origins.take p := by
+        dsimp [offset]
+        exact List.take_length_add_append p
+      have hdropIndex : offset + 2 = prefixOrigins.length + (p + 2) := by
+        dsimp [offset]
+        omega
+      have hdropCombined :
+          (prefixOrigins ++ origins).drop (offset + 2) = origins.drop (p + 2) := by
+        rw [hdropIndex]
+        exact List.drop_length_add_append (p + 2)
+      have hremainingCombined :
+          (prefixOrigins ++ origins).take offset ++
+              (prefixOrigins ++ origins).drop (offset + 2) =
+            prefixOrigins ++ remaining := by
+        rw [htakeCombined, hdropCombined]
+        simp [remaining, List.append_assoc]
+      have hfirstEq :
+          (prefixOrigins ++ origins).get ⟨offset, hfirstCombined⟩ =
+            origins.get ⟨p, hfirstBound⟩ := by
+        rw [List.get_eq_getElem, List.get_eq_getElem]
+        rw [List.getElem_append_right (by dsimp [offset]; omega)]
+        simp [offset]
+      have hsecondEq :
+          (prefixOrigins ++ origins).get ⟨offset + 1, hsecondCombined⟩ =
+            origins.get ⟨p + 1, hsecondBound⟩ := by
+        rw [List.get_eq_getElem, List.get_eq_getElem]
+        rw [List.getElem_append_right (by dsimp [offset]; omega)]
+        simp [offset]
+        congr 1
+        omega
+      have hrecursive := ih prefixOrigins remaining hprefix hremaining
+      have hstepOffset : (step.appendLeft preContext).prefixLength = offset := by
+        simp [FreeCancellationStep.prefixLength_appendLeft, offset, p, hprefix]
+      change sourcePositionTraceAux source
+          (FreeCancellationSequence.cons (step.appendLeft preContext)
+            (rest.appendLeft preContext)) (prefixOrigins ++ origins) _ = _
+      simp only [sourcePositionTraceAux.eq_2, hstepOffset,
+        hfirstEq, hsecondEq, hremainingCombined]
+      rw [hrecursive]
 
 /-- Every input occurrence is recorded exactly once, either as one endpoint
 of a cancellation pair or as a surviving position. -/
@@ -569,7 +799,8 @@ theorem sourcePositionTraceAux_endpoint_partition {α : Type*}
               rw [hend]
             exact hstartPerm.trans (hmiddle.trans hendPerm)
           simp only [sourcePositionTraceAux.eq_2,
-            CancellationOccurrencePositions.endpointOccurrences, List.flatMap_cons]
+            CancellationOccurrencePositions.endpointOccurrences, List.flatMap_cons,
+            FreeCancellationStep.prefixLength]
           change List.Perm
             ([first, second] ++
               ((sourcePositionTraceAux source rest remaining hremaining).endpointOccurrences ++
@@ -654,6 +885,7 @@ theorem foldSequence_darts_eq_sourcePositionTraceAux_survivors {α : Type*}
             rfl
           have htail := ih remaining hremaining first.walk sourceDarts' hwalk'
           rw [sourcePositionTraceAux.eq_2]
+          simp only [FreeCancellationStep.prefixLength]
           change (LabelledWalk.foldSequence rest first.walk).walk.darts =
             (sourcePositionTraceAux source rest remaining hremaining).survivors.map
               (fun i => (LabelledWalk.foldSequence rest first.walk).hom.mapDart
@@ -908,7 +1140,8 @@ theorem sourcePositionTraceAux_pairs_folded {α : Type*}
           intro p hp
           have hp' : p ∈ (firstPosition, secondPosition) ::
               (sourcePositionTraceAux source rest remaining hremaining).pairs := by
-            simpa only [sourcePositionTraceAux.eq_2] using hp
+            simpa only [sourcePositionTraceAux.eq_2,
+              FreeCancellationStep.prefixLength] using hp
           rcases List.mem_cons.mp hp' with hhead | hlaterPair
           · subst p
             simpa [hfirstSource, hsecondSource] using hheadFolded
@@ -1010,7 +1243,8 @@ theorem foldSequence_factor_through_map {α : Type*}
               (sourcePositionTraceAux source
                 (FreeCancellationSequence.cons
                   (FreeCancellationStep.cancel pre post a) rest) origins hlen).pairs := by
-            simp only [sourcePositionTraceAux.eq_2]
+            simp only [sourcePositionTraceAux.eq_2,
+              FreeCancellationStep.prefixLength]
             exact List.mem_cons_self
           have hcurrentFolded : f.mapDart firstData.pair.second =
               H.toDartGraph.reverse (f.mapDart firstData.pair.first) := by
@@ -1073,7 +1307,8 @@ theorem foldSequence_factor_through_map {α : Type*}
                 (sourcePositionTraceAux source
                   (FreeCancellationSequence.cons
                     (FreeCancellationStep.cancel pre post a) rest) origins hlen).pairs := by
-              simpa only [sourcePositionTraceAux.eq_2] using
+              simpa only [sourcePositionTraceAux.eq_2,
+                FreeCancellationStep.prefixLength] using
                 (List.mem_cons_of_mem (firstPosition, secondPosition) hp)
             have h := hfolded p hpFull
             calc
@@ -1389,6 +1624,193 @@ def toReplayIndexedBoundaryTrace {α : Type*} {raw reduced : Word α}
         shape.cancellationPairs_perm_replayCancellationPairs
       exact h.mem_iff.mp hend
     · exact Or.inr hsurvivor
+
+end FreeReductionShape
+
+namespace FreeReductionShape
+
+/-- Relabel a finite list of natural-number source positions by their
+occurrences in an arbitrary ambient source list. -/
+def mapSourcePositions {α : Type*} {raw : Word α} {source : Word α}
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length)
+    (positions : List Nat) (hbound : ∀ i ∈ positions, i < raw.length) :
+    List (Fin source.length) :=
+  positions.attach.map fun i =>
+    origins.get (Fin.cast hlen.symm ⟨i.1, hbound i.1 i.2⟩)
+
+/-- Relabeling an appended position list splits into the two component traces. -/
+theorem mapSourcePositions_append {α : Type*} {raw : Word α} {source : Word α}
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length)
+    (left right : List Nat)
+    (hbound : ∀ i ∈ left ++ right, i < raw.length)
+    (hleft : ∀ i ∈ left, i < raw.length)
+    (hright : ∀ i ∈ right, i < raw.length) :
+    mapSourcePositions origins hlen (left ++ right) hbound =
+      mapSourcePositions origins hlen left hleft ++
+        mapSourcePositions origins hlen right hright := by
+  simp only [mapSourcePositions, List.attach_append, List.map_append,
+    List.map_map]
+  congr 1
+
+/-- Shifting positions past a fixed prefix is the same as dropping that
+prefix from the ambient occurrence list. -/
+theorem mapSourcePositions_shiftSource {α : Type*} {whole raw : Word α}
+    {source : Word α} (prefixOrigins origins : List (Fin source.length))
+    (offset : Nat) (hprefix : prefixOrigins.length = offset)
+    (hlen : origins.length = raw.length)
+    (hwhole : whole.length = offset + raw.length)
+    (htotal : (prefixOrigins ++ origins).length = whole.length)
+    (positions : List Nat) (hpositions : ∀ i ∈ positions, i < raw.length) :
+    mapSourcePositions (prefixOrigins ++ origins) htotal
+        (positions.map (offset + ·)) (by
+          intro i hi
+          rcases List.mem_map.mp hi with ⟨j, hj, rfl⟩
+          simp only [List.length_append] at htotal
+          rw [hwhole] at htotal
+          have := hpositions j hj
+          omega) =
+      mapSourcePositions origins hlen positions hpositions := by
+  simp only [mapSourcePositions, List.attach_map, List.map_map]
+  apply List.map_congr_left
+  intro i hi
+  apply Fin.ext
+  simp only [Fin.val_cast, List.get_eq_getElem, Function.comp_apply,
+    ]
+  rw [List.getElem_append_right (by rw [hprefix]; omega)]
+  simp [hprefix]
+
+/-- Positions bounded by a prefix select the same occurrences before and
+after a suffix is appended. -/
+theorem mapSourcePositions_prefixSource {α : Type*} {whole left : Word α}
+    {source : Word α} (prefixOrigins suffixOrigins : List (Fin source.length))
+    (hprefix : prefixOrigins.length = left.length)
+    (htotal : (prefixOrigins ++ suffixOrigins).length = whole.length)
+    (positions : List Nat) (hpositions : ∀ i ∈ positions, i < left.length) :
+    mapSourcePositions (prefixOrigins ++ suffixOrigins) htotal positions
+        (by
+          intro i hi
+          have := hpositions i hi
+          simp only [List.length_append] at htotal
+          omega) =
+      mapSourcePositions prefixOrigins hprefix positions hpositions := by
+  simp only [mapSourcePositions]
+  apply List.map_congr_left
+  intro i hi
+  apply Fin.ext
+  simp only [Fin.val_cast, List.get_eq_getElem]
+  rw [List.getElem_append_left (by rw [hprefix]; exact hpositions i.1 i.2)]
+
+/-- Relabel both endpoints of each bounded source pair by its ambient source
+occurrences. -/
+def mapSourcePairs {α : Type*} {raw : Word α} {source : Word α}
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length)
+    (pairs : List (Nat × Nat))
+    (hbound : ∀ p ∈ pairs, p.1 < raw.length ∧ p.2 < raw.length) :
+    List (Fin source.length × Fin source.length) :=
+  pairs.attach.map fun p =>
+    (origins.get (Fin.cast hlen.symm ⟨p.1.1,
+      (hbound p.1 p.2).1⟩),
+     origins.get (Fin.cast hlen.symm ⟨p.1.2,
+      (hbound p.1 p.2).2⟩))
+
+/-- Relabeling pair endpoints after an index shift agrees with dropping the
+fixed prefix from the source occurrence list. -/
+theorem mapSourcePairs_shiftSource {α : Type*} {whole raw : Word α}
+    {source : Word α} (prefixOrigins origins : List (Fin source.length))
+    (offset : Nat) (hprefix : prefixOrigins.length = offset)
+    (hlen : origins.length = raw.length)
+    (hwhole : whole.length = offset + raw.length)
+    (htotal : (prefixOrigins ++ origins).length = whole.length)
+    (pairs : List (Nat × Nat))
+    (hpairs : ∀ p ∈ pairs, p.1 < raw.length ∧ p.2 < raw.length) :
+    mapSourcePairs (prefixOrigins ++ origins) htotal
+        (shiftCancellationPairs offset pairs) (by
+          intro p hp
+          rcases List.mem_map.mp hp with ⟨q, hq, rfl⟩
+          simp only [List.length_append] at htotal
+          rw [hwhole] at htotal
+          have hq' := hpairs q hq
+          constructor <;> omega) =
+      mapSourcePairs origins hlen pairs hpairs := by
+  simp only [mapSourcePairs, shiftCancellationPairs, List.attach_map,
+    List.map_map]
+  apply List.map_congr_left
+  intro p hp
+  apply Prod.ext
+  · apply Fin.ext
+    simp only [Fin.val_cast, List.get_eq_getElem, Function.comp_apply]
+    rw [List.getElem_append_right (by rw [hprefix]; omega)]
+    simp [hprefix]
+  · apply Fin.ext
+    simp only [Fin.val_cast, List.get_eq_getElem, Function.comp_apply]
+    rw [List.getElem_append_right (by rw [hprefix]; omega)]
+    simp [hprefix]
+
+/-- Pair endpoints whose positions stay in a prefix are unaffected by a
+suffix appended to their source list. -/
+theorem mapSourcePairs_prefixSource {α : Type*} {whole left : Word α}
+    {source : Word α} (prefixOrigins suffixOrigins : List (Fin source.length))
+    (hprefix : prefixOrigins.length = left.length)
+    (htotal : (prefixOrigins ++ suffixOrigins).length = whole.length)
+    (pairs : List (Nat × Nat))
+    (hpairs : ∀ p ∈ pairs, p.1 < left.length ∧ p.2 < left.length) :
+    mapSourcePairs (prefixOrigins ++ suffixOrigins) htotal pairs
+        (by
+          intro p hp
+          have := hpairs p hp
+          simp only [List.length_append] at htotal
+          omega) =
+      mapSourcePairs prefixOrigins hprefix pairs hpairs := by
+  simp only [mapSourcePairs]
+  apply List.map_congr_left
+  intro p hp
+  apply Prod.ext
+  · apply Fin.ext
+    simp only [Fin.val_cast, List.get_eq_getElem]
+    rw [List.getElem_append_left (by rw [hprefix]; exact (hpairs p.1 p.2).1)]
+  · apply Fin.ext
+    simp only [Fin.val_cast, List.get_eq_getElem]
+    rw [List.getElem_append_left (by rw [hprefix]; exact (hpairs p.1 p.2).2)]
+
+/-- Relabeling an appended pair list splits into the two component traces. -/
+theorem mapSourcePairs_append {α : Type*} {raw : Word α} {source : Word α}
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length)
+    (left right : List (Nat × Nat))
+    (hbound : ∀ p ∈ left ++ right, p.1 < raw.length ∧ p.2 < raw.length)
+    (hleft : ∀ p ∈ left, p.1 < raw.length ∧ p.2 < raw.length)
+    (hright : ∀ p ∈ right, p.1 < raw.length ∧ p.2 < raw.length) :
+    mapSourcePairs origins hlen (left ++ right) hbound =
+      mapSourcePairs origins hlen left hleft ++
+        mapSourcePairs origins hlen right hright := by
+  simp only [mapSourcePairs, List.attach_append, List.map_append,
+    List.map_map]
+  congr 1
+
+/-- The chronological pairing inherited from a reduction tree remains in the
+input word's positional range. -/
+theorem replayCancellationPairs_inBounds {α : Type*} {raw reduced : Word α}
+    (shape : FreeReductionShape raw reduced) :
+    ∀ p ∈ shape.replayCancellationPairs,
+      p.1 < raw.length ∧ p.2 < raw.length := by
+  intro p hp
+  have h := shape.cancellationPairs_inBounds p
+    (shape.cancellationPairs_perm_replayCancellationPairs.mem_iff.mpr hp)
+  simp only [FreeReductionShape.inputWord] at h
+  constructor <;> omega
+
+/-- The replayed reduction tree's source-position trace, relabeled by a given
+list of ambient source occurrences. -/
+def replayMappedTrace {α : Type*} {raw reduced : Word α}
+    (shape : FreeReductionShape raw reduced) {source : Word α}
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length) :
+    LabelledWalk.CancellationOccurrencePositions source where
+  pairs := mapSourcePairs origins hlen shape.replayCancellationPairs
+    (replayCancellationPairs_inBounds shape)
+  survivors := mapSourcePositions origins hlen
+    (shape.survivorOccurrences.map Prod.fst) (by
+      intro i hi
+      rcases List.mem_map.mp hi with ⟨o, ho, rfl⟩
+      exact shape.survivorOccurrences_inBounds o ho)
 
 end FreeReductionShape
 
