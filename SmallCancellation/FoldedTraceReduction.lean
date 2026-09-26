@@ -1301,6 +1301,95 @@ theorem cancellationPairs_perm_replayCancellationPairs
               hsuffix.replayCancellationPairs)))
       exact htail.cons (0, hinner.inputWord.length + 1) |>.trans hroot
 
+/-- Flattening pair endpoints preserves a permutation of the pair list. -/
+theorem pairEndpoints_perm {left right : List (Nat × Nat)}
+    (h : List.Perm left right) :
+    List.Perm (pairEndpoints left) (pairEndpoints right) := by
+  unfold pairEndpoints
+  exact h.flatMap fun p hp => List.Perm.refl [p.1, p.2]
+
+/-- The same nested pairing as an indexed trace whose pairs are listed in
+chronological replay order. All source-position and survivor facts are
+inherited from the original tree pairing. -/
+def toReplayIndexedBoundaryTrace {α : Type*} {raw reduced : Word α}
+    (shape : FreeReductionShape raw reduced) :
+    IndexedBoundaryTrace raw reduced where
+  cancellationPairs := shape.replayCancellationPairs
+  survivorOccurrences := shape.survivorOccurrences
+  pairs_noncrossing := by
+    intro p hp q hq
+    exact shape.cancellationPairs_noncrossing p
+      (shape.cancellationPairs_perm_replayCancellationPairs.mem_iff.mpr hp)
+      q (shape.cancellationPairs_perm_replayCancellationPairs.mem_iff.mpr hq)
+  pairs_are_inverseLetters := by
+    intro p hp
+    exact shape.cancellationPairs_are_inverseLetterOccurrences p
+      (shape.cancellationPairs_perm_replayCancellationPairs.mem_iff.mpr hp)
+  pairs_inBounds := by
+    intro p hp
+    exact shape.cancellationPairs_inBounds p
+      (shape.cancellationPairs_perm_replayCancellationPairs.mem_iff.mpr hp)
+  endpoints_nodup := by
+    have h := pairEndpoints_perm
+      shape.cancellationPairs_perm_replayCancellationPairs
+    exact h.nodup_iff.mp shape.cancellationEndpoints_nodup
+  endpoints_inBounds := by
+    intro i hi
+    have h := pairEndpoints_perm
+      shape.cancellationPairs_perm_replayCancellationPairs
+    exact shape.cancellationEndpoints_inBounds i (h.mem_iff.mpr hi)
+  survivors_labels := shape.survivorOccurrences_labels
+  survivors_length := shape.survivorOccurrences_length
+  survivorPositions_nodup := shape.survivorOccurrencePositions_nodup
+  survivorPositions_strict := shape.survivorOccurrencePositions_strict
+  survivors_are_sourceLetters := shape.survivorOccurrences_are_sourceLetters
+  survivors_inBounds := shape.survivorOccurrences_inBounds
+  endpoints_disjoint_survivors := by
+    intro i hi j hj
+    rcases List.mem_flatMap.mp hi with ⟨p, hp, hip⟩
+    rcases List.mem_map.mp hj with ⟨o, ho, hoj⟩
+    have hdis := shape.survivorOccurrences_disjointFromCancellationPairs o ho p
+      (shape.cancellationPairs_perm_replayCancellationPairs.mem_iff.mpr hp)
+    simp at hip
+    rcases hip with hip | hip
+    · intro hij
+      apply hdis.1
+      calc
+        o.1 = j := hoj
+        _ = i := hij.symm
+        _ = p.1 := hip
+    · intro hij
+      apply hdis.2
+      calc
+        o.1 = j := hoj
+        _ = i := hij.symm
+        _ = p.2 := hip
+  no_survivor_inside_pair := by
+    intro p hp o ho hleft hright
+    exact shape.cancellationPairs_contain_no_survivor p
+      (shape.cancellationPairs_perm_replayCancellationPairs.mem_iff.mpr hp)
+      o ho hleft hright
+  endpoint_survivor_count := by
+    have h := pairEndpoints_perm
+      shape.cancellationPairs_perm_replayCancellationPairs
+    calc
+      (pairEndpoints shape.replayCancellationPairs).length +
+          (shape.survivorOccurrences.map Prod.fst).length =
+        (pairEndpoints shape.cancellationPairs).length +
+          (shape.survivorOccurrences.map Prod.fst).length := by
+            rw [h.length_eq]
+      _ = raw.length := by
+        simpa [FreeReductionShape.inputWord] using
+          shape.survivorAndCancellationEndpointCount
+  sourcePositions_partition := by
+    intro i hi
+    rcases shape.sourcePositions_partition i hi with hend | hsurvivor
+    · left
+      have h := pairEndpoints_perm
+        shape.cancellationPairs_perm_replayCancellationPairs
+      exact h.mem_iff.mp hend
+    · exact Or.inr hsurvivor
+
 end FreeReductionShape
 
 theorem wordPathWalk_darts {α : Type*} (word : Word α) :
