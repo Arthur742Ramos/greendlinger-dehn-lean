@@ -577,6 +577,106 @@ theorem sourcePositionTraceAux_endpoint_partition {α : Type*}
             origins
           exact ((ih remaining hremaining).append_left [first, second]).trans hrotate
 
+/-- The boundary left by replay is exactly the ordered list of source
+occurrences marked as survivors by the nested cancellation trace. -/
+theorem foldSequence_darts_eq_sourcePositionTraceAux_survivors {α : Type*}
+    (source : Word α) {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced)
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length)
+    {G : LabelledDartGraph α} {u v : G.toDartGraph.Vertex}
+    (walk : LabelledWalk G u v raw)
+    (sourceDarts : Fin source.length → G.toDartGraph.Dart)
+    (hwalk : walk.darts = origins.map sourceDarts) :
+    (LabelledWalk.foldSequence steps walk).walk.darts =
+      (sourcePositionTraceAux source steps origins hlen).survivors.map
+        (fun i => (LabelledWalk.foldSequence steps walk).hom.mapDart (sourceDarts i)) := by
+  induction steps generalizing G u v origins sourceDarts with
+  | refl raw =>
+      simpa [sourcePositionTraceAux, LabelledWalk.foldSequence,
+        LabelledGraphHom.id] using hwalk
+  | @cons raw mid reduced step rest ih =>
+      cases step with
+      | cancel pre post a =>
+          have hraw : origins.length =
+              (pre ++ [a] ++ [inverseLetter a] ++ post).length := hlen
+          have hrawLen : origins.length = pre.length + 2 + post.length := by
+            have hraw' : origins.length = pre.length + (post.length + 2) := by
+              simpa [List.length_append] using hraw
+            omega
+          have hfirstBound : pre.length < origins.length := by omega
+          have hsecondBound : pre.length + 1 < origins.length := by omega
+          let remaining := origins.take pre.length ++ origins.drop (pre.length + 2)
+          have hremaining : remaining.length = (pre ++ post).length := by
+            dsimp [remaining]
+            have htake : pre.length ≤ origins.length := by omega
+            have hdrop : pre.length + 2 ≤ origins.length := by omega
+            have hdropLen : origins.length - (pre.length + 2) = post.length := by
+              omega
+            rw [List.length_append, List.length_take, List.length_drop,
+              Nat.min_eq_left htake]
+            rw [hdropLen]
+            simp [List.length_append]
+          let first := LabelledWalk.foldCancellation
+            (FreeCancellationStep.cancel pre post a) walk
+          obtain ⟨firstDart, secondDart, before, after, hdecomp, hresult⟩ :=
+            foldCancellation_darts a walk
+          have hbefore : before.darts = walk.darts.take pre.length := by
+            rw [hdecomp]
+            simp [LabelledWalk.length_darts]
+          have hafter : after.darts = walk.darts.drop (pre.length + 2) := by
+            have hprefixLen : (before.darts ++ [firstDart, secondDart]).length =
+                pre.length + 2 := by simp [LabelledWalk.length_darts]
+            have hdropEq :
+                ((before.darts ++ [firstDart, secondDart]) ++ after.darts).drop
+                    (pre.length + 2) = after.darts := by
+              rw [← hprefixLen, List.drop_append_of_le_length (Nat.le_refl _)]
+              simp
+            rw [hdecomp]
+            exact hdropEq.symm
+          have hbeforeSource : before.darts =
+              (origins.take pre.length).map sourceDarts := by
+            calc
+              before.darts = walk.darts.take pre.length := hbefore
+              _ = (origins.map sourceDarts).take pre.length := by rw [hwalk]
+              _ = (origins.take pre.length).map sourceDarts := by simp
+          have hafterSource : after.darts =
+              (origins.drop (pre.length + 2)).map sourceDarts := by
+            calc
+              after.darts = walk.darts.drop (pre.length + 2) := hafter
+              _ = (origins.map sourceDarts).drop (pre.length + 2) := by rw [hwalk]
+              _ = (origins.drop (pre.length + 2)).map sourceDarts := by simp
+          let sourceDarts' : Fin source.length → first.graph.toDartGraph.Dart :=
+            fun i => first.hom.mapDart (sourceDarts i)
+          have hwalk' : first.walk.darts = remaining.map sourceDarts' := by
+            rw [hresult, hbeforeSource, hafterSource]
+            simp only [List.map_map, Function.comp_def, sourceDarts', remaining,
+              List.map_append]
+            rfl
+          have htail := ih remaining hremaining first.walk sourceDarts' hwalk'
+          rw [sourcePositionTraceAux.eq_2]
+          change (LabelledWalk.foldSequence rest first.walk).walk.darts =
+            (sourcePositionTraceAux source rest remaining hremaining).survivors.map
+              (fun i => (LabelledWalk.foldSequence rest first.walk).hom.mapDart
+                (first.hom.mapDart (sourceDarts i)))
+          exact htail
+
+/-- The initialized source-position trace records exactly the darts left on
+its replayed boundary, in their original order and after the final quotient
+map. -/
+theorem foldSequence_darts_eq_sourcePositionTrace_survivors {α : Type*}
+    {G : LabelledDartGraph α} {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced)
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v raw)
+    (sourceDarts : Fin raw.length → G.toDartGraph.Dart)
+    (hwalk : walk.darts = (List.finRange raw.length).map sourceDarts) :
+    (LabelledWalk.foldSequence steps walk).walk.darts =
+      (sourcePositionTrace steps).survivors.map
+        (fun i => (LabelledWalk.foldSequence steps walk).hom.mapDart
+          (sourceDarts i)) := by
+  simpa only [sourcePositionTrace] using
+    (foldSequence_darts_eq_sourcePositionTraceAux_survivors raw steps
+      (List.finRange raw.length) (by simp) walk sourceDarts hwalk)
+
 /-- The initialized trace partitions the full input occurrence range. -/
 theorem sourcePositionTrace_endpoint_partition {α : Type*}
     {raw reduced : Word α} (steps : FreeCancellationSequence raw reduced) :
