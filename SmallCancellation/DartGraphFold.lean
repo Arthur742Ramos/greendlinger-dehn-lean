@@ -224,6 +224,13 @@ inductive LabelledWalk {α : Type u} (G : LabelledDartGraph.{u, v} α) :
 
 namespace LabelledWalk
 
+/-- The dart occurrences in a labeled walk, in word order. -/
+def occurrenceDarts {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α} :
+    LabelledWalk G u v word → List G.toDartGraph.Dart
+  | .nil _ => []
+  | .cons d _ _ tail => d :: occurrenceDarts tail
+
 /-- Concatenate two endpoint-compatible walks. -/
 noncomputable def append {α : Type*} {G : LabelledDartGraph α}
     {u v w : G.toDartGraph.Vertex} {left right : Word α}
@@ -285,6 +292,51 @@ noncomputable def edgeOf {α : Type*} {G : LabelledDartGraph α}
   | cons d hsource htarget tail =>
       cases tail with
       | nil x => exact ⟨d, hsource, htarget, rfl⟩
+
+@[simp] theorem occurrenceDarts_append {α : Type*} {G : LabelledDartGraph α}
+    {u v w : G.toDartGraph.Vertex} {left right : Word α}
+    (first : LabelledWalk G u v left) (second : LabelledWalk G v w right) :
+    (first.append second).occurrenceDarts =
+      first.occurrenceDarts ++ second.occurrenceDarts := by
+  induction first with
+  | nil => simp [LabelledWalk.append, occurrenceDarts]
+  | cons d hsource htarget tail ih =>
+      simp [LabelledWalk.append, occurrenceDarts, ih]
+
+@[simp] theorem occurrenceDarts_cast {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {left right : Word α}
+    (h : left = right) (walk : LabelledWalk G u v left) :
+    (h ▸ walk).occurrenceDarts = walk.occurrenceDarts := by
+  cases h
+  rfl
+
+@[simp] theorem occurrenceDarts_length {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {word : Word α}
+    (walk : LabelledWalk G u v word) :
+    walk.occurrenceDarts.length = word.length := by
+  induction walk with
+  | nil => rfl
+  | cons d hsource htarget tail ih => simp [occurrenceDarts, ih]
+
+theorem occurrenceDarts_split {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} (left right : Word α)
+    (walk : LabelledWalk G u v (left ++ right)) :
+    walk.occurrenceDarts =
+      (LabelledWalk.split left right walk).2.1.occurrenceDarts ++
+        (LabelledWalk.split left right walk).2.2.occurrenceDarts := by
+  induction left generalizing u with
+  | nil => simp [LabelledWalk.split, occurrenceDarts]
+  | cons a left ih =>
+      cases walk with
+      | cons d hsource htarget tail =>
+          simpa [LabelledWalk.split, occurrenceDarts] using ih tail
+
+theorem occurrenceDarts_edgeOf {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {a : Letter α}
+    (walk : LabelledWalk G u v [a]) :
+    walk.occurrenceDarts = [walk.edgeOf.dart] := by
+  cases walk with
+  | cons d hsource htarget tail => cases tail; rfl
 
 end LabelledWalk
 
@@ -408,6 +460,17 @@ def descendFold {α : Type*} {G H : LabelledDartGraph α}
     refine Quotient.inductionOn d ?_
     intro x
     exact f.map_label x
+
+/-- The descended map agrees with the original map after the one-fold
+quotient map. -/
+theorem descendFold_mapDart_fold {α : Type*} {G H : LabelledDartGraph α}
+    (a b : G.toDartGraph.Dart)
+    (hlabels : G.label a = inverseLetter (G.label b))
+    (f : LabelledGraphHom G H)
+    (hfold : f.mapDart b = H.toDartGraph.reverse (f.mapDart a))
+    (d : G.toDartGraph.Dart) :
+    (descendFold a b hlabels f hfold).mapDart
+        ((fold G a b hlabels).mapDart d) = f.mapDart d := rfl
 
 /-- The dart map for a single fold is a quotient map and is surjective. -/
 theorem fold_mapDart_surjective {α : Type*} (G : LabelledDartGraph α)
@@ -969,15 +1032,37 @@ theorem foldPairs_pair_unorientedClass_eq {α : Type*} {G : LabelledDartGraph α
 
 end WalkFoldResult
 
+namespace FreeCancellationStep
+
+/-- The prefix length locating the adjacent inverse letters removed by a
+single free-cancellation step. -/
+def prefixLength {α : Type*} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced) : Nat := by
+  cases step with
+  | cancel pre post a => exact pre.length
+
+end FreeCancellationStep
+
 namespace LabelledWalk
+
+/-- A cancellation fold packages the exact source pair, its adjacent walk
+positions, and the quotient replay state produced from that same pair. -/
+structure CancellationFoldData {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced)
+    (walk : LabelledWalk G u v raw) where
+  pair : LabelledDartPair G
+  first_at : walk.occurrenceDarts[step.prefixLength]? = some pair.first
+  second_at : walk.occurrenceDarts[step.prefixLength + 1]? = some pair.second
+  result : WalkFoldResult G (u₀ := u) (v₀ := v) reduced
 
 /-- Fold one adjacent inverse-letter pair in a labeled walk. This is the
 combinatorial step used to realize a free cancellation as an edge fold. -/
-noncomputable def foldCancellation {α : Type*} {G : LabelledDartGraph α}
+noncomputable def foldCancellationWithPair {α : Type*} {G : LabelledDartGraph α}
     {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
     (step : FreeCancellationStep raw reduced)
     (walk : LabelledWalk G u v raw) :
-    WalkFoldResult G (u₀ := u) (v₀ := v) reduced := by
+    CancellationFoldData step walk := by
   cases step with
   | cancel pre post a =>
       have hword : (pre ++ [a] ++ [inverseLetter a] ++ post) =
@@ -987,12 +1072,12 @@ noncomputable def foldCancellation {α : Type*} {G : LabelledDartGraph α}
       let firstSplit := split pre ([a] ++ ([inverseLetter a] ++ post)) walk'
       let beforeVertex := firstSplit.1
       let before := firstSplit.2.1
-      let rest := firstSplit.2.2
-      let secondSplit := split [a] ([inverseLetter a] ++ post) rest
+      let afterBefore := firstSplit.2.2
+      let secondSplit := split [a] ([inverseLetter a] ++ post) afterBefore
       let middleVertex := secondSplit.1
       let firstEdge := secondSplit.2.1
-      let rest := secondSplit.2.2
-      let thirdSplit := split [inverseLetter a] post rest
+      let afterFirst := secondSplit.2.2
+      let thirdSplit := split [inverseLetter a] post afterFirst
       let afterVertex := thirdSplit.1
       let secondEdge := thirdSplit.2.1
       let after := thirdSplit.2.2
@@ -1013,11 +1098,90 @@ noncomputable def foldCancellation {α : Type*} {G : LabelledDartGraph α}
         hfirstSource.symm ▸ before
       let after' : LabelledWalk G (G.toDartGraph.target secondDart) v post :=
         hsecondTarget ▸ after
-      refine ⟨G.folded α firstDart secondDart hlabels,
-        LabelledGraphHom.fold G firstDart secondDart hlabels, ?_, ?_⟩
+      have hcast : walk.occurrenceDarts = walk'.occurrenceDarts :=
+        (LabelledWalk.occurrenceDarts_cast hword walk).symm
+      have hsplit₁ : walk'.occurrenceDarts =
+          before.occurrenceDarts ++ afterBefore.occurrenceDarts :=
+        LabelledWalk.occurrenceDarts_split pre
+          ([a] ++ ([inverseLetter a] ++ post)) walk'
+      have hsplit₂ : afterBefore.occurrenceDarts = firstEdge.occurrenceDarts ++
+          afterFirst.occurrenceDarts :=
+        LabelledWalk.occurrenceDarts_split [a] ([inverseLetter a] ++ post) afterBefore
+      have hsplit₃ : afterFirst.occurrenceDarts = secondEdge.occurrenceDarts ++
+          after.occurrenceDarts :=
+        LabelledWalk.occurrenceDarts_split [inverseLetter a] post afterFirst
+      have hfirstDarts : firstEdge.occurrenceDarts = [firstDart] :=
+        LabelledWalk.occurrenceDarts_edgeOf firstEdge
+      have hsecondDarts : secondEdge.occurrenceDarts = [secondDart] :=
+        LabelledWalk.occurrenceDarts_edgeOf secondEdge
+      have hlist : walk.occurrenceDarts = before.occurrenceDarts ++
+          ([firstDart, secondDart] ++ after.occurrenceDarts) := by
+        calc
+          walk.occurrenceDarts = walk'.occurrenceDarts := hcast
+          _ = before.occurrenceDarts ++ afterBefore.occurrenceDarts := hsplit₁
+          _ = before.occurrenceDarts ++
+              (firstEdge.occurrenceDarts ++ afterFirst.occurrenceDarts) := by
+            rw [hsplit₂]
+          _ = before.occurrenceDarts ++
+              ([firstDart] ++ ([secondDart] ++ after.occurrenceDarts)) := by
+            rw [hsplit₃, hfirstDarts, hsecondDarts]
+          _ = before.occurrenceDarts ++ ([firstDart, secondDart] ++
+              after.occurrenceDarts) := by simp
+      have hbeforeLen : before.occurrenceDarts.length = pre.length := by
+        rw [LabelledWalk.occurrenceDarts_length]
+      have hfirstAt : walk.occurrenceDarts[pre.length]? = some firstDart := by
+        rw [hlist]
+        have hindex : pre.length = before.occurrenceDarts.length + 0 := by omega
+        rw [hindex, List.getElem?_append_right (by omega)]
+        simp
+      have hsecondAt : walk.occurrenceDarts[pre.length + 1]? = some secondDart := by
+        rw [hlist]
+        have hindex : pre.length + 1 = before.occurrenceDarts.length + 1 := by omega
+        rw [hindex, List.getElem?_append_right (by omega)]
+        simp
+      refine ⟨⟨firstDart, secondDart, hlabels⟩, hfirstAt, hsecondAt,
+        ⟨G.folded α firstDart secondDart hlabels,
+          LabelledGraphHom.fold G firstDart secondDart hlabels, ?_, ?_⟩⟩
       · exact before'.spliceAcrossFold firstDart secondDart after' hlabels
       · exact LabelledGraphHom.fold_mapDart_surjective G
           firstDart secondDart hlabels
+
+/-- The replay state of one adjacent inverse-letter cancellation. -/
+noncomputable def foldCancellation {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced)
+    (walk : LabelledWalk G u v raw) :
+    WalkFoldResult G (u₀ := u) (v₀ := v) reduced :=
+  (foldCancellationWithPair step walk).result
+
+/-- The one-step replay graph is the quotient by the pair exposed alongside
+the replay state. -/
+theorem foldCancellationWithPair_graph {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced)
+    (walk : LabelledWalk G u v raw) :
+    (foldCancellationWithPair step walk).result.graph =
+      G.folded α (foldCancellationWithPair step walk).pair.first
+        (foldCancellationWithPair step walk).pair.second
+        (foldCancellationWithPair step walk).pair.inverse_labels := by
+  cases step with
+  | cancel pre post a => rfl
+
+/-- The replay map sends the selected second dart to the reverse of the
+selected first dart in its quotient graph. -/
+theorem foldCancellationWithPair_pair_reverse {α : Type*} {G : LabelledDartGraph α}
+    {u v : G.toDartGraph.Vertex} {raw reduced : Word α}
+    (step : FreeCancellationStep raw reduced)
+    (walk : LabelledWalk G u v raw) :
+    (foldCancellationWithPair step walk).result.hom.mapDart
+        (foldCancellationWithPair step walk).pair.second =
+      (foldCancellationWithPair step walk).result.graph.toDartGraph.reverse
+        ((foldCancellationWithPair step walk).result.hom.mapDart
+          (foldCancellationWithPair step walk).pair.first) := by
+  cases step with
+  | cancel pre post a =>
+      exact LabelledDartPairFoldResult.oneFold_pair_reverse
+        (foldCancellationWithPair (FreeCancellationStep.cancel pre post a) walk).pair
 
 /-- Replay a sequence of adjacent free cancellations as successive graph
 folds. The returned homomorphism tracks the original graph into the final
