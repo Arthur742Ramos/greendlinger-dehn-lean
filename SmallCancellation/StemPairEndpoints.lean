@@ -932,6 +932,186 @@ theorem reducedBalloonOccurrencePathEmbedding_position_surjective
         dsimp [pTail] at hpos
         omega
 
+/-- The vertex map of a balloon occurrence embedding shifts by the flattened
+length of the balloons before that occurrence. -/
+theorem reducedBalloonOccurrencePathEmbedding_vertex_formula
+    {α : Type*} [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α} :
+    ∀ (balloons : List (ReducedRelatorBalloonData P))
+      (i : Fin balloons.length) (v : Nat),
+      (reducedBalloonOccurrencePathEmbedding balloons i).mapVertex v =
+        ((balloons.take i.val).map
+          (fun b => b.label.rawWord)).flatten.length + v := by
+  intro balloons
+  induction balloons with
+  | nil => intro i; exact Fin.elim0 i
+  | cons b tail ih =>
+      intro i
+      cases i using Fin.cases with
+      | zero =>
+          intro v
+          rw [reducedBalloonOccurrencePathEmbedding_zero]
+          simp [wordPathPrefixHom]
+          rfl
+      | succ i =>
+          intro v
+          rw [reducedBalloonOccurrencePathEmbedding_succ]
+          change (wordPathSuffixHom b.label.rawWord
+              ((tail.map fun b => b.label.rawWord).flatten)).mapVertex
+              ((reducedBalloonOccurrencePathEmbedding tail i).mapVertex v) =
+            ((b :: tail).take i.succ.val |>.map
+              (fun b => b.label.rawWord)).flatten.length + v
+          dsimp [wordPathSuffixHom]
+          rw [ih i v]
+          simp [id, List.map_cons, List.flatten_cons, Nat.add_assoc]
+          rfl
+
+/-- The source position of a forward dart in one balloon occurrence is its
+local position shifted by the preceding balloon lengths. -/
+theorem reducedBalloonOccurrencePathEmbedding_position_formula
+    {α : Type*} [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α}
+    (balloons : List (ReducedRelatorBalloonData P))
+    (i : Fin balloons.length)
+    (j : Fin (balloons.get i).label.rawWord.length) :
+    (((reducedBalloonOccurrencePathEmbedding balloons i).mapDart
+      (j, false)).1).val =
+      ((balloons.take i.val).map
+        (fun b => b.label.rawWord)).flatten.length + j.val := by
+  let f := reducedBalloonOccurrencePathEmbedding balloons i
+  have hsource := f.map_source (j, false)
+  have hdirection :=
+    reducedBalloonOccurrencePathEmbedding_direction balloons i (j, false)
+  have hposition : (f.mapDart (j, false)).1.val = f.mapVertex j.val := by
+    have hdirection' : (f.mapDart (j, false)).2 = false := by
+      simpa using hdirection
+    simpa [wordPathGraph, hdirection'] using hsource
+  rw [hposition]
+  exact reducedBalloonOccurrencePathEmbedding_vertex_formula balloons i j.val
+
+/-- Splitting a flattened list of balloon words at one indexed balloon. -/
+theorem reducedBalloonWords_flatten_split_at
+    {α : Type*} [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α}
+    (balloons : List (ReducedRelatorBalloonData P))
+  (i : Fin balloons.length) :
+    ((balloons.map fun b => b.label.rawWord).flatten) =
+      ((balloons.take i.val).map fun b => b.label.rawWord).flatten ++
+        (balloons.get i).label.rawWord ++
+      ((balloons.drop (i.val + 1)).map fun b => b.label.rawWord).flatten := by
+  let words := balloons.map fun b => b.label.rawWord
+  have hi : i.val < words.length := by simpa [words] using i.isLt
+  have hdrop : words.drop i.val = words[i.val] :: words.drop (i.val + 1) :=
+    List.drop_eq_getElem_cons hi
+  calc
+    words.flatten = (words.take i.val ++ words.drop i.val).flatten := by
+      rw [List.take_append_drop]
+    _ = (words.take i.val).flatten ++ (words.drop i.val).flatten :=
+      List.flatten_append
+    _ = (words.take i.val).flatten ++
+        words[i.val] ++ (words.drop (i.val + 1)).flatten := by
+      rw [hdrop]
+      simp only [List.flatten_cons]
+      exact (List.append_assoc _ _ _).symm
+    _ = _ := by
+      simp [words, List.get_eq_getElem]
+
+private theorem cancellationBracket_infix_of_bounds
+    {α : Type*} {whole boundaryPrefix segment suffix pre inner post : Word α}
+    {a : Letter α}
+    (hwhole : whole = boundaryPrefix ++ segment ++ suffix)
+    (hpair : whole = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post)
+    (hleft : boundaryPrefix.length ≤ pre.length)
+    (hright : pre.length + inner.length + 1 <
+      boundaryPrefix.length + segment.length) :
+    ([a] ++ inner ++ [inverseLetter a]) <:+: segment := by
+  have hprePrefix : pre.take boundaryPrefix.length = boundaryPrefix := by
+    have ht := congrArg (fun x : Word α => x.take boundaryPrefix.length)
+      (hwhole.symm.trans hpair)
+    simpa [List.take_append_of_le_length hleft] using ht.symm
+  have hpreSplit : pre = boundaryPrefix ++ pre.drop boundaryPrefix.length := by
+    calc
+      pre = pre.take boundaryPrefix.length ++ pre.drop boundaryPrefix.length :=
+        (List.take_append_drop _ _).symm
+      _ = boundaryPrefix ++ pre.drop boundaryPrefix.length := by rw [hprePrefix]
+  have hwhole' : boundaryPrefix ++ (segment ++ suffix) =
+      boundaryPrefix ++
+        (pre.drop boundaryPrefix.length ++ [a] ++ inner ++
+          [inverseLetter a] ++ post) := by
+    calc
+      boundaryPrefix ++ (segment ++ suffix) = whole := by
+        rw [hwhole]
+        simp [List.append_assoc]
+      _ = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post := hpair
+      _ = boundaryPrefix ++
+          (pre.drop boundaryPrefix.length ++ [a] ++ inner ++
+            [inverseLetter a] ++ post) := by
+        rw [hpreSplit]
+        simp [List.append_assoc]
+  have hrest : segment ++ suffix =
+      pre.drop boundaryPrefix.length ++ [a] ++ inner ++
+        [inverseLetter a] ++ post := List.append_cancel_left hwhole'
+  let preSeg := pre.drop boundaryPrefix.length
+  let core := preSeg ++ [a] ++ inner ++ [inverseLetter a]
+  have hpreLength : pre.length = boundaryPrefix.length + preSeg.length := by
+    have hdrop : preSeg.length = pre.length - boundaryPrefix.length := by
+      simp [preSeg]
+    omega
+  have hright' : preSeg.length + inner.length + 1 < segment.length := by
+    rw [hpreLength] at hright
+    omega
+  have hcoreLength : core.length = preSeg.length + inner.length + 2 := by
+    simp [core, List.length_append, List.length_cons]
+    omega
+  have hcoreBound : core.length ≤ segment.length := by
+    rw [hcoreLength]
+    omega
+  have hrestCore : segment ++ suffix = core ++ post := by
+    simpa [core, preSeg, List.append_assoc] using hrest
+  have htake : segment.take core.length = core := by
+    have ht := congrArg (fun x : Word α => x.take core.length) hrestCore
+    rw [List.take_append_of_le_length hcoreBound] at ht
+    simpa using ht
+  have hsegment : segment = core ++ segment.drop core.length := by
+    calc
+      segment = segment.take core.length ++ segment.drop core.length :=
+        (List.take_append_drop _ _).symm
+      _ = core ++ segment.drop core.length := by rw [htake]
+  refine ⟨preSeg,
+    segment.drop core.length, ?_⟩
+  simpa [core, List.append_assoc] using hsegment.symm
+
+/-- A null cancellation interior cannot have both endpoints inside one
+freely reduced balloon boundary. -/
+private theorem no_null_cancellation_interval_inside_reduced_segment
+    {α : Type*} [DecidableEq α]
+    {whole boundaryPrefix segment suffix pre inner post : Word α} {a : Letter α}
+    (hwhole : whole = boundaryPrefix ++ segment ++ suffix)
+    (hpair : whole = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post)
+    (hleft : boundaryPrefix.length ≤ pre.length)
+    (hright : pre.length + inner.length + 1 <
+      boundaryPrefix.length + segment.length)
+    (hsegment : FreeGroup.IsReduced segment)
+    (hnull : FreeGroup.mk inner = 1) : False := by
+  have hbracket := cancellationBracket_infix_of_bounds
+    hwhole hpair hleft hright
+  have hinnerReduceNil : FreeGroup.reduce inner = [] := by
+    have hword := congrArg FreeGroup.toWord hnull
+    simpa only [FreeGroup.toWord_mk, FreeGroup.toWord_one] using hword
+  have hinnerInBracket : inner <:+: ([a] ++ inner ++ [inverseLetter a]) := by
+    refine ⟨[a], [inverseLetter a], ?_⟩
+    simp [List.append_assoc]
+  have hinnerInSegment := hinnerInBracket.trans hbracket
+  have hinnerReduced : FreeGroup.IsReduced inner := hsegment.infix hinnerInSegment
+  have hinnerNil : inner = [] := by
+    calc
+      inner = FreeGroup.reduce inner := hinnerReduced.reduce_eq.symm
+      _ = [] := hinnerReduceNil
+  have hpairInfix : ([a, inverseLetter a] : Word α) <:+: segment := by
+    simpa [hinnerNil, List.append_assoc] using hbracket
+  have hpairReduced := hsegment.infix hpairInfix
+  have hcondition := (FreeGroup.isReduced_cons_cons.mp hpairReduced).1
+  have hbits := hcondition rfl
+  cases a with
+  | mk generator sign => cases sign <;> simp [inverseLetter] at hbits
+
 /-- A stem pair belonging to a particular balloon occurrence remains in the
 flattened pairing at that same indexed occurrence. Using the index avoids
 confusing duplicate balloon values. -/
@@ -1705,6 +1885,203 @@ theorem MinimalAreaRelatorBoundarySeed.cancellationPair_has_null_interior
       p = (pre.length, pre.length + inner.length + 1) ∧
       FreeGroup.mk inner = 1 :=
   seed.boundary.reducedLiteralBoundaryShape.cancellationPair_interior_mk_eq_one p hp
+
+/-- A source cancellation pair in a minimum area boundary cannot have both
+endpoints in one reduced relator balloon. -/
+theorem MinimalAreaRelatorBoundarySeed.cancellationPair_not_within_one_balloon
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (p : Nat × Nat)
+    (hp : p ∈ seed.boundary.reducedLiteralBoundaryShape.cancellationPairs)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (j k : Fin (seed.boundary.reducedBalloons.get i).label.rawWord.length)
+    (hfirst :
+      (((reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons i).mapDart (j, false)).1).val = p.1)
+    (hsecond :
+      (((reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons i).mapDart (k, false)).1).val = p.2) :
+    False := by
+  let balloons := seed.boundary.reducedBalloons
+  let balloon := balloons.get i
+  let prefixWord := ((balloons.take i.val).map
+    fun b => b.label.rawWord).flatten
+  let suffixWord := ((balloons.drop (i.val + 1)).map
+    fun b => b.label.rawWord).flatten
+  have hwhole : seed.boundary.reducedLiteralBoundary =
+      prefixWord ++ balloon.label.rawWord ++ suffixWord := by
+    dsimp [prefixWord, suffixWord, balloon, balloons,
+      RelatorFactorBoundarySeed.reducedLiteralBoundary]
+    exact reducedBalloonWords_flatten_split_at
+      seed.boundary.reducedBalloons i
+  have hfirstPosition := reducedBalloonOccurrencePathEmbedding_position_formula
+    seed.boundary.reducedBalloons i j
+  have hsecondPosition := reducedBalloonOccurrencePathEmbedding_position_formula
+    seed.boundary.reducedBalloons i k
+  have hleft : prefixWord.length ≤ p.1 := by
+    rw [← hfirst, hfirstPosition]
+    exact Nat.le_add_right _ _
+  have hright : p.2 < prefixWord.length + balloon.label.rawWord.length := by
+    rw [← hsecond, hsecondPosition]
+    exact Nat.add_lt_add_left k.isLt _
+  obtain ⟨pre, inner, post, a, hpair, hpositions, hnull⟩ :=
+    seed.cancellationPair_has_null_interior p hp
+  have hpositionFirst : p.1 = pre.length := congrArg Prod.fst hpositions
+  have hpositionSecond : p.2 = pre.length + inner.length + 1 :=
+    congrArg Prod.snd hpositions
+  have hleft' : prefixWord.length ≤ pre.length := by omega
+  have hright' : pre.length + inner.length + 1 <
+      prefixWord.length + balloon.label.rawWord.length := by omega
+  exact no_null_cancellation_interval_inside_reduced_segment
+    hwhole hpair hleft' hright' balloon.boundary_reduced hnull
+
+/-- Every cancellation pair in the flattened minimum area boundary joins
+occurrences from distinct reduced relator balloons. -/
+theorem MinimalAreaRelatorBoundarySeed.cancellationPair_spans_distinct_balloons
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (p : Nat × Nat)
+    (hp : p ∈ seed.boundary.reducedLiteralBoundaryShape.cancellationPairs) :
+    ∃ (i₁ i₂ : Fin seed.boundary.reducedBalloons.length)
+      (j₁ : Fin (seed.boundary.reducedBalloons.get i₁).label.rawWord.length)
+      (j₂ : Fin (seed.boundary.reducedBalloons.get i₂).label.rawWord.length),
+      i₁ ≠ i₂ ∧
+      (((reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons i₁).mapDart (j₁, false)).1).val = p.1 ∧
+      (((reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons i₂).mapDart (j₂, false)).1).val = p.2 := by
+  obtain ⟨pre, inner, post, a, hpair, hpositions, _⟩ :=
+    seed.cancellationPair_has_null_interior p hp
+  have hpositionFirst : p.1 = pre.length := congrArg Prod.fst hpositions
+  have hpositionSecond : p.2 = pre.length + inner.length + 1 :=
+    congrArg Prod.snd hpositions
+  have hfirstBound : p.1 < seed.boundary.reducedLiteralBoundary.length := by
+    rw [hpositionFirst, hpair]
+    simp only [List.length_append, List.length_cons]
+    omega
+  have hsecondBound : p.2 < seed.boundary.reducedLiteralBoundary.length := by
+    rw [hpositionSecond, hpair]
+    simp only [List.length_append, List.length_cons]
+    omega
+  let first : Fin (((seed.boundary.reducedBalloons.map
+      fun b => b.label.rawWord).flatten).length) :=
+    ⟨p.1, by simpa [RelatorFactorBoundarySeed.reducedLiteralBoundary] using hfirstBound⟩
+  let second : Fin (((seed.boundary.reducedBalloons.map
+      fun b => b.label.rawWord).flatten).length) :=
+    ⟨p.2, by simpa [RelatorFactorBoundarySeed.reducedLiteralBoundary] using hsecondBound⟩
+  obtain ⟨i₁, j₁, hmap₁⟩ :=
+    reducedBalloonOccurrencePathEmbedding_position_surjective
+      seed.boundary.reducedBalloons first
+  obtain ⟨i₂, j₂, hmap₂⟩ :=
+    reducedBalloonOccurrencePathEmbedding_position_surjective
+      seed.boundary.reducedBalloons second
+  have hposition₁ :
+      (((reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons i₁).mapDart (j₁, false)).1).val = p.1 := by
+    simpa [first] using hmap₁
+  have hposition₂ :
+      (((reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons i₂).mapDart (j₂, false)).1).val = p.2 := by
+    simpa [second] using hmap₂
+  have hdistinct : i₁ ≠ i₂ := by
+    intro heq
+    subst i₂
+    exact seed.cancellationPair_not_within_one_balloon
+      p hp i₁ j₁ j₂ hposition₁ hposition₂
+  exact ⟨i₁, i₂, j₁, j₂, hdistinct, hposition₁, hposition₂⟩
+
+private theorem reducedBalloonPrefix_ends_before_later_prefix
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α}
+    (balloons : List (ReducedRelatorBalloonData P))
+    (i j : Fin balloons.length) (hij : i.val < j.val) :
+    ((balloons.take i.val).map fun b => b.label.rawWord).flatten.length +
+        (balloons.get i).label.rawWord.length ≤
+      ((balloons.take j.val).map fun b => b.label.rawWord).flatten.length := by
+  induction balloons with
+  | nil => exact Fin.elim0 i
+  | cons b tail ih =>
+      cases i using Fin.cases with
+      | zero =>
+          cases j using Fin.cases with
+          | zero => simp at hij
+          | succ j =>
+              have hget : (b :: tail).get (0 : Fin (b :: tail).length) = b := by
+                rfl
+              have hoffset :
+                  (( (b :: tail).take (0 : Fin (b :: tail).length).val).map
+                    (fun b => b.label.rawWord)).flatten.length = 0 := by
+                rfl
+              have htake : (b :: tail).take j.succ.val = b :: tail.take j.val := by
+                simp
+              rw [hoffset, Nat.zero_add, hget]
+              change b.label.rawWord.length ≤
+                (((b :: tail).take j.succ.val).map
+                  (fun b => b.label.rawWord)).flatten.length
+              rw [htake]
+              simp only [List.map_cons, List.flatten_cons, List.length_append]
+              exact Nat.le_add_right _ _
+      | succ i =>
+          cases j using Fin.cases with
+          | zero => simp at hij
+          | succ j =>
+              have hij' : i.val < j.val := by simpa using hij
+              have htail := ih i j hij'
+              simpa [List.take, List.map_cons, List.flatten_cons,
+                List.get_cons_succ', Nat.add_assoc] using
+                  (Nat.add_le_add_left htail b.label.rawWord.length)
+
+/-- Cancellation endpoints occur in distinct balloons, and their balloon
+indices increase in the same order as the source positions. -/
+theorem MinimalAreaRelatorBoundarySeed.cancellationPair_balloonIndices_strictly_increase
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (p : Nat × Nat)
+    (hp : p ∈ seed.boundary.reducedLiteralBoundaryShape.cancellationPairs) :
+    ∃ (i₁ i₂ : Fin seed.boundary.reducedBalloons.length)
+      (j₁ : Fin (seed.boundary.reducedBalloons.get i₁).label.rawWord.length)
+      (j₂ : Fin (seed.boundary.reducedBalloons.get i₂).label.rawWord.length),
+      i₁.val < i₂.val ∧
+      (((reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons i₁).mapDart (j₁, false)).1).val = p.1 ∧
+      (((reducedBalloonOccurrencePathEmbedding
+        seed.boundary.reducedBalloons i₂).mapDart (j₂, false)).1).val = p.2 := by
+  obtain ⟨i₁, i₂, j₁, j₂, hdistinct, hposition₁, hposition₂⟩ :=
+    seed.cancellationPair_spans_distinct_balloons p hp
+  obtain ⟨pre, inner, post, a, _hpair, hpositions, _hnull⟩ :=
+    seed.cancellationPair_has_null_interior p hp
+  have hsourceOrder : p.1 < p.2 := by
+    have hfirst := congrArg Prod.fst hpositions
+    have hsecond := congrArg Prod.snd hpositions
+    omega
+  have hindexOrder : i₁.val < i₂.val := by
+    by_contra hnot
+    have hreverse : i₂.val < i₁.val := by omega
+    let balloons := seed.boundary.reducedBalloons
+    have hoffset := reducedBalloonPrefix_ends_before_later_prefix
+      balloons i₂ i₁ hreverse
+    have hposition₂' : p.2 =
+        ((balloons.take i₂.val).map fun b => b.label.rawWord).flatten.length + j₂.val := by
+      rw [← hposition₂]
+      exact reducedBalloonOccurrencePathEmbedding_position_formula balloons i₂ j₂
+    have hposition₁' : p.1 =
+        ((balloons.take i₁.val).map fun b => b.label.rawWord).flatten.length + j₁.val := by
+      rw [← hposition₁]
+      exact reducedBalloonOccurrencePathEmbedding_position_formula balloons i₁ j₁
+    have hbefore : p.2 <
+        ((balloons.take i₂.val).map fun b => b.label.rawWord).flatten.length +
+          (balloons.get i₂).label.rawWord.length := by
+      rw [hposition₂']
+      exact Nat.add_lt_add_left j₂.isLt _
+    have hafter :
+        ((balloons.take i₁.val).map fun b => b.label.rawWord).flatten.length ≤ p.1 := by
+      rw [hposition₁']
+      omega
+    omega
+  exact ⟨i₁, i₂, j₁, j₂, hindexOrder, hposition₁, hposition₂⟩
 
 /-- In the direct pair-fold quotient, each global free-cancellation pair is
 already represented by opposite dart occurrences of the original boundary
