@@ -1230,6 +1230,79 @@ theorem foldSequence_factors_through_tracePairFold {α : Type*}
 
 end LabelledWalk
 
+namespace FreeReductionShape
+
+/-- Cancellation pairs listed in the order that the executable sequence
+performs them. For a bracket, the inner word is reduced first, then the
+bracket's outer pair, and then the suffix. -/
+def replayCancellationPairs {α : Type*} {raw reduced : Word α} :
+    FreeReductionShape raw reduced → List (Nat × Nat)
+  | .empty => []
+  | .letter _ => []
+  | .append left right =>
+      left.replayCancellationPairs ++
+        shiftCancellationPairs left.inputWord.length
+          right.replayCancellationPairs
+  | .bracket _ inner suffix =>
+      shiftCancellationPairs 1 inner.replayCancellationPairs ++
+        [(0, inner.inputWord.length + 1)] ++
+        shiftCancellationPairs (inner.inputWord.length + 2)
+          suffix.replayCancellationPairs
+
+/-- The structural, root-first pairing and the chronological replay pairing
+have the same pairs; only their list order differs. -/
+theorem cancellationPairs_perm_replayCancellationPairs
+    {α : Type*} {raw reduced : Word α}
+    (shape : FreeReductionShape raw reduced) :
+    List.Perm shape.cancellationPairs shape.replayCancellationPairs := by
+  induction shape with
+  | empty => rfl
+  | letter _ => rfl
+  | @append u u' v v' left right ihLeft ihRight =>
+      apply List.Perm.append ihLeft
+      simpa [shiftCancellationPairs] using
+        ihRight.map fun p =>
+          (left.inputWord.length + p.1, left.inputWord.length + p.2)
+  | @bracket a inner suffix result hinner hsuffix ihInner ihSuffix =>
+      simp only [cancellationPairs, replayCancellationPairs]
+      have hInner := ihInner.map fun p => (1 + p.1, 1 + p.2)
+      have hSuffix := ihSuffix.map fun p =>
+        (hinner.inputWord.length + 2 + p.1,
+          hinner.inputWord.length + 2 + p.2)
+      have hinnerShift :
+          List.Perm (shiftCancellationPairs 1 hinner.cancellationPairs)
+            (shiftCancellationPairs 1 hinner.replayCancellationPairs) := by
+        simpa [shiftCancellationPairs] using hInner
+      have hsuffixShift :
+          List.Perm (shiftCancellationPairs (hinner.inputWord.length + 2)
+              hsuffix.cancellationPairs)
+            (shiftCancellationPairs (hinner.inputWord.length + 2)
+              hsuffix.replayCancellationPairs) := by
+        simpa [shiftCancellationPairs] using hSuffix
+      have htail := List.Perm.append hinnerShift hsuffixShift
+      have hroot :
+          List.Perm ((0, hinner.inputWord.length + 1) ::
+              (shiftCancellationPairs 1 hinner.replayCancellationPairs ++
+                shiftCancellationPairs (hinner.inputWord.length + 2)
+                  hsuffix.replayCancellationPairs))
+            (shiftCancellationPairs 1 hinner.replayCancellationPairs ++
+              [(0, hinner.inputWord.length + 1)] ++
+                shiftCancellationPairs (hinner.inputWord.length + 2)
+                  hsuffix.replayCancellationPairs) := by
+        have hcomm : List.Perm
+            ([(0, hinner.inputWord.length + 1)] ++
+                shiftCancellationPairs 1 hinner.replayCancellationPairs)
+            (shiftCancellationPairs 1 hinner.replayCancellationPairs ++
+                [(0, hinner.inputWord.length + 1)]) := by
+          exact List.perm_append_comm
+        simpa [List.append_assoc] using
+          (List.Perm.append hcomm (List.Perm.refl
+            (shiftCancellationPairs (hinner.inputWord.length + 2)
+              hsuffix.replayCancellationPairs)))
+      exact htail.cons (0, hinner.inputWord.length + 1) |>.trans hroot
+
+end FreeReductionShape
+
 theorem wordPathWalk_darts {α : Type*} (word : Word α) :
     (wordPathWalk word).darts =
       (List.finRange word.length).map fun i => (i, false) := by
