@@ -643,6 +643,72 @@ theorem sourcePositionTrace_endpoint_partition {α : Type*}
   simpa [sourcePositionTrace] using
     sourcePositionTraceAux_endpoint_partition raw steps (List.finRange raw.length) (by simp)
 
+/-- At a cancellation step, the two live walk darts are the images of the
+source occurrences recorded at that step's current positions. -/
+theorem sourcePositionTraceAux_head_sourceDarts {α : Type*}
+    (source : Word α) {pre post : Word α} (a : Letter α)
+    (origins : List (Fin source.length))
+    (hlen : origins.length = (pre ++ [a] ++ [inverseLetter a] ++ post).length)
+    {G : LabelledDartGraph α} {u v : G.toDartGraph.Vertex}
+    (walk : LabelledWalk G u v
+      (pre ++ [a] ++ [inverseLetter a] ++ post))
+    (sourceDarts : Fin source.length → G.toDartGraph.Dart)
+    (hwalk : walk.darts = origins.map sourceDarts) :
+    ∃ firstDart secondDart,
+      walk.darts[pre.length]? = some firstDart ∧
+      walk.darts[pre.length + 1]? = some secondDart ∧
+      sourceDarts (origins.get ⟨pre.length, by
+        have hlen' : origins.length = pre.length + 2 + post.length := by
+          have hlen'' : origins.length = pre.length + (post.length + 2) := by
+            simpa [List.length_append] using hlen
+          omega
+        omega⟩) = firstDart ∧
+      sourceDarts (origins.get ⟨pre.length + 1, by
+        have hlen' : origins.length = pre.length + 2 + post.length := by
+          have hlen'' : origins.length = pre.length + (post.length + 2) := by
+            simpa [List.length_append] using hlen
+          omega
+        omega⟩) = secondDart := by
+  have hlen' : origins.length = pre.length + 2 + post.length := by
+    have hlen'' : origins.length = pre.length + (post.length + 2) := by
+      simpa [List.length_append] using hlen
+    omega
+  have hfirstBound : pre.length < origins.length := by omega
+  have hsecondBound : pre.length + 1 < origins.length := by omega
+  let firstPosition := origins.get ⟨pre.length, hfirstBound⟩
+  let secondPosition := origins.get ⟨pre.length + 1, hsecondBound⟩
+  obtain ⟨firstDart, secondDart, hfirstAt, hsecondAt, _⟩ :=
+    foldCancellation_sourcePair a walk
+  have hfirstValue : firstPosition = origins[pre.length] := by
+    exact List.get_eq_getElem
+  have hsecondValue : secondPosition = origins[pre.length + 1] := by
+    exact List.get_eq_getElem
+  have hfirstPosition : origins[pre.length]? = some firstPosition := by
+    rw [hfirstValue]
+    simp
+  have hsecondPosition : origins[pre.length + 1]? = some secondPosition := by
+    rw [hsecondValue]
+    simp
+  have hfirstMap : (origins.map sourceDarts)[pre.length]? =
+      some (sourceDarts firstPosition) := by
+    rw [List.getElem?_map, hfirstPosition]
+    simp
+  have hsecondMap : (origins.map sourceDarts)[pre.length + 1]? =
+      some (sourceDarts secondPosition) := by
+    rw [List.getElem?_map, hsecondPosition]
+    simp
+  have hfirstWalk : (origins.map sourceDarts)[pre.length]? = some firstDart := by
+    rw [← hwalk]
+    exact hfirstAt
+  have hsecondWalk : (origins.map sourceDarts)[pre.length + 1]? = some secondDart := by
+    rw [← hwalk]
+    exact hsecondAt
+  refine ⟨firstDart, secondDart, hfirstAt, hsecondAt, ?_, ?_⟩
+  · have h := hfirstMap.symm.trans hfirstWalk
+    exact Option.some.inj h
+  · have h := hsecondMap.symm.trans hsecondWalk
+    exact Option.some.inj h
+
 /-- Later cancellation folds preserve the occurrence pair selected by the
 first step of a free-cancellation sequence. -/
 theorem foldSequence_headSourcePair {α : Type*} {G : LabelledDartGraph α}
@@ -774,38 +840,28 @@ theorem sourcePositionTraceAux_pairs_folded {α : Type*}
             simp only [List.map_map, Function.comp_def, sourceDarts', remaining,
               List.map_append]
             rfl
-          obtain ⟨pairFirstDart, pairSecondDart, hfirstAt, hsecondAt, hheadFolded⟩ :=
-            foldSequence_headSourcePair pre post a rest walk
-          have hfirstValue : firstPosition = origins[pre.length] := by
-            exact List.get_eq_getElem
-          have hsecondValue : secondPosition = origins[pre.length + 1] := by
-            exact List.get_eq_getElem
+          obtain ⟨traceFirstDart, traceSecondDart, traceFirstAt, traceSecondAt,
+              traceFirstSource, traceSecondSource⟩ :=
+            sourcePositionTraceAux_head_sourceDarts source a origins hraw
+              walk sourceDarts hwalk
+          obtain ⟨pairFirstDart, pairSecondDart, pairFirstAt, pairSecondAt,
+              hheadFolded⟩ := foldSequence_headSourcePair pre post a rest walk
+          have htraceFirstEq : traceFirstDart = pairFirstDart :=
+            Option.some.inj (traceFirstAt.symm.trans pairFirstAt)
+          have htraceSecondEq : traceSecondDart = pairSecondDart :=
+            Option.some.inj (traceSecondAt.symm.trans pairSecondAt)
           have hfirstSource : sourceDarts firstPosition = pairFirstDart := by
-            have hposition : origins[pre.length]? = some firstPosition := by
-              rw [hfirstValue]
-              simp
-            have hmapAt : (origins.map sourceDarts)[pre.length]? =
-                some (sourceDarts firstPosition) := by
-              rw [List.getElem?_map, hposition]
-              simp
-            have hwalkAt : (origins.map sourceDarts)[pre.length]? =
-                some pairFirstDart := by
-              rw [← hwalk]
-              exact hfirstAt
-            exact Option.some.inj (hmapAt.symm.trans hwalkAt)
+            have hsource : sourceDarts firstPosition = traceFirstDart := by
+              change sourceDarts
+                (origins.get ⟨pre.length, hfirstBound⟩) = traceFirstDart
+              exact traceFirstSource
+            exact hsource.trans htraceFirstEq
           have hsecondSource : sourceDarts secondPosition = pairSecondDart := by
-            have hposition : origins[pre.length + 1]? = some secondPosition := by
-              rw [hsecondValue]
-              simp
-            have hmapAt : (origins.map sourceDarts)[pre.length + 1]? =
-                some (sourceDarts secondPosition) := by
-              rw [List.getElem?_map, hposition]
-              simp
-            have hwalkAt : (origins.map sourceDarts)[pre.length + 1]? =
-                some pairSecondDart := by
-              rw [← hwalk]
-              exact hsecondAt
-            exact Option.some.inj (hmapAt.symm.trans hwalkAt)
+            have hsource : sourceDarts secondPosition = traceSecondDart := by
+              change sourceDarts
+                (origins.get ⟨pre.length + 1, hsecondBound⟩) = traceSecondDart
+              exact traceSecondSource
+            exact hsource.trans htraceSecondEq
           have hlater := ih remaining hremaining first.walk sourceDarts' hwalk'
           intro p hp
           have hp' : p ∈ (firstPosition, secondPosition) ::
