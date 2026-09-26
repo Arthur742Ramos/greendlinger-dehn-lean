@@ -695,6 +695,223 @@ theorem foldSequence_headSourcePair {α : Type*} {G : LabelledDartGraph α}
         (later.hom.map_reverse _).symm
   exact ⟨firstDart, secondDart, hfirstAt, hsecondAt, hfinal⟩
 
+/-- Every cancellation pair recorded by the source-position trace is folded
+into opposite orientations by the accumulated graph map. -/
+theorem sourcePositionTraceAux_pairs_folded {α : Type*}
+    (source : Word α) {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced)
+    (origins : List (Fin source.length)) (hlen : origins.length = raw.length)
+    {G : LabelledDartGraph α} {u v : G.toDartGraph.Vertex}
+    (walk : LabelledWalk G u v raw)
+    (sourceDarts : Fin source.length → G.toDartGraph.Dart)
+    (hwalk : walk.darts = origins.map sourceDarts) :
+    ∀ p ∈ (sourcePositionTraceAux source steps origins hlen).pairs,
+      (LabelledWalk.foldSequence steps walk).hom.mapDart (sourceDarts p.2) =
+        (LabelledWalk.foldSequence steps walk).graph.toDartGraph.reverse
+          ((LabelledWalk.foldSequence steps walk).hom.mapDart (sourceDarts p.1)) := by
+  induction steps generalizing G u v origins sourceDarts with
+  | refl word =>
+      intro p hp
+      simp only [sourcePositionTraceAux.eq_1, List.not_mem_nil] at hp
+  | @cons raw mid reduced step rest ih =>
+      cases step with
+      | cancel pre post a =>
+          have hraw : origins.length =
+              (pre ++ [a] ++ [inverseLetter a] ++ post).length := hlen
+          have hrawLen : origins.length = pre.length + 2 + post.length := by
+            have hraw' : origins.length = pre.length + (post.length + 2) := by
+              simpa [List.length_append] using hraw
+            omega
+          have hfirstBound : pre.length < origins.length := by omega
+          have hsecondBound : pre.length + 1 < origins.length := by omega
+          let firstPosition := origins.get ⟨pre.length, hfirstBound⟩
+          let secondPosition := origins.get ⟨pre.length + 1, hsecondBound⟩
+          let remaining := origins.take pre.length ++ origins.drop (pre.length + 2)
+          have hremaining : remaining.length = (pre ++ post).length := by
+            dsimp [remaining]
+            have htake : pre.length ≤ origins.length := by omega
+            have hdrop : pre.length + 2 ≤ origins.length := by omega
+            have hdropLen : origins.length - (pre.length + 2) = post.length := by
+              omega
+            rw [List.length_append, List.length_take, List.length_drop,
+              Nat.min_eq_left htake]
+            rw [hdropLen]
+            simp [List.length_append]
+          let first := LabelledWalk.foldCancellation
+            (FreeCancellationStep.cancel pre post a) walk
+          let later := LabelledWalk.foldSequence rest first.walk
+          obtain ⟨firstDart, secondDart, before, after, hdecomp, hresult⟩ :=
+            foldCancellation_darts a walk
+          have hbefore : before.darts = walk.darts.take pre.length := by
+            rw [hdecomp]
+            simp [LabelledWalk.length_darts]
+          have hafter : after.darts = walk.darts.drop (pre.length + 2) := by
+            have hprefixLen : (before.darts ++ [firstDart, secondDart]).length =
+                pre.length + 2 := by simp [LabelledWalk.length_darts]
+            have hdropEq :
+                ((before.darts ++ [firstDart, secondDart]) ++ after.darts).drop
+                    (pre.length + 2) = after.darts := by
+              rw [← hprefixLen, List.drop_append_of_le_length (Nat.le_refl _)]
+              simp
+            rw [hdecomp]
+            exact hdropEq.symm
+          have hbeforeSource : before.darts =
+              (origins.take pre.length).map sourceDarts := by
+            calc
+              before.darts = walk.darts.take pre.length := hbefore
+              _ = (origins.map sourceDarts).take pre.length := by rw [hwalk]
+              _ = (origins.take pre.length).map sourceDarts := by simp
+          have hafterSource : after.darts =
+              (origins.drop (pre.length + 2)).map sourceDarts := by
+            calc
+              after.darts = walk.darts.drop (pre.length + 2) := hafter
+              _ = (origins.map sourceDarts).drop (pre.length + 2) := by rw [hwalk]
+              _ = (origins.drop (pre.length + 2)).map sourceDarts := by simp
+          let sourceDarts' : Fin source.length → first.graph.toDartGraph.Dart :=
+            fun i => first.hom.mapDart (sourceDarts i)
+          have hwalk' : first.walk.darts = remaining.map sourceDarts' := by
+            rw [hresult, hbeforeSource, hafterSource]
+            simp only [List.map_map, Function.comp_def, sourceDarts', remaining,
+              List.map_append]
+            rfl
+          obtain ⟨pairFirstDart, pairSecondDart, hfirstAt, hsecondAt, hheadFolded⟩ :=
+            foldSequence_headSourcePair pre post a rest walk
+          have hfirstValue : firstPosition = origins[pre.length] := by
+            exact List.get_eq_getElem
+          have hsecondValue : secondPosition = origins[pre.length + 1] := by
+            exact List.get_eq_getElem
+          have hfirstSource : sourceDarts firstPosition = pairFirstDart := by
+            have hposition : origins[pre.length]? = some firstPosition := by
+              rw [hfirstValue]
+              simp
+            have hmapAt : (origins.map sourceDarts)[pre.length]? =
+                some (sourceDarts firstPosition) := by
+              rw [List.getElem?_map, hposition]
+              simp
+            have hwalkAt : (origins.map sourceDarts)[pre.length]? =
+                some pairFirstDart := by
+              rw [← hwalk]
+              exact hfirstAt
+            exact Option.some.inj (hmapAt.symm.trans hwalkAt)
+          have hsecondSource : sourceDarts secondPosition = pairSecondDart := by
+            have hposition : origins[pre.length + 1]? = some secondPosition := by
+              rw [hsecondValue]
+              simp
+            have hmapAt : (origins.map sourceDarts)[pre.length + 1]? =
+                some (sourceDarts secondPosition) := by
+              rw [List.getElem?_map, hposition]
+              simp
+            have hwalkAt : (origins.map sourceDarts)[pre.length + 1]? =
+                some pairSecondDart := by
+              rw [← hwalk]
+              exact hsecondAt
+            exact Option.some.inj (hmapAt.symm.trans hwalkAt)
+          have hlater := ih remaining hremaining first.walk sourceDarts' hwalk'
+          intro p hp
+          have hp' : p ∈ (firstPosition, secondPosition) ::
+              (sourcePositionTraceAux source rest remaining hremaining).pairs := by
+            simpa only [sourcePositionTraceAux.eq_2] using hp
+          rcases List.mem_cons.mp hp' with hhead | hlaterPair
+          · subst p
+            simpa [hfirstSource, hsecondSource] using hheadFolded
+          · have hfolded := hlater p hlaterPair
+            change later.hom.mapDart (first.hom.mapDart (sourceDarts p.2)) =
+              later.graph.toDartGraph.reverse
+                (later.hom.mapDart (first.hom.mapDart (sourceDarts p.1)))
+            exact hfolded
+
+/-- The initialized cancellation trace's input darts are paired as opposite
+orientations in the final sequential quotient. -/
+theorem sourcePositionTrace_pairs_folded {α : Type*} {G : LabelledDartGraph α}
+    {raw reduced : Word α} (steps : FreeCancellationSequence raw reduced)
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v raw)
+    (sourceDarts : Fin raw.length → G.toDartGraph.Dart)
+    (hwalk : walk.darts = (List.finRange raw.length).map sourceDarts) :
+    ∀ p ∈ (sourcePositionTrace steps).pairs,
+      (LabelledWalk.foldSequence steps walk).hom.mapDart (sourceDarts p.2) =
+        (LabelledWalk.foldSequence steps walk).graph.toDartGraph.reverse
+          ((LabelledWalk.foldSequence steps walk).hom.mapDart (sourceDarts p.1)) := by
+  simpa only [sourcePositionTrace] using
+    (sourcePositionTraceAux_pairs_folded raw steps (List.finRange raw.length) (by simp)
+      walk sourceDarts hwalk)
+
+/-- Source darts at each recorded cancellation pair have inverse labels. -/
+theorem sourcePositionTrace_pairs_inverseLabels {α : Type*}
+    {G : LabelledDartGraph α} {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced)
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v raw)
+    (sourceDarts : Fin raw.length → G.toDartGraph.Dart)
+    (hwalk : walk.darts = (List.finRange raw.length).map sourceDarts) :
+    ∀ p ∈ (sourcePositionTrace steps).pairs,
+      G.label (sourceDarts p.1) = inverseLetter (G.label (sourceDarts p.2)) := by
+  intro p hp
+  let final := LabelledWalk.foldSequence steps walk
+  have hfold := sourcePositionTrace_pairs_folded steps walk sourceDarts hwalk p hp
+  have hlabel : final.graph.label (final.hom.mapDart (sourceDarts p.2)) =
+      inverseLetter (final.graph.label (final.hom.mapDart (sourceDarts p.1))) := by
+    calc
+      final.graph.label (final.hom.mapDart (sourceDarts p.2)) =
+          final.graph.label (final.graph.toDartGraph.reverse
+            (final.hom.mapDart (sourceDarts p.1))) :=
+        congrArg final.graph.label hfold
+      _ = inverseLetter (final.graph.label (final.hom.mapDart (sourceDarts p.1))) :=
+        final.graph.label_reverse _
+  calc
+    G.label (sourceDarts p.1) =
+        final.graph.label (final.hom.mapDart (sourceDarts p.1)) :=
+      (final.hom.map_label _).symm
+    _ = inverseLetter (inverseLetter
+          (final.graph.label (final.hom.mapDart (sourceDarts p.1)))) := by
+      exact (LabelledDartGraph.inverseLetter_inverse _).symm
+    _ = inverseLetter (final.graph.label (final.hom.mapDart (sourceDarts p.2))) := by
+      rw [hlabel]
+    _ = inverseLetter (G.label (sourceDarts p.2)) := by rw [final.hom.map_label]
+
+/-- Turn the trace's source-position pairing into the finite list of labeled
+dart pairs consumed by the direct pair-fold quotient. -/
+def CancellationOccurrencePositions.toLabelledDartPairs {α : Type*}
+    {source : Word α} {G : LabelledDartGraph α}
+    (trace : CancellationOccurrencePositions source)
+    (sourceDarts : Fin source.length → G.toDartGraph.Dart)
+    (hlabels : ∀ p ∈ trace.pairs,
+      G.label (sourceDarts p.1) = inverseLetter (G.label (sourceDarts p.2))) :
+    List (LabelledDartPair G) :=
+  trace.pairs.attach.map fun p =>
+    ⟨sourceDarts p.1.1, sourceDarts p.1.2, hlabels p.1 p.2⟩
+
+/-- Any pair-fold quotient whose requested pairs are all identified by a
+sequential cancellation replay maps into that replay's final quotient. -/
+noncomputable def pairFoldToReplay {α : Type*} {G : LabelledDartGraph α}
+    {raw reduced : Word α} (steps : FreeCancellationSequence raw reduced)
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v raw)
+    (pairs : List (LabelledDartPair G))
+    (hfolded : ∀ pair ∈ pairs,
+      (LabelledWalk.foldSequence steps walk).hom.mapDart pair.second =
+        (LabelledWalk.foldSequence steps walk).graph.toDartGraph.reverse
+          ((LabelledWalk.foldSequence steps walk).hom.mapDart pair.first)) :
+    LabelledGraphHom (LabelledDartPairFoldResult.foldAll G pairs).graph
+      (LabelledWalk.foldSequence steps walk).graph :=
+  LabelledDartPairFoldResult.descendAll
+    (LabelledWalk.foldSequence steps walk).hom pairs hfolded
+
+/-- Every source-position dart pair from the trace is folded in the final
+sequential cancellation quotient. -/
+theorem sourcePositionTrace_dartPairs_folded {α : Type*}
+    {G : LabelledDartGraph α} {raw reduced : Word α}
+    (steps : FreeCancellationSequence raw reduced)
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v raw)
+    (sourceDarts : Fin raw.length → G.toDartGraph.Dart)
+    (hwalk : walk.darts = (List.finRange raw.length).map sourceDarts) :
+    ∀ pair ∈ (sourcePositionTrace steps).toLabelledDartPairs sourceDarts
+      (sourcePositionTrace_pairs_inverseLabels steps walk sourceDarts hwalk),
+      (LabelledWalk.foldSequence steps walk).hom.mapDart pair.second =
+        (LabelledWalk.foldSequence steps walk).graph.toDartGraph.reverse
+          ((LabelledWalk.foldSequence steps walk).hom.mapDart pair.first) := by
+  intro pair hp
+  rcases List.mem_map.mp hp with ⟨sourcePair, hsourcePair, rfl⟩
+  exact sourcePositionTrace_pairs_folded steps walk sourceDarts hwalk
+    sourcePair.1 sourcePair.2
+
 end LabelledWalk
 
 theorem wordPathWalk_darts {α : Type*} (word : Word α) :
