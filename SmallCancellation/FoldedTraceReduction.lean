@@ -468,6 +468,20 @@ def sourcePositionTraceAux {α : Type*} (source : Word α) :
   decreasing_by
     omega
 
+/-- The occurrence trace is unchanged when its cancellation sequence is
+transported across equalities of its endpoint words. -/
+theorem sourcePositionTraceAux_castWords {α : Type*}
+    (source : Word α) {raw raw' reduced reduced' : Word α}
+    (hraw : raw = raw') (hred : reduced = reduced')
+    (steps : FreeCancellationSequence raw reduced)
+    (origins : List (Fin source.length)) (hlen : origins.length = raw'.length) :
+    sourcePositionTraceAux source
+        (FreeCancellationSequence.castWords hraw hred steps) origins hlen =
+      sourcePositionTraceAux source steps origins (by simpa [hraw] using hlen) := by
+  cases hraw
+  cases hred
+  rfl
+
 /-- Initialize the source-position trace with the complete range of input
 occurrences. -/
 def sourcePositionTrace {α : Type*} {raw reduced : Word α}
@@ -1635,8 +1649,19 @@ def mapSourcePositions {α : Type*} {raw : Word α} {source : Word α}
     (origins : List (Fin source.length)) (hlen : origins.length = raw.length)
     (positions : List Nat) (hbound : ∀ i ∈ positions, i < raw.length) :
     List (Fin source.length) :=
-  positions.attach.map fun i =>
-    origins.get (Fin.cast hlen.symm ⟨i.1, hbound i.1 i.2⟩)
+    positions.attach.map fun i =>
+      origins.get (Fin.cast hlen.symm ⟨i.1, hbound i.1 i.2⟩)
+
+theorem mapSourcePositions_congr_origins {α : Type*} {raw : Word α}
+    {source : Word α} {origins origins' : List (Fin source.length)}
+    (horigins : origins = origins')
+    (hlen : origins.length = raw.length)
+    (hlen' : origins'.length = raw.length)
+    (positions : List Nat) (hbound : ∀ i ∈ positions, i < raw.length) :
+    mapSourcePositions origins hlen positions hbound =
+      mapSourcePositions origins' hlen' positions hbound := by
+  cases horigins
+  rfl
 
 /-- Relabeling an appended position list splits into the two component traces. -/
 theorem mapSourcePositions_append {α : Type*} {raw : Word α} {source : Word α}
@@ -1712,6 +1737,18 @@ def mapSourcePairs {α : Type*} {raw : Word α} {source : Word α}
       (hbound p.1 p.2).1⟩),
      origins.get (Fin.cast hlen.symm ⟨p.1.2,
       (hbound p.1 p.2).2⟩))
+
+theorem mapSourcePairs_congr_origins {α : Type*} {raw : Word α}
+    {source : Word α} {origins origins' : List (Fin source.length)}
+    (horigins : origins = origins')
+    (hlen : origins.length = raw.length)
+    (hlen' : origins'.length = raw.length)
+    (pairs : List (Nat × Nat))
+    (hbound : ∀ p ∈ pairs, p.1 < raw.length ∧ p.2 < raw.length) :
+    mapSourcePairs origins hlen pairs hbound =
+      mapSourcePairs origins' hlen' pairs hbound := by
+  cases horigins
+  rfl
 
 /-- Relabeling pair endpoints after an index shift agrees with dropping the
 fixed prefix from the source occurrence list. -/
@@ -2063,6 +2100,476 @@ theorem append_to_cancellationSequence_trace
     (⟨pairs, survivors⟩ : LabelledWalk.CancellationOccurrencePositions source))
   · rw [hmappedPairs, hleftTracePairs, hrightTracePairs]
   · rw [hmappedSurvivors, hleftTraceSurvivors, hrightTraceSurvivors]
+
+/-- A bracket replays its inner cancellations, removes the enclosing pair,
+then replays its suffix. The trace keeps the source occurrences from all
+three stages. -/
+theorem bracket_sourcePositionTraceAux
+    {a : Letter α} {inner suffix result : Word α}
+    (innerShape : FreeReductionShape inner [])
+    (suffixShape : FreeReductionShape suffix result)
+    {source : Word α} (origins : List (Fin source.length))
+    (opening closing : Fin source.length)
+    (innerOrigins suffixOrigins : List (Fin source.length))
+    (horigins : origins = ([opening] ++ innerOrigins) ++
+      ([closing] ++ suffixOrigins))
+    (hinnerLen : innerOrigins.length = inner.length)
+    (hsuffixLen : suffixOrigins.length = suffix.length)
+    (hlen : origins.length =
+      (((( [a] ++ inner) ++ [inverseLetter a]) ++ suffix).length)) :
+    LabelledWalk.sourcePositionTraceAux source
+      (FreeReductionShape.bracket a innerShape suffixShape).to_cancellationSequence
+      origins hlen =
+      ⟨(LabelledWalk.sourcePositionTraceAux source
+          innerShape.to_cancellationSequence innerOrigins hinnerLen).pairs ++
+          [(opening, closing)] ++
+        (LabelledWalk.sourcePositionTraceAux source
+          suffixShape.to_cancellationSequence suffixOrigins hsuffixLen).pairs,
+       (LabelledWalk.sourcePositionTraceAux source
+          suffixShape.to_cancellationSequence suffixOrigins hsuffixLen).survivors⟩ := by
+  subst origins
+  let contextSuffix := [inverseLetter a] ++ suffix
+  have hraw :
+      ([a] ++ inner) ++ contextSuffix =
+        ((([a] ++ inner) ++ [inverseLetter a]) ++ suffix) := by
+    simp [contextSuffix, List.append_assoc]
+  have hmid :
+      ([a] ++ []) ++ contextSuffix =
+        ((([a] ++ []) ++ [inverseLetter a]) ++ suffix) := by
+    simp [contextSuffix, List.append_assoc]
+  let innerSeq := innerShape.to_cancellationSequence
+  let suffixSeq := suffixShape.to_cancellationSequence
+  let contextSeqRaw := (innerSeq.appendLeft [a]).appendRight contextSuffix
+  let contextSeq := FreeCancellationSequence.castWords hraw hmid contextSeqRaw
+  let rootSeq := FreeCancellationSequence.cons
+    (FreeCancellationStep.cancel [] suffix a) (.refl suffix)
+  let innerTrace := LabelledWalk.sourcePositionTraceAux source innerSeq
+    innerOrigins hinnerLen
+  let suffixTrace := LabelledWalk.sourcePositionTraceAux source suffixSeq
+    suffixOrigins hsuffixLen
+  have hbaseTrace :=
+    LabelledWalk.sourcePositionTraceAux_appendLeft source innerSeq [a]
+      [opening] innerOrigins (by simp) hinnerLen
+  have hinnerSurvivorsLength :=
+    LabelledWalk.sourcePositionTraceAux_survivors_length source innerSeq
+      innerOrigins hinnerLen
+  have hinnerSurvivors : innerTrace.survivors = [] := by
+    apply List.length_eq_zero_iff.mp
+    simpa [innerTrace, innerSeq] using hinnerSurvivorsLength
+  have hcontextTrace :=
+    LabelledWalk.sourcePositionTraceAux_appendRight source
+      (innerSeq.appendLeft [a]) contextSuffix
+      ([opening] ++ innerOrigins) ([closing] ++ suffixOrigins)
+      (by simp [hinnerLen]) (by simp [contextSuffix, hsuffixLen])
+  have hcontextWholeLen :
+      (([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins)).length =
+        ((([a] ++ inner) ++ [inverseLetter a]) ++ suffix).length := by
+    simpa [List.append_assoc] using hlen
+  have hcontextRawLen :
+      (([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins)).length =
+        (([a] ++ inner) ++ contextSuffix).length := by
+    simpa [contextSuffix, List.append_assoc] using hlen
+  have hcontextRaw :
+      LabelledWalk.sourcePositionTraceAux source contextSeqRaw
+        (([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins))
+        hcontextRawLen =
+        ⟨innerTrace.pairs, [opening, closing] ++ suffixOrigins⟩ := by
+    rw [hbaseTrace] at hcontextTrace
+    simpa [contextSeqRaw, innerTrace, hinnerSurvivors,
+      List.append_assoc] using hcontextTrace
+  have hcontext :
+      LabelledWalk.sourcePositionTraceAux source contextSeq
+        (([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins))
+        hcontextWholeLen =
+        ⟨innerTrace.pairs, [opening, closing] ++ suffixOrigins⟩ := by
+    have htransport := LabelledWalk.sourcePositionTraceAux_castWords
+      source hraw hmid contextSeqRaw
+      (([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins))
+      hcontextWholeLen
+    simpa [contextSeq, innerTrace] using htransport.trans hcontextRaw
+  have hrootTrace :
+      LabelledWalk.sourcePositionTraceAux source rootSeq
+        ([opening, closing] ++ suffixOrigins)
+        (by simp [rootSeq, List.length_append, hsuffixLen]) =
+        ⟨[(opening, closing)], suffixOrigins⟩ := by
+    simp [rootSeq, LabelledWalk.sourcePositionTraceAux,
+      FreeCancellationStep.prefixLength, List.length_append]
+  have hinnerRootTrace :
+      LabelledWalk.sourcePositionTraceAux source (contextSeq.trans rootSeq)
+        (([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins))
+        hcontextWholeLen =
+        ⟨innerTrace.pairs ++ [(opening, closing)], suffixOrigins⟩ := by
+    rw [LabelledWalk.sourcePositionTraceAux_trans]
+    simp only [hcontext]
+    change
+      (⟨innerTrace.pairs ++
+          (LabelledWalk.sourcePositionTraceAux source rootSeq
+            ([opening, closing] ++ suffixOrigins) _).pairs,
+        (LabelledWalk.sourcePositionTraceAux source rootSeq
+          ([opening, closing] ++ suffixOrigins) _).survivors⟩ :
+        LabelledWalk.CancellationOccurrencePositions source) = _
+    rw [hrootTrace]
+  have hwholeTrace :
+      LabelledWalk.sourcePositionTraceAux source
+        ((contextSeq.trans rootSeq).trans suffixSeq)
+        (([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins))
+        hcontextWholeLen =
+        ⟨(innerTrace.pairs ++ [(opening, closing)]) ++ suffixTrace.pairs,
+          suffixTrace.survivors⟩ := by
+    rw [LabelledWalk.sourcePositionTraceAux_trans]
+    simp only [hinnerRootTrace, suffixTrace]
+  have hseq :
+      (FreeReductionShape.bracket a innerShape suffixShape).to_cancellationSequence =
+        (contextSeq.trans rootSeq).trans suffixSeq := by
+    simp [FreeReductionShape.to_cancellationSequence,
+      contextSeq, rootSeq, suffixSeq, innerSeq, contextSuffix,
+      hraw, hmid, List.append_assoc]
+    all_goals rfl
+  rw [hseq]
+  exact hwholeTrace
+
+/-- Relabeling the chronological bracket replay selects the same ambient
+occurrences as the inner replay, root cancellation, and suffix replay. -/
+theorem bracket_replayMappedTrace
+    {a : Letter α} {inner suffix result : Word α}
+    (innerShape : FreeReductionShape inner [])
+    (suffixShape : FreeReductionShape suffix result)
+    {source : Word α} (origins : List (Fin source.length))
+    (opening closing : Fin source.length)
+    (innerOrigins suffixOrigins : List (Fin source.length))
+    (horigins : origins = ([opening] ++ innerOrigins) ++
+      ([closing] ++ suffixOrigins))
+    (hinnerLen : innerOrigins.length = inner.length)
+    (hsuffixLen : suffixOrigins.length = suffix.length)
+    (hlen : origins.length =
+      (((( [a] ++ inner) ++ [inverseLetter a]) ++ suffix).length)) :
+    (FreeReductionShape.bracket a innerShape suffixShape).replayMappedTrace
+        origins hlen =
+      ⟨(innerShape.replayMappedTrace innerOrigins hinnerLen).pairs ++
+          [(opening, closing)] ++
+        (suffixShape.replayMappedTrace suffixOrigins hsuffixLen).pairs,
+       (suffixShape.replayMappedTrace suffixOrigins hsuffixLen).survivors⟩ := by
+  subst origins
+  let tailOrigins := innerOrigins ++ ([closing] ++ suffixOrigins)
+  let tailWord := inner ++ ([inverseLetter a] ++ suffix)
+  let wholeWord := ((([a] ++ inner) ++ [inverseLetter a]) ++ suffix)
+  let innerPairs := shiftCancellationPairs 1 innerShape.replayCancellationPairs
+  let rootPairs := [(0, inner.length + 1)]
+  let suffixPairs := shiftCancellationPairs (inner.length + 2)
+    suffixShape.replayCancellationPairs
+  have hfullOrigins :
+      (([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins)) =
+        [opening] ++ tailOrigins := by
+    simp [tailOrigins, List.append_assoc]
+  have htailLen : tailOrigins.length = tailWord.length := by
+    simp [tailOrigins, tailWord, List.length_append, hinnerLen, hsuffixLen]
+  have hwholeTailLen : wholeWord.length = 1 + tailWord.length := by
+    simp [wholeWord, tailWord, List.length_append]
+    omega
+  have htotal : ([opening] ++ tailOrigins).length = wholeWord.length := by
+    rw [← hfullOrigins]
+    simpa [wholeWord] using hlen
+  have hwholeLen : wholeWord.length = inner.length + suffix.length + 2 := by
+    simp [wholeWord, List.length_append]
+    omega
+  have hinnerChildBound : ∀ p ∈ innerShape.replayCancellationPairs,
+      p.1 < inner.length ∧ p.2 < inner.length := by
+    intro p hp
+    simpa [FreeReductionShape.inputWord] using
+      innerShape.replayCancellationPairs_inBounds p hp
+  have hinnerTailBound : ∀ p ∈ innerShape.replayCancellationPairs,
+      p.1 < tailWord.length ∧ p.2 < tailWord.length := by
+    intro p hp
+    have hb := hinnerChildBound p hp
+    simp [tailWord, List.length_append]
+    omega
+  have hsuffixChildBound : ∀ p ∈ suffixShape.replayCancellationPairs,
+      p.1 < suffix.length ∧ p.2 < suffix.length := by
+    intro p hp
+    simpa [FreeReductionShape.inputWord] using
+      suffixShape.replayCancellationPairs_inBounds p hp
+  have hinnerBound : ∀ p ∈ innerPairs,
+      p.1 < wholeWord.length ∧ p.2 < wholeWord.length := by
+    intro p hp
+    rcases List.mem_map.mp hp with ⟨q, hq, rfl⟩
+    have hb := hinnerChildBound q hq
+    rw [hwholeLen]
+    simp only [shiftCancellationPairs, List.length_append]
+    constructor <;> omega
+  have hrootBound : ∀ p ∈ rootPairs,
+      p.1 < wholeWord.length ∧ p.2 < wholeWord.length := by
+    intro p hp
+    simp only [rootPairs, List.mem_singleton] at hp
+    subst p
+    rw [hwholeLen]
+    constructor <;> omega
+  have hsuffixBound : ∀ p ∈ suffixPairs,
+      p.1 < wholeWord.length ∧ p.2 < wholeWord.length := by
+    intro p hp
+    rcases List.mem_map.mp hp with ⟨q, hq, rfl⟩
+    have hb := hsuffixChildBound q hq
+    rw [hwholeLen]
+    simp only [shiftCancellationPairs]
+    constructor <;> omega
+  have hrestBound : ∀ p ∈ rootPairs ++ suffixPairs,
+      p.1 < wholeWord.length ∧ p.2 < wholeWord.length := by
+    intro p hp
+    rcases List.mem_append.mp hp with hp | hp
+    · exact hrootBound p hp
+    · exact hsuffixBound p hp
+  have hallBound : ∀ p ∈ innerPairs ++ (rootPairs ++ suffixPairs),
+      p.1 < wholeWord.length ∧ p.2 < wholeWord.length := by
+    intro p hp
+    rcases List.mem_append.mp hp with hp | hp
+    · exact hinnerBound p hp
+    · exact hrestBound p hp
+  have htailPairsShift := mapSourcePairs_shiftSource
+    ([opening]) tailOrigins 1 (by simp) htailLen hwholeTailLen htotal
+    innerShape.replayCancellationPairs hinnerTailBound
+  have htailPairsPrefix := mapSourcePairs_prefixSource
+    innerOrigins ([closing] ++ suffixOrigins) hinnerLen htailLen
+    innerShape.replayCancellationPairs hinnerChildBound
+  have hinnerMap :
+    mapSourcePairs (([opening] ++ innerOrigins) ++
+          ([closing] ++ suffixOrigins)) hlen innerPairs hinnerBound =
+        mapSourcePairs innerOrigins hinnerLen
+          innerShape.replayCancellationPairs hinnerChildBound := by
+    calc
+      _ = mapSourcePairs ([opening] ++ tailOrigins) htotal innerPairs hinnerBound := by
+        exact mapSourcePairs_congr_origins hfullOrigins hlen htotal
+          innerPairs hinnerBound
+      _ = mapSourcePairs tailOrigins htailLen
+            innerShape.replayCancellationPairs hinnerTailBound := by
+        simpa [innerPairs] using htailPairsShift
+      _ = mapSourcePairs innerOrigins hinnerLen
+            innerShape.replayCancellationPairs hinnerChildBound :=
+        htailPairsPrefix
+  have hrootMap :
+      mapSourcePairs (([opening] ++ innerOrigins) ++
+          ([closing] ++ suffixOrigins)) hlen rootPairs hrootBound =
+        [(opening, closing)] := by
+    simp [FreeReductionShape.mapSourcePairs, rootPairs, hfullOrigins,
+      tailOrigins, List.getElem_append_left, List.getElem_append_right,
+      List.length_append, hinnerLen]
+  let suffixPrefixOrigins := ([opening] ++ innerOrigins) ++ [closing]
+  have hsuffixPrefixLen :
+      suffixPrefixOrigins.length = inner.length + 2 := by
+    simp [suffixPrefixOrigins, hinnerLen]
+  have hwholeSuffixLen : wholeWord.length = inner.length + 2 + suffix.length := by
+    rw [hwholeLen]
+    omega
+  have hsplitSuffixOrigins :
+      suffixPrefixOrigins ++ suffixOrigins =
+        ([opening] ++ innerOrigins) ++ ([closing] ++ suffixOrigins) := by
+    simp [suffixPrefixOrigins, List.append_assoc]
+  have hwholeSuffixOrigins :
+      (suffixPrefixOrigins ++ suffixOrigins).length = wholeWord.length := by
+    rw [hsplitSuffixOrigins]
+    simpa [wholeWord] using hlen
+  have htailSuffixShift := mapSourcePairs_shiftSource
+    suffixPrefixOrigins suffixOrigins (inner.length + 2)
+    hsuffixPrefixLen hsuffixLen hwholeSuffixLen hwholeSuffixOrigins
+    suffixShape.replayCancellationPairs hsuffixChildBound
+  have hsuffixMap :
+      mapSourcePairs (([opening] ++ innerOrigins) ++
+          ([closing] ++ suffixOrigins)) hlen suffixPairs hsuffixBound =
+        mapSourcePairs suffixOrigins hsuffixLen
+          suffixShape.replayCancellationPairs hsuffixChildBound := by
+    calc
+      _ = mapSourcePairs (suffixPrefixOrigins ++ suffixOrigins)
+          hwholeSuffixOrigins suffixPairs hsuffixBound :=
+        mapSourcePairs_congr_origins hsplitSuffixOrigins.symm hlen hwholeSuffixOrigins
+          suffixPairs hsuffixBound
+      _ = mapSourcePairs suffixOrigins hsuffixLen
+          suffixShape.replayCancellationPairs hsuffixChildBound := by
+        simpa [suffixPairs] using htailSuffixShift
+  have hpairMap :
+      mapSourcePairs (([opening] ++ innerOrigins) ++
+          ([closing] ++ suffixOrigins)) hlen
+          (innerPairs ++ (rootPairs ++ suffixPairs)) hallBound =
+        mapSourcePairs innerOrigins hinnerLen
+            innerShape.replayCancellationPairs hinnerChildBound ++
+          [(opening, closing)] ++
+        mapSourcePairs suffixOrigins hsuffixLen
+            suffixShape.replayCancellationPairs hsuffixChildBound := by
+    calc
+      _ = mapSourcePairs (([opening] ++ innerOrigins) ++
+            ([closing] ++ suffixOrigins)) hlen innerPairs hinnerBound ++
+          mapSourcePairs (([opening] ++ innerOrigins) ++
+            ([closing] ++ suffixOrigins)) hlen (rootPairs ++ suffixPairs)
+              hrestBound := by
+        exact mapSourcePairs_append _ _ _ _ hallBound hinnerBound hrestBound
+      _ = mapSourcePairs (([opening] ++ innerOrigins) ++
+            ([closing] ++ suffixOrigins)) hlen innerPairs hinnerBound ++
+          (mapSourcePairs (([opening] ++ innerOrigins) ++
+              ([closing] ++ suffixOrigins)) hlen rootPairs hrootBound ++
+            mapSourcePairs (([opening] ++ innerOrigins) ++
+              ([closing] ++ suffixOrigins)) hlen suffixPairs hsuffixBound) := by
+        congr 1
+        exact mapSourcePairs_append _ _ _ _ hrestBound hrootBound hsuffixBound
+      _ = _ := by
+        rw [hinnerMap, hrootMap, hsuffixMap]
+        simp [List.append_assoc]
+  have hsurvivorBound : ∀ i ∈
+      ((suffixShape.survivorOccurrences.map Prod.fst).map
+        (inner.length + 2 + ·)), i < wholeWord.length := by
+    intro i hi
+    rcases List.mem_map.mp hi with ⟨j, hj, rfl⟩
+    rcases List.mem_map.mp hj with ⟨o, ho, rfl⟩
+    have hb' := suffixShape.survivorOccurrences_inBounds o ho
+    simp only [FreeReductionShape.inputWord] at hb'
+    rw [hwholeLen]
+    omega
+  have hsurvivorBound' : ∀ i ∈
+      (FreeReductionShape.bracket a innerShape suffixShape).survivorOccurrences.map
+        Prod.fst, i < wholeWord.length := by
+    simpa [FreeReductionShape.survivorOccurrences,
+      shiftLetterOccurrences_positions, FreeReductionShape.inputWord] using
+        hsurvivorBound
+  have hsurvivorMap := mapSourcePositions_shiftSource
+    suffixPrefixOrigins suffixOrigins (inner.length + 2)
+    hsuffixPrefixLen hsuffixLen hwholeSuffixLen hwholeSuffixOrigins
+    (suffixShape.survivorOccurrences.map Prod.fst)
+    (by
+      intro i hi
+      rcases List.mem_map.mp hi with ⟨o, ho, rfl⟩
+      simpa [FreeReductionShape.inputWord] using
+        suffixShape.survivorOccurrences_inBounds o ho)
+  have hsurvivorOriginMap := mapSourcePositions_congr_origins
+    hsplitSuffixOrigins.symm hlen hwholeSuffixOrigins
+    ((suffixShape.survivorOccurrences.map Prod.fst).map
+      (inner.length + 2 + ·)) hsurvivorBound
+  have hsurvivors :
+      mapSourcePositions (([opening] ++ innerOrigins) ++
+          ([closing] ++ suffixOrigins)) hlen
+          ((FreeReductionShape.bracket a innerShape suffixShape).survivorOccurrences.map
+            Prod.fst) hsurvivorBound' =
+        mapSourcePositions suffixOrigins hsuffixLen
+          (suffixShape.survivorOccurrences.map Prod.fst)
+            (by
+              intro i hi
+              rcases List.mem_map.mp hi with ⟨o, ho, rfl⟩
+              simpa [FreeReductionShape.inputWord] using
+                suffixShape.survivorOccurrences_inBounds o ho) := by
+    simpa [FreeReductionShape.survivorOccurrences,
+      shiftLetterOccurrences_positions, FreeReductionShape.inputWord] using
+        hsurvivorOriginMap.trans hsurvivorMap
+  unfold FreeReductionShape.replayMappedTrace
+  apply congrArg₂ (fun pairs survivors =>
+    (⟨pairs, survivors⟩ : LabelledWalk.CancellationOccurrencePositions source))
+  · simpa [FreeReductionShape.replayCancellationPairs, innerPairs,
+      rootPairs, suffixPairs, FreeReductionShape.inputWord,
+      List.append_assoc] using hpairMap
+  · simpa [FreeReductionShape.survivorOccurrences,
+      shiftLetterOccurrences_positions, FreeReductionShape.inputWord] using
+        hsurvivors
+
+/-- Any occurrence list whose length matches a bracket input splits into its
+opening occurrence, inner occurrences, closing occurrence, and suffix. -/
+theorem exists_bracket_origin_decomposition {β : Type*}
+    (origins : List β) (innerLength suffixLength : Nat)
+    (hlen : origins.length = innerLength + suffixLength + 2) :
+    ∃ opening inner closing suffix,
+      origins = [opening] ++ inner ++ [closing] ++ suffix ∧
+      inner.length = innerLength ∧ suffix.length = suffixLength := by
+  induction innerLength generalizing origins with
+  | zero =>
+      cases origins with
+      | nil => simp at hlen
+      | cons opening tail =>
+          have htail : tail.length = suffixLength + 1 := by
+            simp at hlen
+            omega
+          cases tail with
+          | nil => simp at htail
+          | cons closing suffix =>
+              have hsuffix : suffix.length = suffixLength := by
+                simp at htail
+                omega
+              refine ⟨opening, [], closing, suffix, ?_, by simp, hsuffix⟩
+              simp [List.append_assoc]
+  | succ n ih =>
+      cases origins with
+      | nil => simp at hlen
+      | cons opening tail =>
+          have htail : tail.length = n + suffixLength + 2 := by
+            simp at hlen
+            omega
+          obtain ⟨first, inner, closing, suffix, horigins,
+              hinner, hsuffix⟩ := ih tail htail
+          refine ⟨opening, first :: inner, closing, suffix, ?_, ?_, hsuffix⟩
+          · simp [horigins, List.append_assoc]
+          · simpa using congrArg Nat.succ hinner
+
+/-- The executable cancellation sequence and the structural replay schedule
+produce exactly the same occurrence trace for every reduction tree. -/
+theorem to_cancellationSequence_sourcePositionTraceAux
+    {raw reduced : Word α} (shape : FreeReductionShape raw reduced)
+    {source : Word α} (origins : List (Fin source.length))
+    (hlen : origins.length = raw.length) :
+    LabelledWalk.sourcePositionTraceAux source shape.to_cancellationSequence
+      origins hlen = shape.replayMappedTrace origins hlen := by
+  induction shape generalizing origins with
+  | empty =>
+      cases origins with
+      | nil =>
+          simp [FreeReductionShape.to_cancellationSequence,
+            FreeReductionShape.replayMappedTrace,
+            FreeReductionShape.replayCancellationPairs,
+            FreeReductionShape.survivorOccurrences,
+            mapSourcePairs, mapSourcePositions,
+            LabelledWalk.sourcePositionTraceAux]
+      | cons _ _ => simp at hlen
+  | letter a =>
+      cases origins with
+      | nil => simp at hlen
+      | cons occurrence tail =>
+          cases tail with
+          | nil =>
+              simp [FreeReductionShape.to_cancellationSequence,
+                FreeReductionShape.replayMappedTrace,
+                FreeReductionShape.replayCancellationPairs,
+                FreeReductionShape.survivorOccurrences,
+                mapSourcePairs, mapSourcePositions,
+                LabelledWalk.sourcePositionTraceAux]
+          | cons _ _ => simp at hlen
+  | @append u u' v v' left right ihLeft ihRight =>
+      let leftOrigins := origins.take u.length
+      let rightOrigins := origins.drop u.length
+      have horigins : origins = leftOrigins ++ rightOrigins := by
+        simp [leftOrigins, rightOrigins, List.take_append_drop]
+      have hleftBound : u.length ≤ origins.length := by
+        rw [hlen]
+        simp [List.length_append]
+      have hleftLen : leftOrigins.length = u.length := by
+        simp [leftOrigins, Nat.min_eq_left hleftBound]
+      have hrightLen : rightOrigins.length = v.length := by
+        dsimp [rightOrigins]
+        rw [List.length_drop, hlen]
+        simp only [List.length_append]
+        omega
+      exact append_to_cancellationSequence_trace left right origins
+        leftOrigins rightOrigins horigins hleftLen hrightLen hlen
+        ihLeft ihRight
+  | @bracket a inner suffix result innerShape suffixShape ihInner ihSuffix =>
+      have hlenRaw : origins.length = inner.length + suffix.length + 2 := by
+        simp only [List.length_append, List.length_cons, List.length_nil] at hlen
+        omega
+      obtain ⟨opening, innerOrigins, closing, suffixOrigins,
+          horigins, hinnerLen, hsuffixLen⟩ :=
+        exists_bracket_origin_decomposition origins inner.length suffix.length
+          hlenRaw
+      have horigins' : origins = ([opening] ++ innerOrigins) ++
+          ([closing] ++ suffixOrigins) := by
+        simpa [List.append_assoc] using horigins
+      have htrace := bracket_sourcePositionTraceAux innerShape suffixShape
+        origins opening closing innerOrigins suffixOrigins horigins'
+        hinnerLen hsuffixLen hlen
+      have hmapped := bracket_replayMappedTrace innerShape suffixShape
+        origins opening closing innerOrigins suffixOrigins horigins'
+        hinnerLen hsuffixLen hlen
+      rw [htrace, hmapped, ihInner innerOrigins hinnerLen,
+        ihSuffix suffixOrigins hsuffixLen]
 
 end FreeReductionShape
 

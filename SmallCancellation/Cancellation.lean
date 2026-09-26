@@ -173,6 +173,19 @@ inductive FreeCancellationSequence : Word α → Word α → Type u where
   | cons {w₁ w₂ w₃ : Word α} : FreeCancellationStep w₁ w₂ →
       FreeCancellationSequence w₂ w₃ → FreeCancellationSequence w₁ w₃
 
+/-- Transport a cancellation sequence across equalities of its endpoint
+words. -/
+def FreeCancellationSequence.castWords {w₁ w₁' w₂ w₂' : Word α}
+    (h₁ : w₁ = w₁') (h₂ : w₂ = w₂')
+    (steps : FreeCancellationSequence w₁ w₂) :
+    FreeCancellationSequence w₁' w₂' :=
+  h₂ ▸ h₁ ▸ steps
+
+@[simp] theorem FreeCancellationSequence.castWords_rfl
+    {w₁ w₂ : Word α} (steps : FreeCancellationSequence w₁ w₂) :
+    FreeCancellationSequence.castWords rfl rfl steps = steps := rfl
+
+
 /-- The identity reduction tree for a word. -/
 def FreeReductionShape.identity : (w : Word α) → FreeReductionShape w w
   | [] => .empty
@@ -264,6 +277,20 @@ noncomputable def FreeCancellationSequence.trans {w₁ w₂ w₃ : Word α}
   | refl _ => exact h₂
   | cons step rest ih => exact .cons step (ih h₂)
 
+/-- Transporting the endpoints of a composed cancellation sequence is the
+same as transporting the first source and last target separately. -/
+@[simp] theorem FreeCancellationSequence.castWords_trans
+    {w₁ w₁' w₂ w₃ w₃' : Word α}
+    (h₁ : w₁ = w₁') (h₃ : w₃ = w₃')
+    (first : FreeCancellationSequence w₁ w₂)
+    (second : FreeCancellationSequence w₂ w₃) :
+    FreeCancellationSequence.castWords h₁ h₃ (first.trans second) =
+      (FreeCancellationSequence.castWords h₁ rfl first).trans
+        (FreeCancellationSequence.castWords rfl h₃ second) := by
+  cases h₁
+  cases h₃
+  rfl
+
 /-- The nested cancellation tree can be replayed as a concrete sequence of
 adjacent free cancellations. -/
 noncomputable def FreeReductionShape.to_cancellationSequence {raw reduced : Word α}
@@ -275,13 +302,21 @@ noncomputable def FreeReductionShape.to_cancellationSequence {raw reduced : Word
   | append hu hv ihu ihv =>
       exact (ihu.appendRight _).trans (ihv.appendLeft _)
   | @bracket a inner suffix result hinner hsuffix ihinner ihsuffix =>
+      let contextSuffix := [inverseLetter a] ++ suffix
+      have hraw :
+          ([a] ++ inner) ++ contextSuffix =
+            ((([a] ++ inner) ++ [inverseLetter a]) ++ suffix) := by
+        simp [contextSuffix, List.append_assoc]
+      have hmid :
+          ([a] ++ []) ++ contextSuffix =
+            ((([a] ++ []) ++ [inverseLetter a]) ++ suffix) := by
+        simp [contextSuffix, List.append_assoc]
       have hinnerContext :
           FreeCancellationSequence
             ((([a] ++ inner) ++ [inverseLetter a]) ++ suffix)
             ((([a] ++ []) ++ [inverseLetter a]) ++ suffix) := by
-        simpa [List.append_assoc] using
-          (ihinner.appendLeft [a]).appendRight
-            ([inverseLetter a] ++ suffix)
+        exact FreeCancellationSequence.castWords hraw hmid
+          ((ihinner.appendLeft [a]).appendRight contextSuffix)
       have hcancel :
           FreeCancellationStep
             ((([a] ++ []) ++ [inverseLetter a]) ++ suffix) suffix := by
