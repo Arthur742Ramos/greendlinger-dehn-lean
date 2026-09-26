@@ -2571,6 +2571,31 @@ theorem to_cancellationSequence_sourcePositionTraceAux
       rw [htrace, hmapped, ihInner innerOrigins hinnerLen,
         ihSuffix suffixOrigins hsuffixLen]
 
+/-- On the complete source range, the executable trace's finite endpoints are
+exactly the natural positions in the chronological replay schedule. -/
+theorem sourcePositionTrace_pairPositions_eq_replayCancellationPairs
+    {raw reduced : Word α} (shape : FreeReductionShape raw reduced) :
+    ((LabelledWalk.sourcePositionTrace shape.to_cancellationSequence).pairs.map
+      fun p => (p.1.val, p.2.val)) = shape.replayCancellationPairs := by
+  have htrace := shape.to_cancellationSequence_sourcePositionTraceAux
+    (source := raw) (List.finRange raw.length) (by simp)
+  have hpairs := congrArg
+    (fun trace : LabelledWalk.CancellationOccurrencePositions raw =>
+      trace.pairs.map fun p => (p.1.val, p.2.val)) htrace
+  have hreplay :
+      (shape.replayMappedTrace (List.finRange raw.length) (by simp)).pairs.map
+        (fun p => (p.1.val, p.2.val)) =
+      shape.replayCancellationPairs := by
+    dsimp [FreeReductionShape.replayMappedTrace,
+      FreeReductionShape.mapSourcePairs]
+    rw [List.map_map]
+    apply Eq.trans ?_ (List.attach_map_subtype_val _)
+    apply List.map_congr_left
+    intro p hp
+    rcases p with ⟨⟨i, j⟩, hmem⟩
+    simp [List.get_eq_getElem, Fin.val_cast]
+  simpa [LabelledWalk.sourcePositionTrace] using hpairs.trans hreplay
+
 end FreeReductionShape
 
 theorem wordPathWalk_darts {α : Type*} (word : Word α) :
