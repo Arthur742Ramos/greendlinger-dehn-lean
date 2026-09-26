@@ -567,36 +567,46 @@ theorem lollipopBoundaryWord_stemPair_decomposition {α : Type*}
 
 /-- The interval inside a lollipop stem pair cannot represent the identity:
 it is a conjugate of the nontrivial relator word. -/
+theorem lollipopStemPair_interior_mk_conjugate {α : Type*}
+    (stem relator : Word α) (i : Fin stem.length)
+    : ∃ g : FreeGroup α, FreeGroup.mk
+      (stem.drop (i.val + 1) ++ relator ++
+        FreeGroup.invRev (stem.drop (i.val + 1))) =
+        g * FreeGroup.mk relator * g⁻¹ := by
+  let tail := stem.drop (i.val + 1)
+  have hconj : FreeGroup.mk (tail ++ relator ++ FreeGroup.invRev tail) =
+      FreeGroup.mk tail * FreeGroup.mk relator * (FreeGroup.mk tail)⁻¹ := by
+    rw [← FreeGroup.mul_mk, ← FreeGroup.mul_mk, ← FreeGroup.inv_mk]
+  exact ⟨FreeGroup.mk tail, by simpa [tail] using hconj⟩
+
+/-- A nontrivial relator remains nontrivial in every conjugate stem interval. -/
 theorem lollipopStemPair_interior_mk_ne_one {α : Type*}
     (stem relator : Word α) (i : Fin stem.length)
     (hrelator : FreeGroup.mk relator ≠ 1) :
     FreeGroup.mk
       (stem.drop (i.val + 1) ++ relator ++
         FreeGroup.invRev (stem.drop (i.val + 1))) ≠ 1 := by
-  let tail := stem.drop (i.val + 1)
-  have hconj : FreeGroup.mk (tail ++ relator ++ FreeGroup.invRev tail) =
-      FreeGroup.mk tail * FreeGroup.mk relator * (FreeGroup.mk tail)⁻¹ := by
-    rw [← FreeGroup.mul_mk, ← FreeGroup.mul_mk, ← FreeGroup.inv_mk]
+  obtain ⟨g, hconj⟩ := lollipopStemPair_interior_mk_conjugate stem relator i
   intro hnull
   have hconjNull :
-      (FreeGroup.mk tail) * FreeGroup.mk relator * (FreeGroup.mk tail)⁻¹ = 1 :=
-    hconj.symm.trans hnull
+      g * FreeGroup.mk relator * g⁻¹ = 1 := hconj.symm.trans hnull
   have hrelatorNull : FreeGroup.mk relator = 1 :=
-    (conjugate_eq_one_iff ((FreeGroup.mk tail)⁻¹)
+    (conjugate_eq_one_iff (g⁻¹)
       (FreeGroup.mk relator)).mp (by simpa using hconjNull)
   exact hrelator hrelatorNull
 
 /-- Every local stem pair in a reduced balloon cuts out an interval whose
 free-group value is a conjugate of that balloon's nontrivial relator. -/
-theorem ReducedRelatorBalloonData.stemPair_interval_nontrivial
+theorem ReducedRelatorBalloonData.stemPair_interval_conjugate
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
     (pair : LabelledDartPair (wordPathGraph b.label.rawWord))
     (hp : pair ∈ b.stemPairs) :
-    ∃ (pre inner post : Word α) (a : Letter α),
+    ∃ (pre inner post : Word α) (a : Letter α) (g : FreeGroup α),
       b.label.rawWord = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
       (pair.first.1.val, pair.second.1.val) =
         (pre.length, pre.length + inner.length + 1) ∧
+      FreeGroup.mk inner = g * b.label.relator * g⁻¹ ∧
       FreeGroup.mk inner ≠ 1 := by
   let stem := b.label.conjugator.toWord
   let relator := b.label.relator.toWord
@@ -661,11 +671,38 @@ theorem ReducedRelatorBalloonData.stemPair_interval_nontrivial
   have hinner : FreeGroup.mk inner ≠ 1 := by
     simpa [inner, tail, stem, relator] using
       lollipopStemPair_interior_mk_ne_one stem relator i hrelator
-  exact ⟨pre, inner, post, stem.get i, hword, hpositions, hinner⟩
+  obtain ⟨g, hinnerConjLocal⟩ :=
+    lollipopStemPair_interior_mk_conjugate stem relator i
+  have hinnerConj : FreeGroup.mk inner = g * b.label.relator * g⁻¹ := by
+    have hlabelWord : b.label.relator = FreeGroup.mk relator := by
+      dsimp [relator]
+      exact FreeGroup.mk_toWord.symm
+    calc
+      FreeGroup.mk inner = g * FreeGroup.mk relator * g⁻¹ := by
+        simpa [inner, tail, stem, relator] using hinnerConjLocal
+      _ = g * b.label.relator * g⁻¹ := by rw [← hlabelWord]
+  exact ⟨pre, inner, post, stem.get i, g,
+    hword, hpositions, hinnerConj, hinner⟩
 
-/-- Stem folds in a concatenated minimum area boundary retain their local
-nontrivial interval after the prefix or suffix embedding. -/
-theorem reducedBalloonStemPair_interval_nontrivial
+/-- Every local stem pair in a reduced balloon cuts out a nontrivial
+interval, as well as retaining its explicit conjugacy witness. -/
+theorem ReducedRelatorBalloonData.stemPair_interval_nontrivial
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (pair : LabelledDartPair (wordPathGraph b.label.rawWord))
+    (hp : pair ∈ b.stemPairs) :
+    ∃ (pre inner post : Word α) (a : Letter α),
+      b.label.rawWord = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+      (pair.first.1.val, pair.second.1.val) =
+        (pre.length, pre.length + inner.length + 1) ∧
+      FreeGroup.mk inner ≠ 1 := by
+  obtain ⟨pre, inner, post, a, g, hword, hpositions, hconj, hnontrivial⟩ :=
+    b.stemPair_interval_conjugate pair hp
+  exact ⟨pre, inner, post, a, hword, hpositions, hnontrivial⟩
+
+/-- Stem folds in a concatenated minimum-area boundary retain their local
+conjugacy witness after the prefix or suffix embedding. -/
+theorem reducedBalloonStemPair_interval_conjugate
     {α : Type*} [Fintype α] [DecidableEq α]
     {P : SymmetrizedPresentation α} :
     ∀ (balloons : List (ReducedRelatorBalloonData P))
@@ -673,12 +710,15 @@ theorem reducedBalloonStemPair_interval_nontrivial
         (wordPathGraph ((balloons.map
           (fun b : ReducedRelatorBalloonData P => b.label.rawWord)).flatten))),
       pair ∈ reducedBalloonStemPairs balloons →
-      ∃ (pre inner post : Word α) (a : Letter α),
+      ∃ (pre inner post : Word α) (a : Letter α)
+        (r g : FreeGroup α),
         ((balloons.map
           (fun b : ReducedRelatorBalloonData P => b.label.rawWord)).flatten) =
           pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
         (pair.first.1.val, pair.second.1.val) =
           (pre.length, pre.length + inner.length + 1) ∧
+        r ∈ P.relators ∧
+        FreeGroup.mk inner = g * r * g⁻¹ ∧
         FreeGroup.mk inner ≠ 1 := by
   intro balloons
   induction balloons with
@@ -690,8 +730,10 @@ theorem reducedBalloonStemPair_interval_nontrivial
       rw [reducedBalloonStemPairs_cons] at hpair
       rcases List.mem_append.mp hpair with hhead | htail
       · rcases List.mem_map.mp hhead with ⟨sourcePair, hsource, hmap⟩
-        obtain ⟨pre, inner, post, a, hword, hpositions, hnontrivial⟩ :=
-          b.stemPair_interval_nontrivial sourcePair hsource
+        obtain ⟨pre, inner, post, a, g, hword, hpositions, hconj,
+            hnontrivial⟩ := b.stemPair_interval_conjugate sourcePair hsource
+        have hrelatorWord : b.label.relator ∈ P.relators :=
+          b.label.relator_mem
         let tailWord := (tail.map
           (fun x : ReducedRelatorBalloonData P => x.label.rawWord)).flatten
         have hfirst : pair.first.1.val = sourcePair.first.1.val := by
@@ -700,7 +742,8 @@ theorem reducedBalloonStemPair_interval_nontrivial
         have hsecond : pair.second.1.val = sourcePair.second.1.val := by
           rw [← hmap]
           simp [LabelledDartPair.map, wordPathPrefixHom]
-        refine ⟨pre, inner, post ++ tailWord, a, ?_, ?_, hnontrivial⟩
+        refine ⟨pre, inner, post ++ tailWord, a, b.label.relator, g,
+          ?_, ?_, hrelatorWord, hconj, hnontrivial⟩
         · calc
             ((b :: tail).map
               (fun x : ReducedRelatorBalloonData P => x.label.rawWord)).flatten =
@@ -716,8 +759,8 @@ theorem reducedBalloonStemPair_interval_nontrivial
             _ = (pre.length, pre.length + inner.length + 1) := hpositions
             _ = (pre.length, pre.length + inner.length + 1) := rfl
       · rcases List.mem_map.mp htail with ⟨sourcePair, hsource, hmap⟩
-        obtain ⟨pre, inner, post, a, hword, hpositions, hnontrivial⟩ :=
-          ih sourcePair hsource
+        obtain ⟨pre, inner, post, a, r, g, hword, hpositions,
+            hrelator, hconj, hnontrivial⟩ := ih sourcePair hsource
         let tailWord := (tail.map
           (fun x : ReducedRelatorBalloonData P => x.label.rawWord)).flatten
         let pre' := b.label.rawWord ++ pre
@@ -733,7 +776,8 @@ theorem reducedBalloonStemPair_interval_nontrivial
           congrArg Prod.fst hpositions
         have hposSecond : sourcePair.second.1.val =
             pre.length + inner.length + 1 := congrArg Prod.snd hpositions
-        refine ⟨pre', inner, post, a, ?_, ?_, hnontrivial⟩
+        refine ⟨pre', inner, post, a, r, g, ?_, ?_, hrelator,
+          hconj, hnontrivial⟩
         · calc
             ((b :: tail).map
               (fun x : ReducedRelatorBalloonData P => x.label.rawWord)).flatten =
@@ -750,6 +794,29 @@ theorem reducedBalloonStemPair_interval_nontrivial
           · rw [hsecond, hposSecond]
             simp only [pre', List.length_append]
             omega
+
+/-- Forgetting the relator label from the strengthened interval statement
+recovers its nontriviality consequence. -/
+theorem reducedBalloonStemPair_interval_nontrivial
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} :
+    ∀ (balloons : List (ReducedRelatorBalloonData P))
+      (pair : LabelledDartPair
+        (wordPathGraph ((balloons.map
+          (fun b : ReducedRelatorBalloonData P => b.label.rawWord)).flatten))),
+      pair ∈ reducedBalloonStemPairs balloons →
+      ∃ (pre inner post : Word α) (a : Letter α),
+        ((balloons.map
+          (fun b : ReducedRelatorBalloonData P => b.label.rawWord)).flatten) =
+          pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+        (pair.first.1.val, pair.second.1.val) =
+          (pre.length, pre.length + inner.length + 1) ∧
+        FreeGroup.mk inner ≠ 1 := by
+  intro balloons pair hpair
+  obtain ⟨pre, inner, post, a, r, g, hword, hpositions,
+      hrelator, hconj, hnontrivial⟩ :=
+    reducedBalloonStemPair_interval_conjugate balloons pair hpair
+  exact ⟨pre, inner, post, a, hword, hpositions, hnontrivial⟩
 
 /-- In a single lollipop, a stem-paired occurrence lies before or after the
 relator segment. -/
