@@ -390,6 +390,73 @@ theorem cancellationPair_interior_mk_eq_one
   rw [FreeGroup.one_eq_mk]
   exact innerShape.sound
 
+/-- The interior word between two specified source positions is unique. This
+lets a cancellation-tree interval be compared with an interval cut out by a
+balloon stem pair. -/
+theorem bracketInterior_eq_of_same_positions
+    {raw pre₁ inner₁ post₁ pre₂ inner₂ post₂ : Word α}
+    {a b : Letter α}
+    (h₁ : raw = pre₁ ++ [a] ++ inner₁ ++ [inverseLetter a] ++ post₁)
+    (h₂ : raw = pre₂ ++ [b] ++ inner₂ ++ [inverseLetter b] ++ post₂)
+    (hpos : (pre₁.length, pre₁.length + inner₁.length + 1) =
+      (pre₂.length, pre₂.length + inner₂.length + 1)) :
+    inner₁ = inner₂ := by
+  have hpreLength : pre₁.length = pre₂.length := by
+    simpa using congrArg Prod.fst hpos
+  have hright : pre₁.length + inner₁.length + 1 =
+      pre₂.length + inner₂.length + 1 := by
+    simpa using congrArg Prod.snd hpos
+  have hinnerLength : inner₁.length = inner₂.length := by omega
+  have hpre₁ : pre₁ = raw.take pre₁.length := by
+    rw [h₁]
+    simp
+  have hpre₂ : pre₂ = raw.take pre₂.length := by
+    rw [h₂]
+    simp
+  have hpre : pre₁ = pre₂ := by
+    calc
+      pre₁ = raw.take pre₁.length := hpre₁
+      _ = raw.take pre₂.length := by rw [hpreLength]
+      _ = pre₂ := hpre₂.symm
+  have hrest : [a] ++ inner₁ ++ [inverseLetter a] ++ post₁ =
+      [b] ++ inner₂ ++ [inverseLetter b] ++ post₂ := by
+    have hwhole := h₁.symm.trans h₂
+    rw [← hpre] at hwhole
+    have hwhole' : pre₁ ++ ([a] ++ inner₁ ++ [inverseLetter a] ++ post₁) =
+        pre₁ ++ ([b] ++ inner₂ ++ [inverseLetter b] ++ post₂) := by
+      simpa only [List.append_assoc] using hwhole
+    exact List.append_cancel_left hwhole'
+  have hcons : a :: (inner₁ ++ [inverseLetter a] ++ post₁) =
+      b :: (inner₂ ++ [inverseLetter b] ++ post₂) := by
+    simpa using hrest
+  obtain ⟨_, htail⟩ := List.cons.inj hcons
+  calc
+    inner₁ = (inner₁ ++ [inverseLetter a] ++ post₁).take inner₁.length := by
+      simp
+    _ = (inner₂ ++ [inverseLetter b] ++ post₂).take inner₁.length := by
+      rw [htail]
+    _ = inner₂ := by rw [hinnerLength]; simp
+
+/-- A cancellation-tree pair cannot occupy the same two positions as a local
+bracket whose interior has nontrivial free-group value. -/
+theorem cancellationPair_false_of_nontrivial_interval
+    {raw reduced : Word α} (shape : FreeReductionShape raw reduced)
+    (p : Nat × Nat) (hp : p ∈ shape.cancellationPairs)
+    (hlocal : ∃ (pre inner post : Word α) (a : Letter α),
+      raw = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+      p = (pre.length, pre.length + inner.length + 1) ∧
+      FreeGroup.mk inner ≠ 1) : False := by
+  obtain ⟨pre₁, inner₁, post₁, a, hword₁, hpos₁, hnull⟩ :=
+    shape.cancellationPair_interior_mk_eq_one p hp
+  obtain ⟨pre₂, inner₂, post₂, b, hword₂, hpos₂, hnontrivial⟩ := hlocal
+  have hpositions : (pre₁.length, pre₁.length + inner₁.length + 1) =
+      (pre₂.length, pre₂.length + inner₂.length + 1) :=
+    hpos₁.symm.trans hpos₂
+  have hinterior := bracketInterior_eq_of_same_positions
+    hword₁ hword₂ hpositions
+  rw [hinterior] at hnull
+  exact hnontrivial hnull
+
 /-- Ordered source occurrences of the letters left after free reduction.
 Cancelled bracket interiors contribute no survivors; the suffix is shifted
 past the opening letter, interior, and closing inverse letter. -/

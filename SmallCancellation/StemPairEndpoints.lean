@@ -170,6 +170,216 @@ theorem lollipopStemPairs_endpointList_nodup {α : Type*}
     lollipopStemIndexToDart] using
     (lollipopStemEndpointIndices_map_nodup stem relator)
 
+/-- Splitting a lollipop at a matched stem pair exposes the conjugate relator
+word between the two stem occurrences. -/
+theorem lollipopBoundaryWord_stemPair_decomposition {α : Type*}
+    (stem relator : Word α) (i : Fin stem.length) :
+    lollipopBoundaryWord stem relator =
+      stem.take i.val ++ [stem.get i] ++
+        (stem.drop (i.val + 1) ++ relator ++
+          FreeGroup.invRev (stem.drop (i.val + 1))) ++
+        [inverseLetter (stem.get i)] ++ FreeGroup.invRev (stem.take i.val) := by
+  have hsplit : stem =
+      stem.take i.val ++ [stem.get i] ++ stem.drop (i.val + 1) := by
+    calc
+      stem = stem.take (i.val + 1) ++ stem.drop (i.val + 1) :=
+        (List.take_append_drop (i.val + 1) stem).symm
+      _ = (stem.take i.val ++ [stem.get i]) ++ stem.drop (i.val + 1) := by
+        rw [← List.take_concat_get' stem i.val i.isLt]
+        simp only [List.get_eq_getElem]
+  change stem ++ relator ++ FreeGroup.invRev stem = _
+  conv_lhs => rw [hsplit]
+  rw [FreeGroup.invRev_append, FreeGroup.invRev_append]
+  rw [show FreeGroup.invRev [stem.get i] =
+      [inverseLetter (stem.get i)] by simp [FreeGroup.invRev, inverseLetter]]
+  simp only [List.append_assoc]
+
+/-- The interval inside a lollipop stem pair cannot represent the identity:
+it is a conjugate of the nontrivial relator word. -/
+theorem lollipopStemPair_interior_mk_ne_one {α : Type*}
+    (stem relator : Word α) (i : Fin stem.length)
+    (hrelator : FreeGroup.mk relator ≠ 1) :
+    FreeGroup.mk
+      (stem.drop (i.val + 1) ++ relator ++
+        FreeGroup.invRev (stem.drop (i.val + 1))) ≠ 1 := by
+  let tail := stem.drop (i.val + 1)
+  have hconj : FreeGroup.mk (tail ++ relator ++ FreeGroup.invRev tail) =
+      FreeGroup.mk tail * FreeGroup.mk relator * (FreeGroup.mk tail)⁻¹ := by
+    rw [← FreeGroup.mul_mk, ← FreeGroup.mul_mk, ← FreeGroup.inv_mk]
+  intro hnull
+  have hconjNull :
+      (FreeGroup.mk tail) * FreeGroup.mk relator * (FreeGroup.mk tail)⁻¹ = 1 :=
+    hconj.symm.trans hnull
+  have hrelatorNull : FreeGroup.mk relator = 1 :=
+    (conjugate_eq_one_iff ((FreeGroup.mk tail)⁻¹)
+      (FreeGroup.mk relator)).mp (by simpa using hconjNull)
+  exact hrelator hrelatorNull
+
+/-- Every local stem pair in a reduced balloon cuts out an interval whose
+free-group value is a conjugate of that balloon's nontrivial relator. -/
+theorem ReducedRelatorBalloonData.stemPair_interval_nontrivial
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} (b : ReducedRelatorBalloonData P)
+    (pair : LabelledDartPair (wordPathGraph b.label.rawWord))
+    (hp : pair ∈ b.stemPairs) :
+    ∃ (pre inner post : Word α) (a : Letter α),
+      b.label.rawWord = pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+      (pair.first.1.val, pair.second.1.val) =
+        (pre.length, pre.length + inner.length + 1) ∧
+      FreeGroup.mk inner ≠ 1 := by
+  let stem := b.label.conjugator.toWord
+  let relator := b.label.relator.toWord
+  have hp' : pair ∈
+      ((List.finRange stem.length).map (lollipopStemPair stem relator)).map
+        (LabelledDartPair.castWordPath b.label.lollipopBoundary_eq_rawWord) := by
+    simpa [ReducedRelatorBalloonData.stemPairs, lollipopStemPairs, stem,
+      relator] using hp
+  rcases List.mem_map.mp hp' with ⟨localPair, hlocalPair, hpairMap⟩
+  rcases List.mem_map.mp hlocalPair with ⟨i, hi, hlocal⟩
+  have hpair : pair = LabelledDartPair.castWordPath
+      b.label.lollipopBoundary_eq_rawWord (lollipopStemPair stem relator i) := by
+    calc
+      pair = LabelledDartPair.castWordPath
+          b.label.lollipopBoundary_eq_rawWord localPair := hpairMap.symm
+      _ = _ := congrArg
+        (fun q => LabelledDartPair.castWordPath
+          b.label.lollipopBoundary_eq_rawWord q) hlocal.symm
+  have hfirst : pair.first.1.val = i.val := by
+    rw [hpair]
+    simp [LabelledDartPair.castWordPath, lollipopStemPair,
+      lollipopStemFirstIndex]
+  have hsecond : pair.second.1.val =
+      stem.length + relator.length + (stem.length - (i.val + 1)) := by
+    rw [hpair]
+    simp [LabelledDartPair.castWordPath, lollipopStemPair,
+      lollipopStemMateIndex, lollipopBoundaryWord]
+  let pre := stem.take i.val
+  let tail := stem.drop (i.val + 1)
+  let inner := tail ++ relator ++ FreeGroup.invRev tail
+  let post := FreeGroup.invRev pre
+  have hword : b.label.rawWord =
+      pre ++ [stem.get i] ++ inner ++
+        [inverseLetter (stem.get i)] ++ post := by
+    calc
+      b.label.rawWord = lollipopBoundaryWord stem relator :=
+        b.label.lollipopBoundary_eq_rawWord.symm
+      _ = _ := lollipopBoundaryWord_stemPair_decomposition stem relator i
+  have hpositions : (pair.first.1.val, pair.second.1.val) =
+      (pre.length, pre.length + inner.length + 1) := by
+    have hpre : pre.length = i.val := by simp [pre]
+    have htail : tail.length = stem.length - (i.val + 1) := by simp [tail]
+    have hinner : inner.length =
+        tail.length + relator.length + tail.length := by
+      simp [inner, List.length_append, FreeGroup.invRev_length]
+      omega
+    have hstem : stem.length = i.val + 1 + tail.length := by
+      rw [htail]
+      omega
+    apply Prod.ext
+    · rw [hfirst]
+      exact hpre.symm
+    · rw [hsecond, hpre, hinner, htail]
+      omega
+  have hrelator : FreeGroup.mk relator ≠ 1 := by
+    intro h
+    apply P.nontrivial b.label.relator b.label.relator_mem
+    calc
+      b.label.relator = FreeGroup.mk b.label.relator.toWord :=
+        FreeGroup.mk_toWord.symm
+      _ = 1 := h
+  have hinner : FreeGroup.mk inner ≠ 1 := by
+    simpa [inner, tail, stem, relator] using
+      lollipopStemPair_interior_mk_ne_one stem relator i hrelator
+  exact ⟨pre, inner, post, stem.get i, hword, hpositions, hinner⟩
+
+/-- Stem folds in a concatenated minimum area boundary retain their local
+nontrivial interval after the prefix or suffix embedding. -/
+theorem reducedBalloonStemPair_interval_nontrivial
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} :
+    ∀ (balloons : List (ReducedRelatorBalloonData P))
+      (pair : LabelledDartPair
+        (wordPathGraph ((balloons.map
+          (fun b : ReducedRelatorBalloonData P => b.label.rawWord)).flatten))),
+      pair ∈ reducedBalloonStemPairs balloons →
+      ∃ (pre inner post : Word α) (a : Letter α),
+        ((balloons.map
+          (fun b : ReducedRelatorBalloonData P => b.label.rawWord)).flatten) =
+          pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+        (pair.first.1.val, pair.second.1.val) =
+          (pre.length, pre.length + inner.length + 1) ∧
+        FreeGroup.mk inner ≠ 1 := by
+  intro balloons
+  induction balloons with
+  | nil =>
+      intro pair hpair
+      simp [reducedBalloonStemPairs] at hpair
+  | cons b tail ih =>
+      intro pair hpair
+      rw [reducedBalloonStemPairs_cons] at hpair
+      rcases List.mem_append.mp hpair with hhead | htail
+      · rcases List.mem_map.mp hhead with ⟨sourcePair, hsource, hmap⟩
+        obtain ⟨pre, inner, post, a, hword, hpositions, hnontrivial⟩ :=
+          b.stemPair_interval_nontrivial sourcePair hsource
+        let tailWord := (tail.map
+          (fun x : ReducedRelatorBalloonData P => x.label.rawWord)).flatten
+        have hfirst : pair.first.1.val = sourcePair.first.1.val := by
+          rw [← hmap]
+          simp [LabelledDartPair.map, wordPathPrefixHom]
+        have hsecond : pair.second.1.val = sourcePair.second.1.val := by
+          rw [← hmap]
+          simp [LabelledDartPair.map, wordPathPrefixHom]
+        refine ⟨pre, inner, post ++ tailWord, a, ?_, ?_, hnontrivial⟩
+        · calc
+            ((b :: tail).map
+              (fun x : ReducedRelatorBalloonData P => x.label.rawWord)).flatten =
+                b.label.rawWord ++ tailWord := rfl
+            _ = (pre ++ [a] ++ inner ++ [inverseLetter a] ++ post) ++
+                tailWord := by rw [hword]
+            _ = pre ++ [a] ++ inner ++ [inverseLetter a] ++
+                (post ++ tailWord) := by simp [List.append_assoc]
+        · calc
+            (pair.first.1.val, pair.second.1.val) =
+                (sourcePair.first.1.val, sourcePair.second.1.val) :=
+                  Prod.ext hfirst hsecond
+            _ = (pre.length, pre.length + inner.length + 1) := hpositions
+            _ = (pre.length, pre.length + inner.length + 1) := rfl
+      · rcases List.mem_map.mp htail with ⟨sourcePair, hsource, hmap⟩
+        obtain ⟨pre, inner, post, a, hword, hpositions, hnontrivial⟩ :=
+          ih sourcePair hsource
+        let tailWord := (tail.map
+          (fun x : ReducedRelatorBalloonData P => x.label.rawWord)).flatten
+        let pre' := b.label.rawWord ++ pre
+        have hfirst : pair.first.1.val =
+            b.label.rawWord.length + sourcePair.first.1.val := by
+          rw [← hmap]
+          simp [LabelledDartPair.map, wordPathSuffixHom]
+        have hsecond : pair.second.1.val =
+            b.label.rawWord.length + sourcePair.second.1.val := by
+          rw [← hmap]
+          simp [LabelledDartPair.map, wordPathSuffixHom]
+        have hposFirst : sourcePair.first.1.val = pre.length :=
+          congrArg Prod.fst hpositions
+        have hposSecond : sourcePair.second.1.val =
+            pre.length + inner.length + 1 := congrArg Prod.snd hpositions
+        refine ⟨pre', inner, post, a, ?_, ?_, hnontrivial⟩
+        · calc
+            ((b :: tail).map
+              (fun x : ReducedRelatorBalloonData P => x.label.rawWord)).flatten =
+                b.label.rawWord ++ tailWord := rfl
+            _ = b.label.rawWord ++
+                (pre ++ [a] ++ inner ++ [inverseLetter a] ++ post) := by
+                  simpa [tailWord] using
+                    congrArg (fun x => b.label.rawWord ++ x) hword
+            _ = pre' ++ [a] ++ inner ++ [inverseLetter a] ++ post := by
+                  simp [pre', List.append_assoc]
+        · apply Prod.ext
+          · rw [hfirst, hposFirst]
+            simp [pre', List.length_append]
+          · rw [hsecond, hposSecond]
+            simp only [pre', List.length_append]
+            omega
+
 /-- In a single lollipop, a stem-paired occurrence lies before or after the
 relator segment. -/
 theorem lollipopStemPairs_endpoint_mem_stem_region {α : Type*}
@@ -2525,6 +2735,415 @@ theorem MinimalAreaRelatorBoundarySeed.card_boundaryIncidences_in_component_eq_z
   rw [hcard]
   simpa only [incidenceSlots, leftSlots, rightSlots, leftPairing, rightPairing] using
     seed.card_component_unmatched_slots_eq_zero_or_two C
+
+/-- Every occurrence in a zero-incidence component is paired by a boundary
+cancellation. The only possible unpaired boundary occurrences are precisely
+the surviving target-boundary letters, each of which contributes an
+incidence. -/
+theorem MinimalAreaRelatorBoundarySeed.boundaryCancellationPartner_of_zeroIncidence
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (hzero : Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 0)
+    (i : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hi : i ∈ C.supp) :
+    ∃ j : Fin seed.boundary.reducedLiteralBoundary.length,
+      j ∈ C.supp ∧ seed.boundaryCancellationPairing.partner i = some j := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  let v : C.supp := ⟨i, hi⟩
+  let rightPairing := componentRightPairing seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing C
+  have hright_ne : rightPairing.partner v ≠ none := by
+    intro hnone
+    have hglobalNone :=
+      (componentRightPairing_partner_none_iff
+        seed.balloonStemOccurrencePairing seed.boundaryCancellationPairing C v).mp
+        hnone
+    have hsurvivor :=
+      (IndexedBoundaryTrace.cancellationOccurrencePairing_unpaired_iff_survivor
+        seed.reducedLollipopBoundaryTrace i).mp hglobalNone
+    have hpositive : 0 < Nat.card
+        ({side : seed.RelatorSideOccurrence //
+            seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+         {i : Fin seed.boundary.reducedLiteralBoundary.length //
+            i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+            i ∈ C.supp}) := by
+      rw [Nat.card_eq_fintype_card]
+      exact Fintype.card_pos_iff.mpr
+        ⟨Sum.inr ⟨i, hsurvivor, hi⟩⟩
+    omega
+  cases hpartner : rightPairing.partner v with
+  | none => exact False.elim (hright_ne hpartner)
+  | some j =>
+      have hglobal : seed.boundaryCancellationPairing.partner i = some j.1 :=
+        (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+          seed.boundaryCancellationPairing C.supp v j).1 hpartner
+      exact ⟨j.1, j.2, hglobal⟩
+
+/-- Every occurrence in a zero-incidence component is also paired by its
+balloon stem. An unmatched stem occurrence would be a relator-side incidence. -/
+theorem MinimalAreaRelatorBoundarySeed.balloonStemPartner_of_zeroIncidence
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (hzero : Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 0)
+    (i : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hi : i ∈ C.supp) :
+    ∃ j : Fin seed.boundary.reducedLiteralBoundary.length,
+      j ∈ C.supp ∧ seed.balloonStemOccurrencePairing.partner i = some j := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  let v : C.supp := ⟨i, hi⟩
+  let leftPairing := componentLeftPairing seed.balloonStemOccurrencePairing
+    seed.boundaryCancellationPairing C
+  have hnoSide : ¬ ∃ side : seed.RelatorSideOccurrence,
+      seed.relatorSideOccurrencePosition side = i := by
+    intro hex
+    obtain ⟨side, hposition⟩ := hex
+    have hpositive : 0 < Nat.card
+        ({side : seed.RelatorSideOccurrence //
+            seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+         {i : Fin seed.boundary.reducedLiteralBoundary.length //
+            i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+            i ∈ C.supp}) := by
+      rw [Nat.card_eq_fintype_card]
+      exact Fintype.card_pos_iff.mpr
+        ⟨Sum.inl ⟨side, by rw [hposition]; exact hi⟩⟩
+    omega
+  have hleft_ne : leftPairing.partner v ≠ none := by
+    intro hnone
+    have hglobalNone :=
+      (componentLeftPairing_partner_none_iff
+        seed.balloonStemOccurrencePairing seed.boundaryCancellationPairing C v).mp
+        hnone
+    obtain ⟨side, hposition⟩ :=
+      seed.exists_relatorSide_of_unmatched_by_stem i hglobalNone
+    exact hnoSide ⟨side, hposition⟩
+  cases hpartner : leftPairing.partner v with
+  | none => exact False.elim (hleft_ne hpartner)
+  | some j =>
+      have hglobal : seed.balloonStemOccurrencePairing.partner i = some j.1 :=
+        (PartialOccurrencePairing.restrictedPartner_eq_some_iff
+          seed.balloonStemOccurrencePairing C.supp v j).1 hpartner
+      exact ⟨j.1, j.2, hglobal⟩
+
+/-- In a zero-incidence component, each selected cancellation edge is backed
+by a source cancellation pair, hence by a contiguous null subword of the
+literal relator-factor boundary. -/
+theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_cancellation_has_null_interior
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (hzero : Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 0)
+    (i : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hi : i ∈ C.supp) :
+    ∃ (j : Fin seed.boundary.reducedLiteralBoundary.length)
+      (p : Nat × Nat) (pre inner post : Word α) (a : Letter α),
+      j ∈ C.supp ∧
+      seed.boundaryCancellationPairing.partner i = some j ∧
+      p ∈ seed.boundary.reducedLiteralBoundaryShape.cancellationPairs ∧
+      (p = (i.val, j.val) ∨ p = (j.val, i.val)) ∧
+      seed.boundary.reducedLiteralBoundary =
+        pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+      p = (pre.length, pre.length + inner.length + 1) ∧
+      FreeGroup.mk inner = 1 := by
+  obtain ⟨j, hj, hpartner⟩ :=
+    seed.boundaryCancellationPartner_of_zeroIncidence C hzero i hi
+  obtain ⟨p, hp, hends⟩ :=
+    seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairing_source_pair
+      i j hpartner
+  have hp' : p ∈ seed.boundary.reducedLiteralBoundaryShape.cancellationPairs := by
+    simpa [MinimalAreaRelatorBoundarySeed.reducedLollipopBoundaryTrace,
+      FreeReductionShape.toIndexedBoundaryTrace] using hp
+  obtain ⟨pre, inner, post, a, hword, hposition, hnull⟩ :=
+    seed.cancellationPair_has_null_interior p hp'
+  refine ⟨j, p, pre, inner, post, a, hj, hpartner, hp', ?_, hword,
+    hposition, hnull⟩
+  rcases hends with ⟨hfirst, hsecond⟩ | ⟨hsecond, hfirst⟩
+  · exact Or.inl (Prod.ext hfirst hsecond)
+  · exact Or.inr (Prod.ext hsecond hfirst)
+
+/-- A stem-paired pair of boundary positions cuts out a nontrivial interval
+in the complete literal boundary, including when its balloon follows a
+nonempty prefix of earlier relators. -/
+theorem MinimalAreaRelatorBoundarySeed.balloonStemPartner_has_nontrivial_interval
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i j : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hpartner : seed.balloonStemOccurrencePairing.partner i = some j) :
+    ∃ (pre inner post : Word α) (a : Letter α),
+      seed.boundary.reducedLiteralBoundary =
+        pre ++ [a] ++ inner ++ [inverseLetter a] ++ post ∧
+      ((i.val, j.val) = (pre.length, pre.length + inner.length + 1) ∨
+        (j.val, i.val) = (pre.length, pre.length + inner.length + 1)) ∧
+      FreeGroup.mk inner ≠ 1 := by
+  have hrel := (seed.balloonStemOccurrencePairing_spec i j).1 hpartner
+  rcases hrel with ⟨q, hq, hqorientation⟩
+  rcases List.mem_map.mp hq with ⟨pair, hpair, hqeq⟩
+  obtain ⟨pre, inner, post, a, hword, hpositions, hnontrivial⟩ :=
+    reducedBalloonStemPair_interval_nontrivial
+      seed.boundary.reducedBalloons pair hpair
+  have hqfirst : pair.first.1 = q.1 := congrArg Prod.fst hqeq
+  have hqsecond : pair.second.1 = q.2 := congrArg Prod.snd hqeq
+  have hpairToQ :
+      (pair.first.1.val, pair.second.1.val) = (q.1.val, q.2.val) :=
+    Prod.ext (congrArg Fin.val hqfirst) (congrArg Fin.val hqsecond)
+  rcases hqorientation with hleft | hright
+  · have hqToIJ : (q.1.val, q.2.val) = (i.val, j.val) :=
+      Prod.ext (congrArg Fin.val hleft.1) (congrArg Fin.val hleft.2)
+    refine ⟨pre, inner, post, a, hword, Or.inl ?_, hnontrivial⟩
+    exact (hpairToQ.trans hqToIJ).symm.trans hpositions
+  · have hqToJI : (q.1.val, q.2.val) = (j.val, i.val) :=
+      Prod.ext (congrArg Fin.val hright.1) (congrArg Fin.val hright.2)
+    refine ⟨pre, inner, post, a, hword, Or.inr ?_, hnontrivial⟩
+    exact (hpairToQ.trans hqToJI).symm.trans hpositions
+
+/-- A zero-incidence component cannot use the same edge for a balloon stem
+fold and a free-cancellation fold: the first encloses a nontrivial relator
+interval, whereas the cancellation tree requires its interior to be null. -/
+theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_stem_and_cancellation_partners_ne
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (hzero : Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 0)
+    (i j : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hi : i ∈ C.supp)
+    (hstem : seed.balloonStemOccurrencePairing.partner i = some j)
+    (hcancel : seed.boundaryCancellationPairing.partner i = some j) : False := by
+  obtain ⟨preS, innerS, postS, aS, hwordS, hendsS, hnontrivialS⟩ :=
+    seed.balloonStemPartner_has_nontrivial_interval i j hstem
+  obtain ⟨jC, p, preC, innerC, postC, aC, hjC, hpartnerC, hp, hendsC,
+      hwordC, hpositionsC, hnullC⟩ :=
+    seed.zeroIncidence_cancellation_has_null_interior C hzero i hi
+  have hjEq : jC = j := Option.some.inj (hpartnerC.symm.trans hcancel)
+  subst jC
+  have hcancelLt : p.1 < p.2 := by
+    rw [hpositionsC]
+    omega
+  have hstemLt : preS.length < preS.length + innerS.length + 1 := by
+    omega
+  have hpStem : p = (preS.length, preS.length + innerS.length + 1) := by
+    rcases hendsS with hstemIJ | hstemJI
+    · rcases hendsC with hcancelIJ | hcancelJI
+      · exact hcancelIJ.trans hstemIJ
+      · have hstemFirst := congrArg Prod.fst hstemIJ
+        have hstemSecond := congrArg Prod.snd hstemIJ
+        have hcancelFirst := congrArg Prod.fst hcancelJI
+        have hcancelSecond := congrArg Prod.snd hcancelJI
+        omega
+    · rcases hendsC with hcancelIJ | hcancelJI
+      · have hstemFirst := congrArg Prod.fst hstemJI
+        have hstemSecond := congrArg Prod.snd hstemJI
+        have hcancelFirst := congrArg Prod.fst hcancelIJ
+        have hcancelSecond := congrArg Prod.snd hcancelIJ
+        omega
+      · exact hcancelJI.trans hstemJI
+  exact seed.boundary.reducedLiteralBoundaryShape
+    |>.cancellationPair_false_of_nontrivial_interval p hp
+      ⟨preS, innerS, postS, aS, hwordS, hpStem, hnontrivialS⟩
+
+/-- The distinct stem and cancellation partners force every zero-incidence
+component to contain at least three boundary occurrences. -/
+theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_card_ge_three
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (hzero : Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 0)
+    (i : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hi : i ∈ C.supp) : 3 ≤ C.supp.ncard := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  obtain ⟨jS, hjS, hstem⟩ :=
+    seed.balloonStemPartner_of_zeroIncidence C hzero i hi
+  obtain ⟨jC, hjC, hcancel⟩ :=
+    seed.boundaryCancellationPartner_of_zeroIncidence C hzero i hi
+  have hiNeStem : i ≠ jS := by
+    intro heq
+    subst jS
+    exact seed.balloonStemOccurrencePairing.partner_ne hstem
+  have hiNeCancel : i ≠ jC := by
+    intro heq
+    subst jC
+    exact seed.boundaryCancellationPairing.partner_ne hcancel
+  have hjNe : jS ≠ jC := by
+    intro heq
+    subst jC
+    exact seed.zeroIncidence_stem_and_cancellation_partners_ne
+      C hzero i jS hi hstem hcancel
+  let vertices : List C.supp := [⟨i, hi⟩, ⟨jS, hjS⟩, ⟨jC, hjC⟩]
+  have hnodup : vertices.Nodup := by
+    simp [vertices, hiNeStem, hiNeCancel, hjNe]
+  have hcard := hnodup.length_le_card
+  simpa [vertices] using hcard
+
+/-- In fact the zero-incidence component cannot be a triangle: its two edge
+families are matchings, so a closed alternating component has at least four
+vertices. -/
+theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_card_ge_four
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (C : (twoPairingGraph seed.balloonStemOccurrencePairing
+      seed.boundaryCancellationPairing).ConnectedComponent)
+    (hzero : Nat.card
+      ({side : seed.RelatorSideOccurrence //
+          seed.relatorSideOccurrencePosition side ∈ C.supp} ⊕
+       {i : Fin seed.boundary.reducedLiteralBoundary.length //
+          i.val ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst ∧
+          i ∈ C.supp}) = 0)
+    (i : Fin seed.boundary.reducedLiteralBoundary.length)
+    (hi : i ∈ C.supp) : 4 ≤ C.supp.ncard := by
+  classical
+  letI : Fintype C.supp := Fintype.ofFinite _
+  letI : DecidableEq C.supp := Classical.decEq _
+  obtain ⟨jS, hjS, hstem⟩ :=
+    seed.balloonStemPartner_of_zeroIncidence C hzero i hi
+  obtain ⟨jC, hjC, hcancel⟩ :=
+    seed.boundaryCancellationPartner_of_zeroIncidence C hzero i hi
+  have hiNeStem : i ≠ jS := by
+    intro heq
+    subst jS
+    exact seed.balloonStemOccurrencePairing.partner_ne hstem
+  have hiNeCancel : i ≠ jC := by
+    intro heq
+    subst jC
+    exact seed.boundaryCancellationPairing.partner_ne hcancel
+  have hjNe : jS ≠ jC := by
+    intro heq
+    subst jC
+    exact seed.zeroIncidence_stem_and_cancellation_partners_ne
+      C hzero i jS hi hstem hcancel
+  have hcard3 := seed.zeroIncidence_component_card_ge_three C hzero i hi
+  by_contra hnotFour
+  have hcardEq : C.supp.ncard = 3 := by omega
+  have hsupport : ∀ x, x ∈ C.supp → x = i ∨ x = jS ∨ x = jC := by
+    intro x hx
+    by_contra hnot
+    have hxi : x ≠ i := by
+      intro heq
+      exact hnot (Or.inl heq)
+    have hxjS : x ≠ jS := by
+      intro heq
+      exact hnot (Or.inr (Or.inl heq))
+    have hxjC : x ≠ jC := by
+      intro heq
+      exact hnot (Or.inr (Or.inr heq))
+    let v₁ : C.supp := ⟨i, hi⟩
+    let v₂ : C.supp := ⟨jS, hjS⟩
+    let v₃ : C.supp := ⟨jC, hjC⟩
+    let v₄ : C.supp := ⟨x, hx⟩
+    have hv₄₁ : v₄ ≠ v₁ := by
+      intro heq
+      exact hxi (congrArg Subtype.val heq)
+    have hv₄₂ : v₄ ≠ v₂ := by
+      intro heq
+      exact hxjS (congrArg Subtype.val heq)
+    have hv₄₃ : v₄ ≠ v₃ := by
+      intro heq
+      exact hxjC (congrArg Subtype.val heq)
+    have hv₁₂ : v₁ ≠ v₂ := by
+      intro heq
+      exact hiNeStem (congrArg Subtype.val heq)
+    have hv₁₃ : v₁ ≠ v₃ := by
+      intro heq
+      exact hiNeCancel (congrArg Subtype.val heq)
+    have hv₁₄ : v₁ ≠ v₄ := Ne.symm hv₄₁
+    have hv₂₃ : v₂ ≠ v₃ := by
+      intro heq
+      exact hjNe (congrArg Subtype.val heq)
+    have hv₂₄ : v₂ ≠ v₄ := Ne.symm hv₄₂
+    have hv₃₄ : v₃ ≠ v₄ := Ne.symm hv₄₃
+    let vertices : List C.supp := [v₁, v₂, v₃, v₄]
+    have hnodup : vertices.Nodup := by
+      simp [vertices, v₁, v₂, v₃, v₄, hv₁₂, hv₁₃, hv₁₄,
+        hv₂₃, hv₂₄, hv₃₄]
+    have hcardFour : 4 ≤ C.supp.ncard := by
+      have hcard := hnodup.length_le_card
+      simpa [vertices, v₁, v₂, v₃, v₄] using hcard
+    omega
+  obtain ⟨kC, hkC, hcancelS⟩ :=
+    seed.boundaryCancellationPartner_of_zeroIncidence C hzero jS hjS
+  have hstemBack : seed.balloonStemOccurrencePairing.partner jS = some i :=
+    seed.balloonStemOccurrencePairing.partner_symm hstem
+  have hiNeKC : i ≠ kC := by
+    intro heq
+    subst kC
+    exact seed.zeroIncidence_stem_and_cancellation_partners_ne
+      C hzero jS i hjS hstemBack hcancelS
+  have hjSNeKC : kC ≠ jS := by
+    intro heq
+    subst kC
+    exact seed.boundaryCancellationPairing.partner_ne hcancelS
+  have hkCeq : kC = jC := by
+    rcases hsupport kC hkC with h | h | h
+    · exact False.elim (hiNeKC h.symm)
+    · exact False.elim (hjSNeKC h)
+    · exact h
+  subst kC
+  have hcancelBack : seed.boundaryCancellationPairing.partner jC = some jS :=
+    seed.boundaryCancellationPairing.partner_symm hcancelS
+  obtain ⟨kS, hkS, hstemC⟩ :=
+    seed.balloonStemPartner_of_zeroIncidence C hzero jC hjC
+  have hjSNeKS : kS ≠ jS := by
+    intro heq
+    subst kS
+    exact seed.zeroIncidence_stem_and_cancellation_partners_ne
+      C hzero jC jS hjC hstemC hcancelBack
+  have hjCNeKS : kS ≠ jC := by
+    intro heq
+    subst kS
+    exact seed.balloonStemOccurrencePairing.partner_ne hstemC
+  have hkSeq : kS = i := by
+    rcases hsupport kS hkS with h | h | h
+    · exact h
+    · exact False.elim (hjSNeKS h)
+    · exact False.elim (hjCNeKS h)
+  have hstemAround : seed.balloonStemOccurrencePairing.partner jC = some i := by
+    rw [hkSeq] at hstemC
+    exact hstemC
+  have hstemBackAround := seed.balloonStemOccurrencePairing.partner_symm hstemAround
+  have hpartners : some jS = some jC := hstem.symm.trans hstemBackAround
+  exact hjNe (Option.some.inj hpartners)
 
 /-- The exact component incidence count implies the corresponding upper
 bound, retained for edge-class corollaries. -/

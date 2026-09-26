@@ -982,6 +982,41 @@ theorem IndexedBoundaryTrace.cancellationOccurrencePairing_spec
     trace.cancellationOccurrencePairs_endpoints_nodup
     trace.cancellationOccurrencePairs_noLoop i j
 
+/-- A matched pair in the indexed cancellation pairing comes from one of the
+source cancellation pairs, with the same endpoint order. -/
+theorem IndexedBoundaryTrace.cancellationOccurrencePairing_source_pair
+    {α : Type*} {raw reduced : Word α}
+    (trace : IndexedBoundaryTrace raw reduced) (i j : Fin raw.length)
+    (hpair : trace.cancellationOccurrencePairing.partner i = some j) :
+    ∃ p ∈ trace.cancellationPairs,
+      (p.1 = i.val ∧ p.2 = j.val) ∨ (p.1 = j.val ∧ p.2 = i.val) := by
+  have hrel := (trace.cancellationOccurrencePairing_spec i j).mp hpair
+  rcases hrel with ⟨q, hq, hends⟩
+  dsimp [IndexedBoundaryTrace.cancellationOccurrencePairs] at hq
+  rcases List.mem_map.mp hq with ⟨entry, hentry, hqeq⟩
+  have hsource : entry.1 ∈ trace.cancellationPairs := entry.2
+  have hvals : (q.1.val, q.2.val) = (entry.1.1, entry.1.2) := by
+    simpa [IndexedBoundaryTrace.cancellationOccurrencePairs] using
+      (congrArg (fun pair : Fin raw.length × Fin raw.length =>
+        (pair.1.val, pair.2.val)) hqeq).symm
+  rcases hends with ⟨hqi, hqj⟩ | ⟨hqj, hqi⟩
+  · refine ⟨entry.1, hsource, Or.inl ?_⟩
+    constructor
+    · calc
+        entry.1.1 = q.1.val := (congrArg Prod.fst hvals).symm
+        _ = i.val := congrArg Fin.val hqi
+    · calc
+        entry.1.2 = q.2.val := (congrArg Prod.snd hvals).symm
+        _ = j.val := congrArg Fin.val hqj
+  · refine ⟨entry.1, hsource, Or.inr ?_⟩
+    constructor
+    · calc
+        entry.1.1 = q.1.val := (congrArg Prod.fst hvals).symm
+        _ = j.val := congrArg Fin.val hqj
+    · calc
+        entry.1.2 = q.2.val := (congrArg Prod.snd hvals).symm
+        _ = i.val := congrArg Fin.val hqi
+
 theorem IndexedBoundaryTrace.cancellationOccurrencePairing_unpaired_iff_not_endpoint
     {α : Type*} {raw reduced : Word α}
     (trace : IndexedBoundaryTrace raw reduced) (i : Fin raw.length) :
