@@ -3,6 +3,7 @@ import SmallCancellation.PairingComponents
 import SmallCancellation.PairingWalkParity
 import SmallCancellation.PlanarBoundarySeed
 import SmallCancellation.FoldedTraceReduction
+import SmallCancellation.SurvivingIntervals
 
 /-!
 # Distinct occurrences in the balloon stem pairing
@@ -2990,6 +2991,281 @@ theorem MinimalAreaRelatorBoundarySeed.relatorSideOccurrencePosition_injective
     (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
     Function.Injective seed.relatorSideOccurrencePosition := by
   exact reducedBalloonRelatorSidePosition_injective seed.boundary.reducedBalloons
+
+private theorem MinimalAreaRelatorBoundarySeed.relatorSegment_slice
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i : Fin seed.boundary.reducedBalloons.length) :
+    let balloons := seed.boundary.reducedBalloons
+    let b := balloons.get i
+    ((seed.boundary.reducedLiteralBoundary.drop
+      ((((balloons.take i.val).map fun x => x.label.rawWord).flatten.length) +
+        b.label.conjugator.toWord.length)).take b.label.relator.toWord.length) =
+      b.label.relator.toWord := by
+  dsimp
+  let balloons := seed.boundary.reducedBalloons
+  let b := balloons.get i
+  let preWord := ((balloons.take i.val).map fun x => x.label.rawWord).flatten
+  let suffix := ((balloons.drop (i.val + 1)).map fun x => x.label.rawWord).flatten
+  let stem := b.label.conjugator.toWord
+  let relator := b.label.relator.toWord
+  have hsplit := reducedBalloonWords_flatten_split_at balloons i
+  have hsplit' : seed.boundary.reducedLiteralBoundary =
+      preWord ++ b.label.rawWord ++ suffix := by
+    simpa [RelatorFactorBoundarySeed.reducedLiteralBoundary, balloons,
+      preWord, suffix, b, List.append_assoc] using hsplit
+  have hrawBalloon :
+      b.label.rawWord = stem ++ relator ++ FreeGroup.invRev stem := by
+    simp [RelatorConjugateWitness.rawWord, FreeGroup.toWord_inv, stem, relator]
+  have hraw : seed.boundary.reducedLiteralBoundary =
+      (preWord ++ stem) ++ relator ++ (FreeGroup.invRev stem ++ suffix) := by
+    rw [hrawBalloon] at hsplit'
+    simpa [List.append_assoc] using hsplit'
+  have hleftLength :
+      (preWord ++ stem).length = preWord.length + stem.length := List.length_append
+  have hdropInner :
+      (preWord ++ stem ++ relator).drop (preWord ++ stem).length = relator := by
+    rw [List.drop_append_of_le_length (Nat.le_refl _)]
+    simp
+  have hdrop :
+      ((preWord ++ stem ++ relator) ++ (FreeGroup.invRev stem ++ suffix)).drop
+          (preWord ++ stem).length = relator ++ (FreeGroup.invRev stem ++ suffix) := by
+    rw [List.drop_append_of_le_length (by simp [List.length_append])]
+    rw [hdropInner]
+  have htake :
+      (relator ++ (FreeGroup.invRev stem ++ suffix)).take relator.length = relator := by
+    rw [List.take_append_of_le_length (Nat.le_refl _)]
+    simp
+  change ((seed.boundary.reducedLiteralBoundary.drop
+      (preWord.length + stem.length)).take relator.length) = relator
+  rw [hraw, ← hleftLength, hdrop, htake]
+
+/-- If every letter on one relator side survives the global boundary
+reduction, that full relator remains as a contiguous factor of the target
+word and gives a valid cyclic Dehn redex. -/
+theorem MinimalAreaRelatorBoundarySeed.cyclicRedex_of_relatorSides_survive
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (hsurvive : ∀ j : Fin
+      ((seed.boundary.reducedBalloons.get i).label.relator.toWord.length),
+      (seed.relatorSideOccurrencePosition ⟨i, j⟩).val ∈
+        seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst) :
+    ∃ c, IsCyclicRedex P.relators w c := by
+  let balloons := seed.boundary.reducedBalloons
+  let b := balloons.get i
+  let preWord := ((balloons.take i.val).map fun x => x.label.rawWord).flatten
+  let stem := b.label.conjugator.toWord
+  let relator := b.label.relator.toWord
+  let start := preWord.length + stem.length
+  have hposFormula (j : Fin relator.length) :
+      (seed.relatorSideOccurrencePosition ⟨i, j⟩).val =
+        preWord.length + stem.length + j.val := by
+    change (((reducedBalloonOccurrencePathEmbedding balloons i).mapDart
+      (b.relatorSideDart j)).1).val = _
+    have h := reducedBalloonOccurrencePathEmbedding_position_formula
+      balloons i (b.relatorSideDart j).1
+    simpa [preWord, stem, b, balloons,
+      ReducedRelatorBalloonData.relatorSideDart,
+      ReducedRelatorBalloonData.relatorSideDart_index, Nat.add_assoc] using h
+  have hsourceSurvives : ∀ k, k < relator.length →
+      start + k ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst := by
+    intro k hk
+    let j : Fin relator.length := ⟨k, hk⟩
+    have h := hsurvive j
+    rw [hposFormula j] at h
+    simpa [start, Nat.add_assoc] using h
+  have hsegment :
+      (seed.boundary.reducedLiteralBoundary.drop start).take relator.length = relator := by
+    simpa [start, preWord, stem, relator, b, balloons] using
+      seed.relatorSegment_slice i
+  obtain ⟨pre, post, hword⟩ :=
+    seed.reducedLollipopBoundaryTrace.contiguous_source_interval_of_survivors
+      start relator.length hsourceSurvives
+  have hword' : w.toWord = pre ++ relator ++ post := by
+    simpa [hsegment] using hword
+  have hrelatorNontrivial : b.label.relator ≠ 1 :=
+    P.nontrivial b.label.relator b.label.relator_mem
+  have hrelatorLength : 0 < relator.length := by
+    by_contra hnot
+    have hzero : relator.length = 0 := Nat.eq_zero_of_not_pos hnot
+    have hnil : relator = [] := List.length_eq_zero_iff.mp hzero
+    have hone : b.label.relator = 1 := by
+      apply FreeGroup.toWord_injective
+      change relator = FreeGroup.toWord 1
+      rw [hnil, FreeGroup.toWord_one]
+    exact hrelatorNontrivial hone
+  let redex : Redex α := ⟨pre, relator, post, b.label.relator, []⟩
+  refine ⟨⟨w.toWord, [], redex⟩, ?_⟩
+  refine ⟨by simp, ?_⟩
+  change IsRedex P.relators (FreeGroup.mk w.toWord).toWord redex
+  rw [FreeGroup.mk_toWord]
+  refine ⟨?_, b.label.relator_mem, ?_, ?_⟩
+  · exact hword'
+  · simp [redex, relator]
+  · simp [redex, relator]
+    exact hrelatorLength
+
+private theorem slice_after_prefix
+    {α : Type*} (left stem relator right : List α) (offset len : Nat)
+    (hbound : offset + len ≤ relator.length) :
+    ((((left ++ stem) ++ relator) ++ right).drop
+      ((left ++ stem).length + offset)).take len =
+      (relator.drop offset).take len := by
+  have hdropLeft :
+      (left ++ (stem ++ (relator ++ right))).drop left.length =
+        stem ++ (relator ++ right) := by
+    rw [List.drop_append_of_le_length (Nat.le_refl _)]
+    simp
+  have hdropStem :
+      (stem ++ (relator ++ right)).drop stem.length = relator ++ right := by
+    rw [List.drop_append_of_le_length (Nat.le_refl _)]
+    simp
+  have hdrop :
+      (left ++ (stem ++ (relator ++ right))).drop
+          (left.length + (stem.length + offset)) = relator.drop offset ++ right := by
+    calc
+      _ = ((left ++ (stem ++ (relator ++ right))).drop left.length).drop
+            (stem.length + offset) := by rw [← List.drop_drop]
+      _ = (stem ++ (relator ++ right)).drop (stem.length + offset) := by
+            rw [hdropLeft]
+      _ = ((stem ++ (relator ++ right)).drop stem.length).drop offset := by
+            rw [← List.drop_drop]
+      _ = (relator ++ right).drop offset := by rw [hdropStem]
+      _ = relator.drop offset ++ right :=
+            List.drop_append_of_le_length (by omega)
+  have hlen : len ≤ (relator.drop offset).length := by
+    simp only [List.length_drop]
+    omega
+  have hdropTarget :
+      (((left ++ stem) ++ relator) ++ right).drop
+          ((left ++ stem).length + offset) = relator.drop offset ++ right := by
+    simpa [List.append_assoc, List.length_append, Nat.add_assoc] using hdrop
+  rw [hdropTarget, List.take_append_of_le_length hlen]
+
+/-- A surviving relator-side arc longer than half its perimeter gives a
+cyclic Dehn redex, even when the arc crosses the chosen cyclic start. -/
+theorem MinimalAreaRelatorBoundarySeed.cyclicRedex_of_long_surviving_relator_arc
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w)
+    (i : Fin seed.boundary.reducedBalloons.length)
+    (offset len : Nat)
+    (hbound : offset + len ≤
+      (seed.boundary.reducedBalloons.get i).label.relator.toWord.length)
+    (hlong : 2 * len >
+      (seed.boundary.reducedBalloons.get i).label.relator.toWord.length)
+    (hsurvive : ∀ k (hk : k < len),
+      (seed.relatorSideOccurrencePosition
+        ⟨i, ⟨offset + k, by omega⟩⟩).val ∈
+        seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst) :
+    ∃ c, IsCyclicRedex P.relators w c := by
+  let balloons := seed.boundary.reducedBalloons
+  let b := balloons.get i
+  let preWord := ((balloons.take i.val).map fun x => x.label.rawWord).flatten
+  let suffix := ((balloons.drop (i.val + 1)).map fun x => x.label.rawWord).flatten
+  let stem := b.label.conjugator.toWord
+  let relator := b.label.relator.toWord
+  let start := preWord.length + stem.length + offset
+  have hboundLocal : offset + len ≤ relator.length := by
+    simpa [relator, b, balloons] using hbound
+  have hlongLocal : 2 * len > relator.length := by
+    simpa [relator, b, balloons] using hlong
+  have hposFormula (j : Fin relator.length) :
+      (seed.relatorSideOccurrencePosition ⟨i, j⟩).val =
+        preWord.length + stem.length + j.val := by
+    change (((reducedBalloonOccurrencePathEmbedding balloons i).mapDart
+      (b.relatorSideDart j)).1).val = _
+    have h := reducedBalloonOccurrencePathEmbedding_position_formula
+      balloons i (b.relatorSideDart j).1
+    simpa [preWord, stem, b, balloons,
+      ReducedRelatorBalloonData.relatorSideDart,
+      ReducedRelatorBalloonData.relatorSideDart_index, Nat.add_assoc] using h
+  have hsourceSurvives : ∀ k, k < len →
+      start + k ∈ seed.reducedLollipopBoundaryTrace.survivorOccurrences.map Prod.fst := by
+    intro k hk
+    let j : Fin relator.length := ⟨offset + k, by omega⟩
+    have h := hsurvive k hk
+    rw [hposFormula j] at h
+    simpa [start, Nat.add_assoc] using h
+  have hsplit := reducedBalloonWords_flatten_split_at balloons i
+  have hsplit' : seed.boundary.reducedLiteralBoundary =
+      preWord ++ b.label.rawWord ++ suffix := by
+    simpa [RelatorFactorBoundarySeed.reducedLiteralBoundary, balloons,
+      preWord, suffix, b, List.append_assoc] using hsplit
+  have hrawBalloon :
+      b.label.rawWord = stem ++ relator ++ FreeGroup.invRev stem := by
+    simp [RelatorConjugateWitness.rawWord, FreeGroup.toWord_inv, stem, relator]
+  have hraw : seed.boundary.reducedLiteralBoundary =
+      (preWord ++ stem) ++ relator ++ (FreeGroup.invRev stem ++ suffix) := by
+    rw [hrawBalloon] at hsplit'
+    simpa [List.append_assoc] using hsplit'
+  let arc := (relator.drop offset).take len
+  have hsegment :
+      (seed.boundary.reducedLiteralBoundary.drop start).take len = arc := by
+    have hslice := slice_after_prefix preWord stem relator
+      (FreeGroup.invRev stem ++ suffix) offset len hboundLocal
+    simpa [arc, start, hraw, List.length_append, Nat.add_assoc,
+      List.append_assoc] using hslice
+  obtain ⟨outPre, outPost, hword⟩ :=
+    seed.reducedLollipopBoundaryTrace.contiguous_source_interval_of_survivors
+      start len hsourceSurvives
+  have hword' : w.toWord = outPre ++ arc ++ outPost := by
+    simpa [hsegment] using hword
+  let relatorPrefix := relator.take offset
+  let relatorTail := relator.drop (offset + len)
+  have hrelatorSplit : relator = relatorPrefix ++ (arc ++ relatorTail) := by
+    calc
+      relator = relator.take offset ++ relator.drop offset :=
+        (List.take_append_drop offset relator).symm
+      _ = relatorPrefix ++ (arc ++ relatorTail) := by
+        dsimp [relatorPrefix, arc, relatorTail]
+        rw [← List.take_append_drop len (relator.drop offset)]
+        simp [List.drop_drop]
+  have hrelatorSplit' :
+      b.label.relator.toWord = relatorPrefix ++ (arc ++ relatorTail) := by
+    simpa [relator, List.append_assoc] using hrelatorSplit
+  obtain ⟨rotatedRelator, hrotatedMem, hrotatedWord⟩ :=
+    P.rotateRelator b.label.relator_mem
+      (pre := relatorPrefix) (suf := arc ++ relatorTail) hrelatorSplit'
+  let short := relatorTail ++ relatorPrefix
+  have hrotatedWord' : rotatedRelator.toWord = arc ++ short := by
+    simpa [short, List.append_assoc] using hrotatedWord
+  have hoffset : offset ≤ relator.length := by omega
+  have hdropLengthNat : len ≤ relator.length - offset :=
+    Nat.le_sub_of_add_le (by omega)
+  have hdropLength : len ≤ (relator.drop offset).length := by
+    simpa [List.length_drop, Nat.min_eq_right hoffset] using hdropLengthNat
+  have hprefixLength : relatorPrefix.length = offset := by
+    simp [relatorPrefix, List.length_take, Nat.min_eq_left hoffset]
+  have harcLength : arc.length = len := by
+    dsimp [arc]
+    rw [List.length_take]
+    exact Nat.min_eq_left hdropLength
+  have hsplitLength :
+      relator.length = relatorPrefix.length + arc.length + relatorTail.length := by
+    rw [hrelatorSplit]
+    simp [List.length_append, Nat.add_assoc]
+  have hshortLength : short.length = relatorTail.length + offset := by
+    simp [short, hprefixLength, List.length_append]
+  have hrelatorLength : relator.length = arc.length + short.length := by
+    rw [hsplitLength, hprefixLength, harcLength, hshortLength]
+    omega
+  have hlongRedex : arc.length > short.length := by
+    rw [hrelatorLength, harcLength] at hlongLocal
+    omega
+  let redex : Redex α :=
+    ⟨outPre, arc, outPost, rotatedRelator, short⟩
+  refine ⟨⟨w.toWord, [], redex⟩, ?_⟩
+  refine ⟨by simp, ?_⟩
+  change IsRedex P.relators (FreeGroup.mk w.toWord).toWord redex
+  rw [FreeGroup.mk_toWord]
+  refine ⟨?_, hrotatedMem, ?_, ?_⟩
+  · exact hword'
+  · simpa [redex] using hrotatedWord'
+  · simpa [redex] using hlongRedex
 
 /-- Every occurrence left unmatched by the balloon-stem pairing is a literal
 side of exactly one indexed relator boundary. -/
