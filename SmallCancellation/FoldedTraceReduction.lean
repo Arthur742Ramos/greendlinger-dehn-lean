@@ -1812,6 +1812,258 @@ def replayMappedTrace {α : Type*} {raw reduced : Word α}
       rcases List.mem_map.mp hi with ⟨o, ho, rfl⟩
       exact shape.survivorOccurrences_inBounds o ho)
 
+/-- The replay trace of an append node is the concatenation of the child
+traces, after splitting ambient source occurrences at the word boundary. -/
+theorem append_to_cancellationSequence_trace
+    {u u' v v' : Word α}
+    (left : FreeReductionShape u u') (right : FreeReductionShape v v')
+    {source : Word α}
+    (origins : List (Fin source.length))
+    (leftOrigins rightOrigins : List (Fin source.length))
+    (horigins : origins = leftOrigins ++ rightOrigins)
+    (hleftLen : leftOrigins.length = u.length)
+    (hrightLen : rightOrigins.length = v.length)
+    (hlen : origins.length = (u ++ v).length)
+    (ihLeft : ∀ (lo : List (Fin source.length))
+      (hlo : lo.length = u.length),
+      LabelledWalk.sourcePositionTraceAux source left.to_cancellationSequence
+        lo hlo = left.replayMappedTrace lo hlo)
+    (ihRight : ∀ (ro : List (Fin source.length))
+      (hro : ro.length = v.length),
+      LabelledWalk.sourcePositionTraceAux source right.to_cancellationSequence
+        ro hro = right.replayMappedTrace ro hro) :
+    LabelledWalk.sourcePositionTraceAux source
+      (FreeReductionShape.append left right).to_cancellationSequence origins hlen =
+    (FreeReductionShape.append left right).replayMappedTrace origins hlen := by
+  subst origins
+  have hlenParts : (leftOrigins ++ rightOrigins).length = (u ++ v).length := hlen
+  let leftSeq := left.to_cancellationSequence
+  let rightSeq := right.to_cancellationSequence
+  let leftTrace := LabelledWalk.sourcePositionTraceAux source leftSeq
+    leftOrigins hleftLen
+  let rightTrace := LabelledWalk.sourcePositionTraceAux source rightSeq
+    rightOrigins hrightLen
+  have hleftTrace := ihLeft leftOrigins hleftLen
+  have hrightTrace := ihRight rightOrigins hrightLen
+  have hleftSurvivorsLength :=
+    LabelledWalk.sourcePositionTraceAux_survivors_length source leftSeq
+      leftOrigins hleftLen
+  have happendRight :=
+    LabelledWalk.sourcePositionTraceAux_appendRight source leftSeq v
+      leftOrigins rightOrigins hleftLen hrightLen
+  have happendLeft :=
+    LabelledWalk.sourcePositionTraceAux_appendLeft source rightSeq u'
+      leftTrace.survivors rightOrigins hleftSurvivorsLength hrightLen
+  have htrace :
+      LabelledWalk.sourcePositionTraceAux source
+        ((leftSeq.appendRight v).trans (rightSeq.appendLeft u'))
+        (leftOrigins ++ rightOrigins) hlenParts =
+        ⟨leftTrace.pairs ++ rightTrace.pairs,
+          leftTrace.survivors ++ rightTrace.survivors⟩ := by
+    rw [LabelledWalk.sourcePositionTraceAux_trans]
+    simp only [happendRight]
+    change
+      (⟨leftTrace.pairs ++
+          (LabelledWalk.sourcePositionTraceAux source (rightSeq.appendLeft u')
+            (leftTrace.survivors ++ rightOrigins) _).pairs,
+          (LabelledWalk.sourcePositionTraceAux source (rightSeq.appendLeft u')
+            (leftTrace.survivors ++ rightOrigins) _).survivors⟩ :
+        LabelledWalk.CancellationOccurrencePositions source) = _
+    rw [happendLeft]
+  have hseq :
+      (FreeReductionShape.append left right).to_cancellationSequence =
+        (leftSeq.appendRight v).trans (rightSeq.appendLeft u') := by
+    simp [FreeReductionShape.to_cancellationSequence, leftSeq, rightSeq]
+  have hleftPairs : ∀ p ∈ left.replayCancellationPairs,
+      p.1 < u.length ∧ p.2 < u.length := by
+    intro p hp
+    have hb := left.replayCancellationPairs_inBounds p hp
+    simpa [FreeReductionShape.inputWord] using hb
+  have hrightPairs : ∀ p ∈ right.replayCancellationPairs,
+      p.1 < v.length ∧ p.2 < v.length := by
+    intro p hp
+    have hb := right.replayCancellationPairs_inBounds p hp
+    simpa [FreeReductionShape.inputWord] using hb
+  have hleftPairsWhole : ∀ p ∈ left.replayCancellationPairs,
+      p.1 < (u ++ v).length ∧ p.2 < (u ++ v).length := by
+    intro p hp
+    have hb := hleftPairs p hp
+    simp only [List.length_append]
+    omega
+  have hrightPairsWhole : ∀ p ∈ shiftCancellationPairs u.length
+      right.replayCancellationPairs,
+      p.1 < (u ++ v).length ∧ p.2 < (u ++ v).length := by
+    intro p hp
+    rcases List.mem_map.mp hp with ⟨q, hq, rfl⟩
+    have hb := hrightPairs q hq
+    simp only [List.length_append]
+    constructor <;> omega
+  have hwholePairs : ∀ p ∈ left.replayCancellationPairs ++
+      shiftCancellationPairs u.length right.replayCancellationPairs,
+      p.1 < (u ++ v).length ∧ p.2 < (u ++ v).length := by
+    intro p hp
+    rcases List.mem_append.mp hp with hp | hp
+    · exact hleftPairsWhole p hp
+    · exact hrightPairsWhole p hp
+  have hleftSurvivors : ∀ i ∈ left.survivorOccurrences.map Prod.fst,
+      i < u.length := by
+    intro i hi
+    rcases List.mem_map.mp hi with ⟨o, ho, rfl⟩
+    have hb := left.survivorOccurrences_inBounds o ho
+    simpa [FreeReductionShape.inputWord] using hb
+  have hrightSurvivors : ∀ i ∈ right.survivorOccurrences.map Prod.fst,
+      i < v.length := by
+    intro i hi
+    rcases List.mem_map.mp hi with ⟨o, ho, rfl⟩
+    have hb := right.survivorOccurrences_inBounds o ho
+    simpa [FreeReductionShape.inputWord] using hb
+  have hleftSurvivorsWhole : ∀ i ∈ left.survivorOccurrences.map Prod.fst,
+      i < (u ++ v).length := by
+    intro i hi
+    have hb := hleftSurvivors i hi
+    simp only [List.length_append]
+    omega
+  have hrightSurvivorsWhole : ∀ i ∈ (right.survivorOccurrences.map Prod.fst).map
+      (u.length + ·), i < (u ++ v).length := by
+    intro i hi
+    rcases List.mem_map.mp hi with ⟨j, hj, rfl⟩
+    have hb := hrightSurvivors j hj
+    simp only [List.length_append]
+    omega
+  have hsurvivorPositions :
+      (FreeReductionShape.append left right).survivorOccurrences.map Prod.fst =
+        left.survivorOccurrences.map Prod.fst ++
+          (right.survivorOccurrences.map Prod.fst).map (u.length + ·) := by
+    simp [FreeReductionShape.survivorOccurrences, FreeReductionShape.inputWord,
+      shiftLetterOccurrences_positions]
+  have hwholeSurvivors : ∀ i ∈
+      (FreeReductionShape.append left right).survivorOccurrences.map Prod.fst,
+      i < (u ++ v).length := by
+    intro i hi
+    rw [hsurvivorPositions] at hi
+    rcases List.mem_append.mp hi with hi | hi
+    · exact hleftSurvivorsWhole i hi
+    · exact hrightSurvivorsWhole i hi
+  have hmappedPairs :
+      FreeReductionShape.mapSourcePairs (leftOrigins ++ rightOrigins) hlenParts
+        (left.replayCancellationPairs ++ shiftCancellationPairs u.length
+          right.replayCancellationPairs) hwholePairs =
+        FreeReductionShape.mapSourcePairs leftOrigins hleftLen
+          left.replayCancellationPairs hleftPairs ++
+        FreeReductionShape.mapSourcePairs rightOrigins hrightLen
+          right.replayCancellationPairs hrightPairs := by
+    calc
+      _ = FreeReductionShape.mapSourcePairs (leftOrigins ++ rightOrigins) hlenParts
+            left.replayCancellationPairs hleftPairsWhole ++
+          FreeReductionShape.mapSourcePairs (leftOrigins ++ rightOrigins) hlenParts
+            (shiftCancellationPairs u.length right.replayCancellationPairs)
+            hrightPairsWhole := by
+              exact FreeReductionShape.mapSourcePairs_append
+                (leftOrigins ++ rightOrigins) hlenParts
+                left.replayCancellationPairs
+                (shiftCancellationPairs u.length right.replayCancellationPairs)
+                hwholePairs hleftPairsWhole hrightPairsWhole
+      _ = FreeReductionShape.mapSourcePairs leftOrigins hleftLen
+            left.replayCancellationPairs hleftPairs ++
+          FreeReductionShape.mapSourcePairs rightOrigins hrightLen
+            right.replayCancellationPairs hrightPairs := by
+              congr 1
+              · exact FreeReductionShape.mapSourcePairs_prefixSource
+                  leftOrigins rightOrigins hleftLen hlenParts
+                  left.replayCancellationPairs hleftPairs
+              · exact FreeReductionShape.mapSourcePairs_shiftSource
+                  leftOrigins rightOrigins u.length hleftLen hrightLen
+                  (by simp [List.length_append]) hlenParts
+                  right.replayCancellationPairs hrightPairs
+  have hwholeSurvivorsBound : ∀ i ∈ left.survivorOccurrences.map Prod.fst ++
+      (right.survivorOccurrences.map Prod.fst).map (u.length + ·),
+      i < (u ++ v).length := by
+    intro i hi
+    rcases List.mem_append.mp hi with hi | hi
+    · exact hleftSurvivorsWhole i hi
+    · exact hrightSurvivorsWhole i hi
+  have hmappedSurvivorsDecomposed :
+      FreeReductionShape.mapSourcePositions (leftOrigins ++ rightOrigins) hlenParts
+        (left.survivorOccurrences.map Prod.fst ++
+          (right.survivorOccurrences.map Prod.fst).map (u.length + ·))
+        hwholeSurvivorsBound =
+        FreeReductionShape.mapSourcePositions leftOrigins hleftLen
+          (left.survivorOccurrences.map Prod.fst) hleftSurvivors ++
+        FreeReductionShape.mapSourcePositions rightOrigins hrightLen
+          (right.survivorOccurrences.map Prod.fst) hrightSurvivors := by
+    calc
+      _ = FreeReductionShape.mapSourcePositions (leftOrigins ++ rightOrigins)
+            hlenParts (left.survivorOccurrences.map Prod.fst) hleftSurvivorsWhole ++
+          FreeReductionShape.mapSourcePositions (leftOrigins ++ rightOrigins)
+            hlenParts ((right.survivorOccurrences.map Prod.fst).map (u.length + ·))
+            hrightSurvivorsWhole := by
+              exact FreeReductionShape.mapSourcePositions_append
+                (leftOrigins ++ rightOrigins) hlenParts
+                (left.survivorOccurrences.map Prod.fst)
+                ((right.survivorOccurrences.map Prod.fst).map (u.length + ·))
+                hwholeSurvivorsBound hleftSurvivorsWhole hrightSurvivorsWhole
+      _ = FreeReductionShape.mapSourcePositions leftOrigins hleftLen
+            (left.survivorOccurrences.map Prod.fst) hleftSurvivors ++
+          FreeReductionShape.mapSourcePositions rightOrigins hrightLen
+            (right.survivorOccurrences.map Prod.fst) hrightSurvivors := by
+              congr 1
+              · exact FreeReductionShape.mapSourcePositions_prefixSource
+                  leftOrigins rightOrigins hleftLen hlenParts
+                  (left.survivorOccurrences.map Prod.fst) hleftSurvivors
+              · exact FreeReductionShape.mapSourcePositions_shiftSource
+                  leftOrigins rightOrigins u.length hleftLen hrightLen
+                  (by simp [List.length_append]) hlenParts
+                  (right.survivorOccurrences.map Prod.fst) hrightSurvivors
+  have hmappedSurvivors :
+      FreeReductionShape.mapSourcePositions (leftOrigins ++ rightOrigins) hlenParts
+        ((FreeReductionShape.append left right).survivorOccurrences.map Prod.fst)
+        hwholeSurvivors =
+        FreeReductionShape.mapSourcePositions leftOrigins hleftLen
+          (left.survivorOccurrences.map Prod.fst) hleftSurvivors ++
+        FreeReductionShape.mapSourcePositions rightOrigins hrightLen
+          (right.survivorOccurrences.map Prod.fst) hrightSurvivors := by
+    simpa only [hsurvivorPositions] using hmappedSurvivorsDecomposed
+  have hleftTracePairs : leftTrace.pairs =
+      FreeReductionShape.mapSourcePairs leftOrigins hleftLen
+        left.replayCancellationPairs hleftPairs := by
+    simpa [leftTrace, FreeReductionShape.replayMappedTrace] using
+      congrArg (fun t : LabelledWalk.CancellationOccurrencePositions source => t.pairs)
+        hleftTrace
+  have hrightTracePairs : rightTrace.pairs =
+      FreeReductionShape.mapSourcePairs rightOrigins hrightLen
+        right.replayCancellationPairs hrightPairs := by
+    simpa [rightTrace, FreeReductionShape.replayMappedTrace] using
+      congrArg (fun t : LabelledWalk.CancellationOccurrencePositions source => t.pairs)
+        hrightTrace
+  have hleftTraceSurvivors : leftTrace.survivors =
+      FreeReductionShape.mapSourcePositions leftOrigins hleftLen
+        (left.survivorOccurrences.map Prod.fst) hleftSurvivors := by
+    simpa [leftTrace, FreeReductionShape.replayMappedTrace] using
+      congrArg (fun t : LabelledWalk.CancellationOccurrencePositions source => t.survivors)
+        hleftTrace
+  have hrightTraceSurvivors : rightTrace.survivors =
+      FreeReductionShape.mapSourcePositions rightOrigins hrightLen
+        (right.survivorOccurrences.map Prod.fst) hrightSurvivors := by
+    simpa [rightTrace, FreeReductionShape.replayMappedTrace] using
+      congrArg (fun t : LabelledWalk.CancellationOccurrencePositions source => t.survivors)
+        hrightTrace
+  rw [hseq]
+  rw [htrace]
+  change
+    (⟨leftTrace.pairs ++ rightTrace.pairs,
+      leftTrace.survivors ++ rightTrace.survivors⟩ :
+        LabelledWalk.CancellationOccurrencePositions source) =
+      ⟨FreeReductionShape.mapSourcePairs (leftOrigins ++ rightOrigins) hlenParts
+          (left.replayCancellationPairs ++ shiftCancellationPairs u.length
+            right.replayCancellationPairs) hwholePairs,
+        FreeReductionShape.mapSourcePositions (leftOrigins ++ rightOrigins) hlenParts
+          ((FreeReductionShape.append left right).survivorOccurrences.map Prod.fst)
+          hwholeSurvivors⟩
+  apply congrArg₂ (fun pairs survivors =>
+    (⟨pairs, survivors⟩ : LabelledWalk.CancellationOccurrencePositions source))
+  · rw [hmappedPairs, hleftTracePairs, hrightTracePairs]
+  · rw [hmappedSurvivors, hleftTraceSurvivors, hrightTraceSurvivors]
+
 end FreeReductionShape
 
 theorem wordPathWalk_darts {α : Type*} (word : Word α) :
