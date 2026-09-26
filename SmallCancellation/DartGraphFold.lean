@@ -621,6 +621,30 @@ def LabelledDartPairFoldSetoid {α : Type*} {G : LabelledDartGraph α}
     (pairs : List (LabelledDartPair G)) : Setoid G.toDartGraph.Dart :=
   Relation.EqvGen.setoid (LabelledDartPairFoldGenerator pairs)
 
+/-- Reordering a finite list of requested folds leaves the generated dart
+identification relation unchanged. -/
+theorem LabelledDartPairFoldSetoid_eq_of_perm {α : Type*}
+    {G : LabelledDartGraph α}
+    {pairs pairs' : List (LabelledDartPair G)}
+    (h : pairs.Perm pairs') :
+    LabelledDartPairFoldSetoid pairs =
+      LabelledDartPairFoldSetoid pairs' := by
+  have hgenerator : LabelledDartPairFoldGenerator pairs =
+      LabelledDartPairFoldGenerator pairs' := by
+    funext d e
+    apply propext
+    simp only [LabelledDartPairFoldGenerator]
+    constructor
+    · rintro ⟨pair, hpair, hfold⟩
+      exact ⟨pair, h.mem_iff.mp hpair, hfold⟩
+    · rintro ⟨pair, hpair, hfold⟩
+      exact ⟨pair, h.mem_iff.mpr hpair, hfold⟩
+  apply Setoid.ext
+  intro d e
+  change Relation.EqvGen (LabelledDartPairFoldGenerator pairs) d e ↔
+    Relation.EqvGen (LabelledDartPairFoldGenerator pairs') d e
+  rw [hgenerator]
+
 private theorem eqvGen_pullback_of_surjective {D E : Type*} (q : D → E)
     (R : E → E → Prop) (K Q : D → D → Prop)
     (hq : Function.Surjective q)
@@ -928,6 +952,18 @@ theorem foldAll_mapDart_eq_iff_pairFoldSetoid {α : Type u}
         exact foldAll_mapDart_eq_of_pairFoldSetoid h
 termination_by pairs => pairs.length
 decreasing_by simp
+
+/-- The direct pair-fold quotient identifies the same original darts when its
+requested pairs are listed in any permuted order. -/
+theorem foldAll_mapDart_eq_iff_of_perm {α : Type u}
+    {G : LabelledDartGraph.{u, v} α}
+    {pairs pairs' : List (LabelledDartPair G)}
+    (h : pairs.Perm pairs') (d e : G.toDartGraph.Dart) :
+    ((foldAll G pairs).hom.mapDart d = (foldAll G pairs).hom.mapDart e) ↔
+      ((foldAll G pairs').hom.mapDart d = (foldAll G pairs').hom.mapDart e) := by
+  rw [foldAll_mapDart_eq_iff_pairFoldSetoid,
+    foldAll_mapDart_eq_iff_pairFoldSetoid,
+    LabelledDartPairFoldSetoid_eq_of_perm h]
 
 /-- Any graph map that already folds every requested pair factors through the
 successive quotient obtained by folding the whole list. -/

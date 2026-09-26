@@ -2033,6 +2033,210 @@ theorem MinimalAreaRelatorBoundarySeed.boundaryCancellationDartPairs_positions
     wordPathBoundaryHomWithJoins, Function.comp_def] using
     seed.reducedLollipopBoundaryTrace.cancellationOccurrenceDartPairs_positions
 
+/-- The cancellation occurrences retained in the seed's indexed boundary
+trace are the same finite source pairs as those replayed by the executable
+cancellation sequence, up to their ordering. -/
+theorem MinimalAreaRelatorBoundarySeed.cancellationOccurrencePairs_perm_replay
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    List.Perm seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs
+      (LabelledWalk.sourcePositionTrace
+        seed.boundary.reducedLiteralBoundaryShape.to_cancellationSequence).pairs := by
+  let shape := seed.boundary.reducedLiteralBoundaryShape
+  have hindexed :
+      seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs.map
+        (fun p => (p.1.val, p.2.val)) = shape.cancellationPairs := by
+    calc
+      _ = shape.cancellationPairs.attach.map Subtype.val := by
+        simp only [shape, MinimalAreaRelatorBoundarySeed.reducedLollipopBoundaryTrace,
+          FreeReductionShape.toIndexedBoundaryTrace,
+          IndexedBoundaryTrace.cancellationOccurrencePairs,
+          List.map_map]
+        apply List.map_congr_left
+        intro entry hentry
+        rcases entry with ⟨⟨i, j⟩, hmem⟩
+        rfl
+      _ = shape.cancellationPairs := List.attach_map_subtype_val _
+  have hreplay := shape.sourcePositionTrace_pairPositions_eq_replayCancellationPairs
+  have hinj : Function.Injective
+      (fun p : Fin seed.boundary.reducedLiteralBoundary.length ×
+        Fin seed.boundary.reducedLiteralBoundary.length =>
+        (p.1.val, p.2.val)) := by
+    intro a b h
+    apply Prod.ext
+    · apply Fin.ext
+      exact congrArg Prod.fst h
+    · apply Fin.ext
+      exact congrArg Prod.snd h
+  apply (List.map_perm_map_iff hinj).mp
+  rw [hindexed, hreplay]
+  exact shape.cancellationPairs_perm_replayCancellationPairs
+
+/-- The executable cancellation replay, reified as inverse-labeled dart pairs
+on the seed's joined boundary graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.boundaryReplayCancellationDartPairs
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    List (LabelledDartPair seed.balloonBoundaryGraph) := by
+  let steps := seed.boundary.reducedLiteralBoundaryShape.to_cancellationSequence
+  let walk := wordPathWalk seed.boundary.reducedLiteralBoundary
+  let sourceDarts : Fin seed.boundary.reducedLiteralBoundary.length →
+      (wordPathGraph seed.boundary.reducedLiteralBoundary).toDartGraph.Dart :=
+    fun i => (i, false)
+  let trace := LabelledWalk.sourcePositionTrace steps
+  let labels := LabelledWalk.sourcePositionTrace_pairs_inverseLabels
+    steps walk sourceDarts (wordPathWalk_darts seed.boundary.reducedLiteralBoundary)
+  exact (LabelledWalk.CancellationOccurrencePositions.toLabelledDartPairs
+    trace sourceDarts labels).map (LabelledDartPair.map seed.balloonBoundaryHom)
+
+/-- The seed's indexed cancellation fold list is a permutation of the
+executable replay's source-position fold list after both are mapped to the
+same joined boundary graph. -/
+theorem MinimalAreaRelatorBoundarySeed.boundaryCancellationDartPairs_perm_replay
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    List.Perm seed.boundaryCancellationDartPairs
+      seed.boundaryReplayCancellationDartPairs := by
+  let trace := LabelledWalk.sourcePositionTrace
+    seed.boundary.reducedLiteralBoundaryShape.to_cancellationSequence
+  let sourceDarts : Fin seed.boundary.reducedLiteralBoundary.length →
+      (wordPathGraph seed.boundary.reducedLiteralBoundary).toDartGraph.Dart :=
+    fun i => (i, false)
+  let tracePairs := LabelledWalk.CancellationOccurrencePositions.toLabelledDartPairs
+    trace sourceDarts
+    (LabelledWalk.sourcePositionTrace_pairs_inverseLabels
+      seed.boundary.reducedLiteralBoundaryShape.to_cancellationSequence
+      (wordPathWalk seed.boundary.reducedLiteralBoundary) sourceDarts
+      (wordPathWalk_darts seed.boundary.reducedLiteralBoundary))
+  let replayPairs := seed.boundaryReplayCancellationDartPairs
+  let project (pair : LabelledDartPair seed.balloonBoundaryGraph) :
+      seed.balloonBoundaryGraph.Dart × seed.balloonBoundaryGraph.Dart :=
+    Prod.mk pair.first pair.second
+  let positions (pair : LabelledDartPair seed.balloonBoundaryGraph) :
+      Fin seed.boundary.reducedLiteralBoundary.length ×
+        Fin seed.boundary.reducedLiteralBoundary.length :=
+    Prod.mk pair.first.1 pair.second.1
+  let liftPositions :
+      (Fin seed.boundary.reducedLiteralBoundary.length ×
+        Fin seed.boundary.reducedLiteralBoundary.length) →
+          ((Fin seed.boundary.reducedLiteralBoundary.length × Bool) ×
+            (Fin seed.boundary.reducedLiteralBoundary.length × Bool)) :=
+    fun p => Prod.mk (Prod.mk p.1 false) (Prod.mk p.2 false)
+  have hleftForward : ∀ pair ∈ seed.boundaryCancellationDartPairs,
+      pair.first.2 = false ∧ pair.second.2 = false := by
+    intro pair hp
+    unfold MinimalAreaRelatorBoundarySeed.boundaryCancellationDartPairs at hp
+    rcases List.mem_map.mp hp with ⟨sourcePair, hsource, rfl⟩
+    rcases List.mem_map.mp hsource with ⟨entry, hentry, rfl⟩
+    simp [IndexedBoundaryTrace.cancellationOccurrenceDartPairs,
+      LabelledDartPair.map, MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
+      wordPathBoundaryHomWithJoins]
+  have hleftOrient : seed.boundaryCancellationDartPairs.map project =
+      (seed.boundaryCancellationDartPairs.map positions).map liftPositions := by
+    calc
+      _ = seed.boundaryCancellationDartPairs.map
+          (fun pair => liftPositions (positions pair)) := by
+            apply List.map_congr_left
+            intro pair hp
+            have hdirs := hleftForward pair hp
+            cases hfirst : pair.first with
+            | mk i b =>
+              cases hsecond : pair.second with
+              | mk j c =>
+                have hb : b = false := by simpa [hfirst] using hdirs.1
+                have hc : c = false := by simpa [hsecond] using hdirs.2
+                simp [project, positions, liftPositions, hfirst, hsecond, hb, hc]
+                rfl
+      _ = (seed.boundaryCancellationDartPairs.map positions).map liftPositions := by
+            simp only [List.map_map, Function.comp_def]
+  have hleft : seed.boundaryCancellationDartPairs.map project =
+      seed.reducedLollipopBoundaryTrace.cancellationOccurrencePairs.map
+        liftPositions := by
+    rw [hleftOrient, seed.boundaryCancellationDartPairs_positions]
+  have hrightOrient : replayPairs.map project =
+      (replayPairs.map positions).map liftPositions := by
+    have hforward : ∀ pair ∈ replayPairs,
+        pair.first.2 = false ∧ pair.second.2 = false := by
+      intro pair hp
+      dsimp [replayPairs,
+        MinimalAreaRelatorBoundarySeed.boundaryReplayCancellationDartPairs] at hp
+      rcases List.mem_map.mp hp with ⟨sourcePair, hsource, rfl⟩
+      dsimp [tracePairs,
+        LabelledWalk.CancellationOccurrencePositions.toLabelledDartPairs] at hsource
+      rcases List.mem_map.mp hsource with ⟨entry, hentry, rfl⟩
+      simp [sourceDarts, LabelledDartPair.map,
+        MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
+        wordPathBoundaryHomWithJoins]
+    calc
+      _ = replayPairs.map (fun pair => liftPositions (positions pair)) := by
+          apply List.map_congr_left
+          intro pair hp
+          have hdirs := hforward pair hp
+          cases hfirst : pair.first with
+          | mk i b =>
+            cases hsecond : pair.second with
+            | mk j c =>
+              have hb : b = false := by simpa [hfirst] using hdirs.1
+              have hc : c = false := by simpa [hsecond] using hdirs.2
+              simp [project, positions, liftPositions, hfirst, hsecond, hb, hc]
+              rfl
+      _ = (replayPairs.map positions).map liftPositions := by
+          simp only [List.map_map, Function.comp_def]
+  have hrightPositions : replayPairs.map positions = trace.pairs := by
+    have hattach : trace.pairs.attach.map
+        (fun entry => Prod.mk entry.1.1 entry.1.2) = trace.pairs := by
+      calc
+        _ = trace.pairs.attach.map Subtype.val := by
+          apply List.map_congr_left
+          intro entry hentry
+          rcases entry with ⟨⟨i, j⟩, hentry⟩
+          rfl
+        _ = trace.pairs := List.attach_map_subtype_val _
+    simpa [replayPairs, tracePairs, positions, sourceDarts,
+      MinimalAreaRelatorBoundarySeed.boundaryReplayCancellationDartPairs,
+      LabelledWalk.CancellationOccurrencePositions.toLabelledDartPairs,
+      LabelledDartPair.map, MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
+      wordPathBoundaryHomWithJoins, Function.comp_def] using hattach
+  have hright : replayPairs.map project = trace.pairs.map liftPositions := by
+    rw [hrightOrient, hrightPositions]
+  have hinj : Function.Injective project := by
+    intro a b h
+    cases a with
+    | mk af as al =>
+      cases b with
+      | mk bf bs bl =>
+        have hfirst : af = bf := congrArg Prod.fst h
+        have hsecond : as = bs := congrArg Prod.snd h
+        cases hfirst
+        cases hsecond
+        rfl
+  apply (List.map_perm_map_iff hinj).mp
+  change List.Perm (seed.boundaryCancellationDartPairs.map project)
+    (replayPairs.map project)
+  rw [hleft, hright]
+  exact List.Perm.map
+    liftPositions
+    seed.cancellationOccurrencePairs_perm_replay
+
+/-- Adding the stem folds to either cancellation schedule gives the same
+direct dart-identification relation on the original joined boundary graph. -/
+theorem MinimalAreaRelatorBoundarySeed.boundaryOccurrenceDartPairFoldSetoid_eq_replay
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    LabelledDartPairFoldSetoid
+        (seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs) =
+      LabelledDartPairFoldSetoid
+        (seed.boundaryBalloonStemPairs ++ seed.boundaryReplayCancellationDartPairs) := by
+  have hperm :
+      (seed.boundaryBalloonStemPairs ++ seed.boundaryCancellationDartPairs).Perm
+        (seed.boundaryBalloonStemPairs ++ seed.boundaryReplayCancellationDartPairs) :=
+    List.Perm.append (List.Perm.refl _) seed.boundaryCancellationDartPairs_perm_replay
+  exact LabelledDartPairFoldSetoid_eq_of_perm hperm
+
 /-- Fold both families of occurrence pairs directly on the same literal
 boundary graph. This explicit quotient presents the edge identifications
 whose connected components are tracked by the occurrence pairing graph. -/
