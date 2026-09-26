@@ -3237,7 +3237,7 @@ theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_cycle_through
         seed.boundaryCancellationPairing C)
       (componentRightPairing seed.balloonStemOccurrencePairing
         seed.boundaryCancellationPairing C)).Walk ⟨i, hi⟩ ⟨i, hi⟩,
-      cycle.IsCycle := by
+      cycle.IsCycle ∧ cycle.toSubgraph.verts = Set.univ := by
   classical
   letI : Fintype C.supp := Fintype.ofFinite _
   letI : DecidableEq C.supp := Classical.decEq _
@@ -3259,12 +3259,26 @@ theorem MinimalAreaRelatorBoundarySeed.zeroIncidence_component_cycle_through
   have hadj : graph.Adj v u := Or.inl hlocal
   have hneighbors : (graph.neighborSet v).Nonempty :=
     ⟨u, by simpa only [SimpleGraph.mem_neighborSet] using hadj⟩
+  have hconn : graph.Connected := by
+    change (twoPairingGraph
+      (componentLeftPairing seed.balloonStemOccurrencePairing
+        seed.boundaryCancellationPairing C)
+      (componentRightPairing seed.balloonStemOccurrencePairing
+        seed.boundaryCancellationPairing C)).Connected
+    rw [twoPairingGraph_component_eq_induce
+      seed.balloonStemOccurrencePairing seed.boundaryCancellationPairing C]
+    exact C.connected_toSimpleGraph
   let component := graph.connectedComponentMk v
   have hv : v ∈ component.supp := by
     exact (SimpleGraph.ConnectedComponent.mem_supp_iff component v).mpr rfl
-  obtain ⟨cycle, hcycle, _⟩ :=
+  obtain ⟨cycle, hcycle, hverts⟩ :=
     hcycles.exists_cycle_toSubgraph_verts_eq_connectedComponentSupp hv hneighbors
-  exact ⟨cycle, hcycle⟩
+  have hcomponent : component.supp = Set.univ := by
+    ext x
+    simp only [Set.mem_univ, iff_true]
+    exact (SimpleGraph.ConnectedComponent.mem_supp_iff component x).mpr
+      (SimpleGraph.ConnectedComponent.eq.mpr (hconn x v))
+  exact ⟨cycle, hcycle, hverts.trans hcomponent⟩
 
 /-- The exact component incidence count implies the corresponding upper
 bound, retained for edge-class corollaries. -/
