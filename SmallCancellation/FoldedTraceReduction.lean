@@ -361,6 +361,35 @@ theorem foldCancellation_darts {α : Type*} {G : LabelledDartGraph α}
   exact ⟨firstDart, secondDart, before', after', by
     simpa only [List.append_assoc] using hlist', hresult⟩
 
+/-- The residual occurrence list after one cancellation is an
+order-preserving sublist of the input occurrence list after mapping through
+the fold homomorphism. -/
+theorem foldCancellation_darts_sublist {α : Type*} {G : LabelledDartGraph α}
+    {raw reduced : Word α} (step : FreeCancellationStep raw reduced)
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v raw) :
+    List.Sublist (LabelledWalk.foldCancellation step walk).walk.darts
+      (walk.darts.map (LabelledWalk.foldCancellation step walk).hom.mapDart) := by
+  cases step with
+  | cancel pre post a =>
+      obtain ⟨firstDart, secondDart, before, after, hdecomp, hresult⟩ :=
+        foldCancellation_darts a walk
+      let state := LabelledWalk.foldCancellation
+        (FreeCancellationStep.cancel pre post a) walk
+      let beforeMap := before.darts.map state.hom.mapDart
+      let middleMap := [state.hom.mapDart firstDart, state.hom.mapDart secondDart]
+      let afterMap := after.darts.map state.hom.mapDart
+      have hinput : walk.darts.map state.hom.mapDart =
+          beforeMap ++ middleMap ++ afterMap := by
+        rw [hdecomp, List.map_append, List.map_append]
+        rfl
+      change List.Sublist state.walk.darts
+        (walk.darts.map state.hom.mapDart)
+      rw [hresult, hinput]
+      simpa only [state, beforeMap, middleMap, afterMap, List.append_assoc,
+        List.nil_append] using
+        (List.Sublist.refl beforeMap).append
+          ((List.nil_sublist middleMap).append (List.Sublist.refl afterMap))
+
 /-- Every dart occurrence remaining after one cancellation is the quotient
 image of an occurrence in the original walk. -/
 theorem foldCancellation_darts_mem {α : Type*} {G : LabelledDartGraph α}
@@ -410,6 +439,47 @@ theorem foldSequence_darts_mem {α : Type*} {G : LabelledDartGraph α}
       refine ⟨source, hsource, ?_⟩
       change later.hom.mapDart (first.hom.mapDart source) = d
       exact (congrArg later.hom.mapDart hfirst).trans hfinal
+
+/-- The complete residual boundary is an order-preserving sublist of the
+initial boundary after mapping through the accumulated quotient map. -/
+theorem foldSequence_darts_sublist {α : Type*} {G : LabelledDartGraph α}
+    {raw reduced : Word α} (steps : FreeCancellationSequence raw reduced)
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v raw) :
+    List.Sublist (LabelledWalk.foldSequence steps walk).walk.darts
+      (walk.darts.map (LabelledWalk.foldSequence steps walk).hom.mapDart) := by
+  induction steps generalizing G u v with
+  | refl word =>
+      simpa only [LabelledWalk.foldSequence, LabelledGraphHom.id, List.map_id'] using
+        (List.Sublist.refl walk.darts)
+  | @cons raw mid reduced step rest ih =>
+      let first := LabelledWalk.foldCancellation step walk
+      let later := LabelledWalk.foldSequence rest first.walk
+      have hlater : List.Sublist later.walk.darts
+          (first.walk.darts.map later.hom.mapDart) :=
+        ih first.walk
+      have hfirst : List.Sublist first.walk.darts
+          (walk.darts.map first.hom.mapDart) :=
+        foldCancellation_darts_sublist step walk
+      have htotal : List.Sublist later.walk.darts
+          ((walk.darts.map first.hom.mapDart).map later.hom.mapDart) :=
+        hlater.trans (hfirst.map later.hom.mapDart)
+      change List.Sublist later.walk.darts
+        (walk.darts.map (LabelledGraphHom.comp later.hom first.hom).mapDart)
+      simpa only [List.map_map, LabelledGraphHom.comp] using htotal
+
+/-- Final boundary positions embed strictly increasingly into initial
+boundary positions after the accumulated graph map, preserving each retained
+dart occurrence. -/
+theorem foldSequence_darts_sourcePositions {α : Type*} {G : LabelledDartGraph α}
+    {raw reduced : Word α} (steps : FreeCancellationSequence raw reduced)
+    {u v : G.toDartGraph.Vertex} (walk : LabelledWalk G u v raw) :
+    ∃ f : Fin (LabelledWalk.foldSequence steps walk).walk.darts.length ↪o
+        Fin (walk.darts.map (LabelledWalk.foldSequence steps walk).hom.mapDart).length,
+      ∀ i,
+        (LabelledWalk.foldSequence steps walk).walk.darts.get i =
+          (walk.darts.map (LabelledWalk.foldSequence steps walk).hom.mapDart).get (f i) :=
+  List.sublist_iff_exists_fin_orderEmbedding_get_eq.mp
+    (foldSequence_darts_sublist steps walk)
 
 /-- Later cancellation folds preserve the occurrence pair selected by the
 first step of a free-cancellation sequence. -/
