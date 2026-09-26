@@ -24,6 +24,156 @@ structure RelatorBoundaryLoop {α : Type*} [Fintype α] [DecidableEq α]
   base : G.toDartGraph.Vertex
   walk : LabelledWalk G base base relator.toWord
 
+/-- The seed's generated endpoint joins make every balloon stem fold
+adjacent in the order used by the folded boundary construction. -/
+theorem MinimalAreaRelatorBoundarySeed.boundaryBalloonStemPairs_adjacent
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    LabelledDartPairFoldAdjacency seed.balloonBoundaryGraph
+      seed.boundaryBalloonStemPairs := by
+  unfold MinimalAreaRelatorBoundarySeed.boundaryBalloonStemPairs
+  apply reducedBalloonStemPairs_foldAdjacency
+  intro pair hpair
+  have hjoin := wordBoundary_join_eq
+    seed.boundary.reducedLiteralBoundary seed.balloonEndpointPairs pair (by
+      simpa [MinimalAreaRelatorBoundarySeed.balloonEndpointPairs] using hpair)
+  simpa [MinimalAreaRelatorBoundarySeed.balloonBoundaryGraph,
+    MinimalAreaRelatorBoundarySeed.balloonBoundaryHom,
+    wordBoundaryGraphWithJoins, wordPathBoundaryHomWithJoins,
+    MinimalAreaRelatorBoundarySeed.balloonEndpointPairs] using hjoin
+
+/-- The finite-dart instance on the joined occurrence-path graph. Its vertex
+type is infinite, but its darts are the finitely many positions in the
+literal boundary word. -/
+@[instance_reducible]
+noncomputable def MinimalAreaRelatorBoundarySeed.balloonBoundaryDartFintype
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) :
+    Fintype seed.balloonBoundaryGraph.toDartGraph.Dart := by
+  classical
+  change Fintype
+    ((wordPathGraph seed.boundary.reducedLiteralBoundary).toDartGraph.Dart)
+  dsimp [wordPathGraph]
+  exact Fintype.ofFinite _
+
+/-- A nontrivial target word forces at least one occurrence in the literal
+boundary, so the finite endpoint restriction has a root-preserving graph map. -/
+theorem MinimalAreaRelatorBoundarySeed.balloonBoundaryDart_nonempty
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :
+    Nonempty seed.balloonBoundaryGraph.toDartGraph.Dart := by
+  have hword : w.toWord ≠ [] := by
+    intro hnil
+    exact hne (FreeGroup.toWord_eq_nil_iff.mp hnil)
+  have hraw : seed.boundary.reducedLiteralBoundary ≠ [] := by
+    intro hnil
+    have hlen := seed.boundary.reducedLiteralBoundary_length_eq
+    simp [hnil] at hlen
+    have hwordPositive : 0 < w.toWord.length :=
+      List.length_pos_iff.mpr hword
+    omega
+  exact LabelledWalk.exists_dart_of_word_ne_nil seed.balloonBoundaryLoop hraw
+
+/-- The finite graph of vertices incident to the seed's joined boundary darts.
+Restricting before the folds removes the infinitely many unused natural-number
+vertices while preserving every occurrence dart. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonBoundaryGraph
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) := by
+  letI := seed.balloonBoundaryDartFintype
+  exact seed.balloonBoundaryGraph.endpointRestriction
+
+/-- The occurrence graph mapped into its finite incident-vertex support. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonBoundaryHom
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :
+    LabelledGraphHom seed.balloonBoundaryGraph seed.finiteBalloonBoundaryGraph := by
+  letI := seed.balloonBoundaryDartFintype
+  exact seed.balloonBoundaryGraph.endpointRestrictionHom
+    (seed.balloonBoundaryDart_nonempty hne)
+
+/-- Stem folds on the finite incident-vertex graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonStemPairs
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :
+    List (LabelledDartPair (seed.finiteBalloonBoundaryGraph)) :=
+  seed.boundaryBalloonStemPairs.map
+    (LabelledDartPair.map (seed.finiteBalloonBoundaryHom hne))
+
+/-- The boundary walk transported to the finite incident-vertex graph. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteBalloonBoundaryLoop
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :=
+  seed.balloonBoundaryLoop.map (seed.finiteBalloonBoundaryHom hne)
+
+/-- Replay the seed's stem folds and free-cancellation trace after restricting
+to its finite boundary support. This is the finite graph in which the global
+Euler ledger can be applied. -/
+noncomputable def MinimalAreaRelatorBoundarySeed.finiteSupportFoldedBoundaryWalk
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :=
+  WalkFoldResult.foldPairsThenReduce (seed.finiteBalloonStemPairs hne)
+    seed.boundary.reducedLiteralBoundaryShape.to_cancellationSequence
+    (seed.finiteBalloonBoundaryLoop hne)
+
+/-- The stem-fold sequence remains endpoint-adjacent after restricting to the
+finite boundary support, so the finite Euler inequality applies to the whole
+stem-fold and cancellation replay. -/
+theorem MinimalAreaRelatorBoundarySeed.finiteSupportFoldedBoundary_euler_data
+    {α : Type*} [Fintype α] [DecidableEq α]
+    {P : SymmetrizedPresentation α} {w : FreeGroup α}
+    (seed : MinimalAreaRelatorBoundarySeed P.relators w) (hne : w ≠ 1) :
+    ∃ hStartV : Finite
+        seed.finiteBalloonBoundaryGraph.toDartGraph.Vertex,
+      ∃ hStartD : Finite
+        seed.finiteBalloonBoundaryGraph.toDartGraph.Dart,
+      ∃ hFinalV : Finite
+        (seed.finiteSupportFoldedBoundaryWalk hne).graph.toDartGraph.Vertex,
+      ∃ hFinalD : Finite
+        (seed.finiteSupportFoldedBoundaryWalk hne).graph.toDartGraph.Dart,
+        finiteCard hStartV +
+            finiteUnorientedEdgeCard
+              (seed.finiteSupportFoldedBoundaryWalk hne).graph.toDartGraph hFinalD ≤
+          finiteCard hFinalV + finiteUnorientedEdgeCard
+            seed.finiteBalloonBoundaryGraph.toDartGraph
+            hStartD := by
+  letI := seed.balloonBoundaryDartFintype
+  letI : Fintype seed.finiteBalloonBoundaryGraph.toDartGraph.Vertex := by
+    change Fintype seed.balloonBoundaryGraph.ActiveVertex
+    infer_instance
+  have hAdjacent : LabelledDartPairFoldAdjacency
+      seed.finiteBalloonBoundaryGraph (seed.finiteBalloonStemPairs hne) := by
+    exact (seed.boundaryBalloonStemPairs_adjacent).map
+      (seed.finiteBalloonBoundaryHom hne)
+  have hV : Finite seed.finiteBalloonBoundaryGraph.toDartGraph.Vertex := by
+    infer_instance
+  have hD : Finite seed.finiteBalloonBoundaryGraph.toDartGraph.Dart := by
+    change Finite seed.balloonBoundaryGraph.toDartGraph.Dart
+    exact Finite.of_fintype _
+  obtain ⟨hFinalV, hFinalD, hcount⟩ :=
+    WalkFoldResult.foldPairsThenReduce_euler_data
+      (seed.finiteBalloonStemPairs hne)
+      seed.boundary.reducedLiteralBoundaryShape.to_cancellationSequence
+      (seed.finiteBalloonBoundaryLoop hne) hAdjacent hV hD
+  refine ⟨hV, hD, ?_, ?_, ?_⟩
+  · simpa [MinimalAreaRelatorBoundarySeed.finiteSupportFoldedBoundaryWalk,
+      MinimalAreaRelatorBoundarySeed.finiteBalloonStemPairs,
+      MinimalAreaRelatorBoundarySeed.finiteBalloonBoundaryLoop] using hFinalV
+  · simpa [MinimalAreaRelatorBoundarySeed.finiteSupportFoldedBoundaryWalk,
+      MinimalAreaRelatorBoundarySeed.finiteBalloonStemPairs,
+      MinimalAreaRelatorBoundarySeed.finiteBalloonBoundaryLoop] using hFinalD
+  · simpa [MinimalAreaRelatorBoundarySeed.finiteSupportFoldedBoundaryWalk,
+      MinimalAreaRelatorBoundarySeed.finiteBalloonStemPairs,
+      MinimalAreaRelatorBoundarySeed.finiteBalloonBoundaryLoop] using hcount
+
 /-- Fold the occurrence boundary of a minimum-area lollipop seed along its
 certified free-reduction trace. The output is a labeled quotient graph and a
 closed boundary walk spelling the requested reduced word. This is a genuine

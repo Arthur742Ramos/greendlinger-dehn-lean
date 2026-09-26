@@ -1,4 +1,5 @@
 import SmallCancellation.LollipopFolds
+import SmallCancellation.FiniteFoldEuler
 import SmallCancellation.PairingComponents
 import SmallCancellation.PairingWalkParity
 import SmallCancellation.PlanarBoundarySeed
@@ -15,6 +16,256 @@ positions in its literal boundary word.
 -/
 
 namespace GreendlingerDehn
+
+private theorem finRange_successor_chain (n : Nat) :
+    List.IsChain (fun i j : Fin n => i.val + 1 = j.val) (List.finRange n) := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+      rw [List.finRange_succ]
+      cases n with
+      | zero => simp [List.finRange_zero]
+      | succ n =>
+          have htail : List.IsChain
+              (fun i j : Fin (Nat.succ (Nat.succ n)) => i.val + 1 = j.val)
+              (List.map Fin.succ (List.finRange (Nat.succ n))) := by
+            apply List.isChain_map_of_isChain Fin.succ
+            · intro i j hij
+              simpa using hij
+            · exact ih
+          apply List.IsChain.cons htail
+          intro j hj
+          have hj' : j = Fin.succ 0 := by
+            simpa [List.finRange_succ] using hj.symm
+          subst j
+          simp
+
+/-- Consecutive doubled stem pairs meet at both ends in their literal
+lollipop boundary path. -/
+theorem lollipopStemPairs_isChain {α : Type*} (stem relator : Word α) :
+    List.IsChain
+      (LabelledDartPairChainStep
+        (G := wordPathGraph (lollipopBoundaryWord stem relator)))
+      (lollipopStemPairs stem relator) := by
+  unfold lollipopStemPairs
+  apply List.isChain_map_of_isChain (lollipopStemPair stem relator)
+  · intro i j hij
+    constructor <;>
+      simp [LabelledDartPairChainStep, lollipopStemPair, wordPathGraph,
+        lollipopStemFirstIndex, lollipopStemMateIndex] <;> omega
+  · apply (finRange_successor_chain stem.length).imp
+    intro i j hij
+    exact hij.symm
+
+private theorem castWordPath_refl {α : Type*} {u : Word α}
+    (pair : LabelledDartPair (wordPathGraph u)) :
+    LabelledDartPair.castWordPath rfl pair = pair := by
+  cases pair
+  rfl
+
+private theorem pairChain_castWordPath {α : Type*} {u v : Word α} (h : u = v)
+    {pairs : List (LabelledDartPair (wordPathGraph u))}
+    (hchain : List.IsChain
+      (LabelledDartPairChainStep (G := wordPathGraph u)) pairs) :
+      List.IsChain (LabelledDartPairChainStep (G := wordPathGraph v))
+      (pairs.map (LabelledDartPair.castWordPath h)) := by
+  cases h
+  have hmap : pairs.map (LabelledDartPair.castWordPath rfl) = pairs := by
+    calc
+      pairs.map (LabelledDartPair.castWordPath rfl) = pairs.map id := by
+        apply List.map_congr_left
+        intro pair hp
+        exact castWordPath_refl pair
+      _ = pairs := by simp
+  rw [hmap]
+  exact hchain
+
+/-- The balloon's cast stem pairs retain the consecutive endpoint relations
+of the lollipop positions. -/
+theorem ReducedRelatorBalloonData.stemPairs_isChain {α : Type*} [Fintype α]
+    [DecidableEq α] {P : SymmetrizedPresentation α}
+    (b : ReducedRelatorBalloonData P) :
+    List.IsChain
+      (LabelledDartPairChainStep (G := wordPathGraph b.label.rawWord))
+      b.stemPairs := by
+  unfold ReducedRelatorBalloonData.stemPairs
+  exact pairChain_castWordPath b.label.lollipopBoundary_eq_rawWord
+    (lollipopStemPairs_isChain
+      b.label.conjugator.toWord b.label.relator.toWord)
+
+private theorem castWordPath_eq_map {α : Type*} {u v : Word α} (h : u = v)
+    (pair : LabelledDartPair (wordPathGraph u)) :
+    LabelledDartPair.castWordPath h pair =
+      LabelledDartPair.map (wordPathCastHom h) pair := by
+  cases h
+  cases pair
+  rfl
+
+/-- A lollipop's stem pairs are fold-adjacent after mapping its two outer
+boundary endpoints to the same vertex. -/
+theorem lollipopStemPairs_foldAdjacency {α : Type*}
+    (stem relator : Word α) {H : LabelledDartGraph α}
+    (f : LabelledGraphHom (wordPathGraph (lollipopBoundaryWord stem relator)) H)
+    (hends : f.mapVertex (0 : Nat) =
+      f.mapVertex (lollipopBoundaryWord stem relator).length) :
+    LabelledDartPairFoldAdjacency H
+      ((lollipopStemPairs stem relator).map (LabelledDartPair.map f)) := by
+  apply LabelledDartPairFoldAdjacency.of_isChain
+    (lollipopStemPairs_isChain stem relator) f
+  intro pair hhead
+  by_cases hzero : stem.length = 0
+  · have hnil : lollipopStemPairs stem relator = [] := by
+      simp [lollipopStemPairs, hzero]
+    simp [hnil] at hhead
+  · have hpos : 0 < stem.length := Nat.pos_of_ne_zero hzero
+    let first := lollipopStemPair stem relator ⟨0, hpos⟩
+    have hfinhead : (List.finRange stem.length).head? = some ⟨0, hpos⟩ := by
+      rw [List.finRange_eq_pmap_range]
+      simp [List.head?_range, hpos.ne']
+    have hhead0 : (lollipopStemPairs stem relator).head? = some first := by
+      change ((List.finRange stem.length).map
+        (lollipopStemPair stem relator)).head? = some first
+      rw [List.head?_map, hfinhead]
+      rfl
+    have hpair : pair = first :=
+      Option.some.inj (hhead0.symm.trans hhead).symm
+    subst pair
+    right
+    have hsource :
+        (wordPathGraph (lollipopBoundaryWord stem relator)).toDartGraph.source
+            first.first = (0 : Nat) := by
+      simp [first, lollipopStemPair, lollipopStemFirstIndex, wordPathGraph]
+    have htarget :
+        (wordPathGraph (lollipopBoundaryWord stem relator)).toDartGraph.target
+            first.second = (lollipopBoundaryWord stem relator).length := by
+      simp [first, lollipopStemPair, lollipopStemMateIndex,
+        lollipopBoundaryWord, wordPathGraph]
+      omega
+    calc
+      H.toDartGraph.source (f.mapDart first.first) =
+          f.mapVertex
+            ((wordPathGraph (lollipopBoundaryWord stem relator)).toDartGraph.source
+              first.first) := f.map_source _
+      _ = f.mapVertex (0 : Nat) := congrArg f.mapVertex hsource
+      _ = f.mapVertex (lollipopBoundaryWord stem relator).length := hends
+      _ = f.mapVertex
+          ((wordPathGraph (lollipopBoundaryWord stem relator)).toDartGraph.target
+            first.second) := congrArg f.mapVertex htarget.symm
+      _ = H.toDartGraph.target (f.mapDart first.second) := (f.map_target _).symm
+
+/-- The cast stem pairs of a relator balloon can be folded sequentially in
+any target graph that closes the raw balloon boundary. -/
+theorem ReducedRelatorBalloonData.stemPairs_foldAdjacency {α : Type*}
+    [Fintype α] [DecidableEq α] {P : SymmetrizedPresentation α}
+    (b : ReducedRelatorBalloonData P) {H : LabelledDartGraph α}
+    (f : LabelledGraphHom (wordPathGraph b.label.rawWord) H)
+    (hends : f.mapVertex (0 : Nat) = f.mapVertex b.label.rawWord.length) :
+    LabelledDartPairFoldAdjacency H
+      (b.stemPairs.map (LabelledDartPair.map f)) := by
+  let h := b.label.lollipopBoundary_eq_rawWord
+  let castHom := wordPathCastHom h
+  let composedHom := LabelledGraphHom.comp f castHom
+  have hlength : (lollipopBoundaryWord b.label.conjugator.toWord
+      b.label.relator.toWord).length = b.label.rawWord.length :=
+    congrArg List.length h
+  have hends' : composedHom.mapVertex (0 : Nat) =
+      composedHom.mapVertex
+        (lollipopBoundaryWord b.label.conjugator.toWord b.label.relator.toWord).length := by
+    change f.mapVertex (0 : Nat) = f.mapVertex
+      (lollipopBoundaryWord b.label.conjugator.toWord b.label.relator.toWord).length
+    exact hends.trans (congrArg f.mapVertex hlength.symm)
+  have hlist :
+      (lollipopStemPairs b.label.conjugator.toWord b.label.relator.toWord).map
+          (LabelledDartPair.map composedHom) =
+        b.stemPairs.map (LabelledDartPair.map f) := by
+    unfold ReducedRelatorBalloonData.stemPairs
+    simp only [List.map_map]
+    apply List.map_congr_left
+    intro pair hmem
+    change LabelledDartPair.map composedHom pair =
+      LabelledDartPair.map f (LabelledDartPair.castWordPath h pair)
+    rw [castWordPath_eq_map h pair]
+    simpa [composedHom, castHom] using
+      (LabelledDartPairFoldAdjacency.mappedPair_comp f castHom pair).symm
+  rw [← hlist]
+  exact lollipopStemPairs_foldAdjacency
+    b.label.conjugator.toWord b.label.relator.toWord composedHom hends'
+
+/-- Stem folds for a list of relator balloons are adjacent when each balloon's
+two outer endpoints are joined in the target graph. -/
+theorem reducedBalloonStemPairs_foldAdjacency {α : Type*} [Fintype α]
+    [DecidableEq α] {P : SymmetrizedPresentation α} :
+    ∀ (balloons : List (ReducedRelatorBalloonData P))
+      {H : LabelledDartGraph α}
+      (f : LabelledGraphHom
+        (wordPathGraph ((balloons.map fun b => b.label.rawWord).flatten)) H),
+      (∀ pair, pair ∈ reducedBalloonEndpointPairs balloons →
+        f.mapVertex pair.1 = f.mapVertex pair.2) →
+      LabelledDartPairFoldAdjacency H
+        ((reducedBalloonStemPairs balloons).map (LabelledDartPair.map f)) := by
+  intro balloons
+  induction balloons with
+  | nil =>
+      intro H f hjoins
+      exact .nil H
+  | cons head tail ih =>
+      intro H f hjoins
+      let tailWord := (tail.map fun b => b.label.rawWord).flatten
+      let prefixEmbedding := wordPathPrefixHom head.label.rawWord tailWord
+      let suffix := wordPathSuffixHom head.label.rawWord tailWord
+      let fHead := LabelledGraphHom.comp f prefixEmbedding
+      let fTail := LabelledGraphHom.comp f suffix
+      have hheadMem :
+          (0, head.label.rawWord.length) ∈
+            reducedBalloonEndpointPairs (head :: tail) := by
+        rw [reducedBalloonEndpointPairs]
+        exact List.Mem.head _
+      have hheadEnds : fHead.mapVertex (0 : Nat) =
+          fHead.mapVertex head.label.rawWord.length := by
+        change f.mapVertex (prefixEmbedding.mapVertex (0 : Nat)) =
+          f.mapVertex (prefixEmbedding.mapVertex head.label.rawWord.length)
+        simpa [prefixEmbedding, wordPathPrefixHom, id] using hjoins
+          (0, head.label.rawWord.length) hheadMem
+      have htailJoins : ∀ pair,
+          pair ∈ reducedBalloonEndpointPairs tail →
+            fTail.mapVertex pair.1 = fTail.mapVertex pair.2 := by
+        intro pair hpair
+        have hpair' :
+            (suffix.mapVertex pair.1, suffix.mapVertex pair.2) ∈
+              reducedBalloonEndpointPairs (head :: tail) := by
+          rw [reducedBalloonEndpointPairs]
+          apply List.mem_cons.mpr
+          right
+          exact List.mem_map.mpr ⟨pair, hpair, rfl⟩
+        change f.mapVertex (suffix.mapVertex pair.1) =
+          f.mapVertex (suffix.mapVertex pair.2)
+        exact hjoins _ hpair'
+      have hfirst := head.stemPairs_foldAdjacency fHead hheadEnds
+      have hsecond := ih fTail htailJoins
+      have hlist :
+          (reducedBalloonStemPairs (head :: tail)).map
+              (LabelledDartPair.map f) =
+            (head.stemPairs.map (LabelledDartPair.map fHead)) ++
+              ((reducedBalloonStemPairs tail).map (LabelledDartPair.map fTail)) := by
+        rw [reducedBalloonStemPairs_cons, List.map_append]
+        congr 1
+        · rw [List.map_map]
+          apply List.map_congr_left
+          intro pair hp
+          change LabelledDartPair.map f
+              (LabelledDartPair.map prefixEmbedding pair) =
+            LabelledDartPair.map fHead pair
+          simpa [fHead, LabelledGraphHom.comp] using
+            (LabelledDartPairFoldAdjacency.mappedPair_comp f prefixEmbedding pair)
+        · rw [List.map_map]
+          apply List.map_congr_left
+          intro pair hp
+          change LabelledDartPair.map f (LabelledDartPair.map suffix pair) =
+            LabelledDartPair.map fTail pair
+          simpa [fTail, LabelledGraphHom.comp] using
+            (LabelledDartPairFoldAdjacency.mappedPair_comp f suffix pair)
+      rw [hlist]
+      exact LabelledDartPairFoldAdjacency.append hfirst hsecond
 
 /-- The occurrence list represented by a list of labeled dart pairs. -/
 def labelledDartPairEndpoints {α : Type*} {G : LabelledDartGraph α}

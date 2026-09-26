@@ -120,6 +120,13 @@ theorem foldedEndpointEq (G : DartGraph) (a b : G.Dart) :
   apply Quotient.sound
   exact Relation.EqvGen.rel _ _ (Or.inl ⟨rfl, rfl⟩)
 
+/-- The other pair of endpoints identified by an edge fold. -/
+theorem foldedOtherEndpointEq (G : DartGraph) (a b : G.Dart) :
+    (Quotient.mk (VertexFoldSetoid G a b) (G.target a) : FoldedVertex G a b) =
+      Quotient.mk (VertexFoldSetoid G a b) (G.source b) := by
+  apply Quotient.sound
+  exact Relation.EqvGen.rel _ _ (Or.inr ⟨rfl, rfl⟩)
+
 theorem foldedSource_reverse (G : DartGraph) (a b : G.Dart)
     (d : FoldedDart G.reverse a b) :
     G.foldedSource a b (foldedReverse a b G.reverse_involutive d) =

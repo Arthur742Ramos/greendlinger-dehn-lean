@@ -31,6 +31,16 @@ def wordPathGraph {α : Type*} (word : Word α) : LabelledDartGraph α where
     | mk i direction =>
         cases direction <;> simp [inverseLetter]
 
+/-- The canonical position-preserving graph map induced by equality of words. -/
+def wordPathCastHom {α : Type*} {u v : Word α} (h : u = v) :
+    LabelledGraphHom (wordPathGraph u) (wordPathGraph v) where
+  mapVertex := id
+  mapDart := fun d => (Fin.cast (congrArg List.length h) d.1, d.2)
+  map_reverse := by cases h; intro d; rfl
+  map_source := by cases h; intro d; rfl
+  map_target := by cases h; intro d; rfl
+  map_label := by cases h; intro d; rfl
+
 /-- The literal boundary word of a lollipop with stem `stem` and relator
 boundary `relator`. -/
 abbrev lollipopBoundaryWord {α : Type*} (stem relator : Word α) : Word α :=

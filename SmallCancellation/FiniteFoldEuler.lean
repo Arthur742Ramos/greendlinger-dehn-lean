@@ -443,6 +443,209 @@ inductive LabelledDartPairFoldAdjacency {α : Type*} :
           (LabelledGraphHom.fold G pair.first pair.second pair.inverse_labels)))) :
       LabelledDartPairFoldAdjacency G (pair :: rest)
 
+namespace LabelledDartPairFoldAdjacency
+
+theorem mappedPair_comp {α : Type*} {G H K : LabelledDartGraph α}
+    (g : LabelledGraphHom H K) (f : LabelledGraphHom G H)
+    (pair : LabelledDartPair G) :
+    LabelledDartPair.map g (LabelledDartPair.map f pair) =
+      LabelledDartPair.map (LabelledGraphHom.comp g f) pair := by
+  cases pair
+  rfl
+
+/-- The fold-adjacency certificate is preserved by a label-preserving graph
+map. The map descends through each successive quotient. -/
+theorem map {α : Type*} {G H : LabelledDartGraph α}
+    (f : LabelledGraphHom G H) {pairs : List (LabelledDartPair G)}
+    (hadj : LabelledDartPairFoldAdjacency G pairs) :
+    LabelledDartPairFoldAdjacency H
+      (pairs.map (LabelledDartPair.map f)) := by
+  induction hadj generalizing H with
+  | nil G => exact .nil H
+  | @cons G pair rest hpairAdjacent hrestAdjacent ih =>
+      let pair' := LabelledDartPair.map f pair
+      let firstHom := LabelledGraphHom.fold G pair.first pair.second pair.inverse_labels
+      let firstGraph := G.folded α pair.first pair.second pair.inverse_labels
+      let targetHom := LabelledGraphHom.fold H pair'.first pair'.second pair'.inverse_labels
+      let targetGraph := H.folded α pair'.first pair'.second pair'.inverse_labels
+      have hpair' :
+          H.toDartGraph.target pair'.first = H.toDartGraph.source pair'.second ∨
+            H.toDartGraph.source pair'.first = H.toDartGraph.target pair'.second := by
+        rcases hpairAdjacent with h | h
+        · left
+          calc
+            H.toDartGraph.target pair'.first = f.mapVertex
+                (G.toDartGraph.target pair.first) := f.map_target pair.first
+            _ = f.mapVertex (G.toDartGraph.source pair.second) :=
+              congrArg f.mapVertex h
+            _ = H.toDartGraph.source pair'.second := (f.map_source pair.second).symm
+        · right
+          calc
+            H.toDartGraph.source pair'.first = f.mapVertex
+                (G.toDartGraph.source pair.first) := f.map_source pair.first
+            _ = f.mapVertex (G.toDartGraph.target pair.second) :=
+              congrArg f.mapVertex h
+            _ = H.toDartGraph.target pair'.second := (f.map_target pair.second).symm
+      have hfold :
+          (LabelledGraphHom.comp targetHom f).mapDart pair.second =
+            targetGraph.toDartGraph.reverse
+              ((LabelledGraphHom.comp targetHom f).mapDart pair.first) := by
+        change targetHom.mapDart pair'.second =
+          targetGraph.toDartGraph.reverse (targetHom.mapDart pair'.first)
+        exact LabelledDartPairFoldResult.oneFold_pair_reverse pair'
+      let descended := LabelledGraphHom.descendFold pair.first pair.second
+        pair.inverse_labels (LabelledGraphHom.comp targetHom f) hfold
+      have hpairMap (q : LabelledDartPair G) :
+          LabelledDartPair.map descended (LabelledDartPair.map firstHom q) =
+            LabelledDartPair.map (LabelledGraphHom.comp targetHom f) q := by
+        cases q with
+        | mk a b hlabels =>
+            have ha := LabelledGraphHom.descendFold_mapDart_fold pair.first pair.second
+              pair.inverse_labels (LabelledGraphHom.comp targetHom f) hfold a
+            have hb := LabelledGraphHom.descendFold_mapDart_fold pair.first pair.second
+              pair.inverse_labels (LabelledGraphHom.comp targetHom f) hfold b
+            cases ha
+            cases hb
+            rfl
+      have hrest' := ih descended
+      refine .cons pair' (rest.map (LabelledDartPair.map f)) hpair' ?_
+      have hlists :
+          (rest.map (LabelledDartPair.map firstHom)).map
+              (LabelledDartPair.map descended) =
+            (rest.map (LabelledDartPair.map f)).map
+              (LabelledDartPair.map targetHom) := by
+        rw [List.map_map, List.map_map]
+        congr 1
+      rw [hlists] at hrest'
+      simpa [targetGraph] using hrest'
+
+/-- Concatenating two fold-adjacent lists preserves fold adjacency. -/
+theorem append {α : Type*} {G : LabelledDartGraph α}
+    {first second : List (LabelledDartPair G)}
+    (hfirst : LabelledDartPairFoldAdjacency G first)
+    (hsecond : LabelledDartPairFoldAdjacency G second) :
+    LabelledDartPairFoldAdjacency G (first ++ second) := by
+  induction hfirst with
+  | nil G => simpa using hsecond
+  | @cons G pair rest hpairAdjacent hrestAdjacent ih =>
+      let firstHom := LabelledGraphHom.fold G pair.first pair.second pair.inverse_labels
+      have hsecond' := hsecond.map firstHom
+      refine .cons pair (rest ++ second) hpairAdjacent ?_
+      simpa [firstHom, List.map_append] using ih hsecond'
+
+end LabelledDartPairFoldAdjacency
+
+/-- Consecutive occurrence pairs are positioned end-to-end on both sides:
+the next first edge starts where the previous first edge ends, and the next
+second edge ends where the previous second edge starts. -/
+def LabelledDartPairChainStep {α : Type*} {G : LabelledDartGraph α}
+    (pair next : LabelledDartPair G) : Prop :=
+  G.toDartGraph.source next.first = G.toDartGraph.target pair.first ∧
+    G.toDartGraph.target next.second = G.toDartGraph.source pair.second
+
+theorem LabelledDartPairChainStep.map {α : Type*}
+    {G H : LabelledDartGraph α} (f : LabelledGraphHom G H)
+    {pair next : LabelledDartPair G}
+    (h : LabelledDartPairChainStep pair next) :
+    LabelledDartPairChainStep (LabelledDartPair.map f pair)
+      (LabelledDartPair.map f next) := by
+  constructor
+  · calc
+      H.toDartGraph.source (f.mapDart next.first) =
+          f.mapVertex (G.toDartGraph.source next.first) := f.map_source _
+      _ = f.mapVertex (G.toDartGraph.target pair.first) := congrArg f.mapVertex h.1
+      _ = H.toDartGraph.target (f.mapDart pair.first) := (f.map_target _).symm
+  · calc
+      H.toDartGraph.target (f.mapDart next.second) =
+          f.mapVertex (G.toDartGraph.target next.second) := f.map_target _
+      _ = f.mapVertex (G.toDartGraph.source pair.second) := congrArg f.mapVertex h.2
+      _ = H.toDartGraph.source (f.mapDart pair.second) := (f.map_source _).symm
+
+/-- If the first pair of a chain is already adjacent, the edge folds along
+the whole chain are adjacent in sequence. Each fold identifies the two
+endpoints needed by the next pair. -/
+theorem LabelledDartPairFoldAdjacency.of_isChain {α : Type*}
+    {G : LabelledDartGraph α} {pairs : List (LabelledDartPair G)}
+    (hchain : List.IsChain (LabelledDartPairChainStep (G := G)) pairs) :
+    ∀ {H : LabelledDartGraph α} (f : LabelledGraphHom G H),
+      (∀ pair, pairs.head? = some pair →
+        H.toDartGraph.target (f.mapDart pair.first) =
+            H.toDartGraph.source (f.mapDart pair.second) ∨
+          H.toDartGraph.source (f.mapDart pair.first) =
+            H.toDartGraph.target (f.mapDart pair.second)) →
+      LabelledDartPairFoldAdjacency H
+        (pairs.map (LabelledDartPair.map f)) := by
+  induction hchain with
+  | nil =>
+      intro H f hfirst
+      exact .nil H
+  | singleton pair =>
+      intro H f hfirst
+      have hp := hfirst pair (by simp)
+      let pair' := LabelledDartPair.map f pair
+      exact .cons pair' [] hp
+        (.nil (H.folded α pair'.first pair'.second pair'.inverse_labels))
+  | @cons_cons pair next rest hstep htail ih =>
+      intro H f hfirst
+      let pair' := LabelledDartPair.map f pair
+      let targetHom := LabelledGraphHom.fold H pair'.first pair'.second
+        pair'.inverse_labels
+      let targetGraph := H.folded α pair'.first pair'.second pair'.inverse_labels
+      have hp := hfirst pair (by simp)
+      have hnext : targetGraph.toDartGraph.source
+          (targetHom.mapDart (f.mapDart next.first)) =
+          targetGraph.toDartGraph.target
+          (targetHom.mapDart (f.mapDart next.second)) := by
+        have hstep' := LabelledDartPairChainStep.map f hstep
+        calc
+          _ = targetHom.mapVertex
+              (H.toDartGraph.source (f.mapDart next.first)) :=
+            targetHom.map_source _
+          _ = targetHom.mapVertex
+              (H.toDartGraph.target (f.mapDart pair.first)) :=
+            congrArg targetHom.mapVertex hstep'.1
+          _ = targetHom.mapVertex
+              (H.toDartGraph.source (f.mapDart pair.second)) :=
+            by
+              simpa [pair', targetHom, LabelledDartPair.map,
+                targetGraph, LabelledGraphHom.fold,
+                LabelledDartGraph.folded, DartGraph.foldedGraph] using
+                DartGraph.foldedOtherEndpointEq H.toDartGraph
+                  pair'.first pair'.second
+          _ = targetHom.mapVertex
+              (H.toDartGraph.target (f.mapDart next.second)) :=
+            congrArg targetHom.mapVertex hstep'.2.symm
+          _ = _ := (targetHom.map_target _).symm
+      let composedHom := LabelledGraphHom.comp targetHom f
+      have hfirst' : ∀ q, (next :: rest).head? = some q →
+          targetGraph.toDartGraph.target (composedHom.mapDart q.first) =
+              targetGraph.toDartGraph.source (composedHom.mapDart q.second) ∨
+            targetGraph.toDartGraph.source (composedHom.mapDart q.first) =
+              targetGraph.toDartGraph.target (composedHom.mapDart q.second) := by
+        intro q hq
+        simp only [List.head?_cons, Option.some.injEq] at hq
+        subst q
+        simpa [composedHom, LabelledGraphHom.comp] using Or.inr hnext
+      have hrest := ih composedHom hfirst'
+      have hlists :
+          (next :: rest).map (LabelledDartPair.map composedHom) =
+            ((next :: rest).map (LabelledDartPair.map f)).map
+              (LabelledDartPair.map targetHom) := by
+        calc
+          _ = (next :: rest).map
+              (fun q => LabelledDartPair.map targetHom
+                (LabelledDartPair.map f q)) := by
+                  apply List.map_congr_left
+                  intro q hq
+                  exact (LabelledDartPairFoldAdjacency.mappedPair_comp
+                    targetHom f q).symm
+          _ = _ := by
+            rw [List.map_map]
+            rfl
+      rw [hlists] at hrest
+      exact .cons pair' ((next :: rest).map (LabelledDartPair.map f)) hp
+        (by simpa [targetGraph] using hrest)
+
 /-- A finite sequence of inverse-labeled pair folds whose current endpoints
 are adjacent has nondecreasing graph Euler count. -/
 theorem LabelledDartPairFoldResult.foldAll_euler_data
